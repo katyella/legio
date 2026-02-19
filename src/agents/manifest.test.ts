@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
@@ -49,7 +49,7 @@ describe("createManifestLoader", () => {
 		data: Record<string, unknown>,
 		options?: { skipMdFiles?: boolean; mdFilesToSkip?: string[] },
 	): Promise<void> {
-		await Bun.write(manifestPath, JSON.stringify(data));
+		await writeFile(manifestPath, JSON.stringify(data));
 		if (options?.skipMdFiles) return;
 
 		const agents = data.agents;
@@ -61,7 +61,7 @@ describe("createManifestLoader", () => {
 					file.length > 0 &&
 					!options?.mdFilesToSkip?.includes(file)
 				) {
-					await Bun.write(join(agentBaseDir, file), `# ${file}\n`);
+					await writeFile(join(agentBaseDir, file), `# ${file}\n`);
 				}
 			}
 		}
@@ -240,7 +240,7 @@ describe("createManifestLoader", () => {
 		});
 
 		test("throws AgentError for invalid JSON", async () => {
-			await Bun.write(manifestPath, "not valid json {{{");
+			await writeFile(manifestPath, "not valid json {{{");
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -248,7 +248,7 @@ describe("createManifestLoader", () => {
 		});
 
 		test("throws AgentError for missing version field", async () => {
-			await Bun.write(manifestPath, JSON.stringify({ agents: {} }));
+			await writeFile(manifestPath, JSON.stringify({ agents: {} }));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -256,7 +256,7 @@ describe("createManifestLoader", () => {
 		});
 
 		test("throws AgentError for empty version string", async () => {
-			await Bun.write(manifestPath, JSON.stringify({ version: "", agents: {} }));
+			await writeFile(manifestPath, JSON.stringify({ version: "", agents: {} }));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -264,7 +264,7 @@ describe("createManifestLoader", () => {
 		});
 
 		test("throws AgentError when agents field is missing", async () => {
-			await Bun.write(manifestPath, JSON.stringify({ version: "1.0" }));
+			await writeFile(manifestPath, JSON.stringify({ version: "1.0" }));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -272,7 +272,7 @@ describe("createManifestLoader", () => {
 		});
 
 		test("throws AgentError when agents field is an array", async () => {
-			await Bun.write(manifestPath, JSON.stringify({ version: "1.0", agents: [] }));
+			await writeFile(manifestPath, JSON.stringify({ version: "1.0", agents: [] }));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -389,7 +389,7 @@ describe("createManifestLoader", () => {
 					bad: "not an object",
 				},
 			};
-			await Bun.write(manifestPath, JSON.stringify(data));
+			await writeFile(manifestPath, JSON.stringify(data));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			await expect(loader.load()).rejects.toThrow(AgentError);
@@ -439,7 +439,7 @@ describe("createManifestLoader", () => {
 					},
 				},
 			};
-			await Bun.write(manifestPath, JSON.stringify(data));
+			await writeFile(manifestPath, JSON.stringify(data));
 			const loader = createManifestLoader(manifestPath, agentBaseDir);
 
 			try {

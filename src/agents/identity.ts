@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AgentError } from "../errors.ts";
 import type { AgentIdentity } from "../types.ts";
@@ -266,7 +266,7 @@ export async function createIdentity(baseDir: string, identity: AgentIdentity): 
 	const yaml = serializeIdentityYaml(identity);
 
 	try {
-		await Bun.write(filePath, yaml);
+		await writeFile(filePath, yaml);
 	} catch (err) {
 		throw new AgentError(`Failed to write identity file: ${filePath}`, {
 			agentName: identity.name,
@@ -287,8 +287,7 @@ export async function createIdentity(baseDir: string, identity: AgentIdentity): 
  */
 export async function loadIdentity(baseDir: string, name: string): Promise<AgentIdentity | null> {
 	const filePath = join(baseDir, name, IDENTITY_FILENAME);
-	const file = Bun.file(filePath);
-	const exists = await file.exists();
+	const exists = await access(filePath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		return null;
@@ -296,7 +295,7 @@ export async function loadIdentity(baseDir: string, name: string): Promise<Agent
 
 	let text: string;
 	try {
-		text = await file.text();
+		text = await readFile(filePath, "utf-8");
 	} catch (err) {
 		throw new AgentError(`Failed to read identity file: ${filePath}`, {
 			agentName: name,

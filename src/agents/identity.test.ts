@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
@@ -31,10 +31,9 @@ describe("identity", () => {
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(tempDir, "test-agent", "identity.yaml");
-			const file = Bun.file(filePath);
-			expect(await file.exists()).toBe(true);
+			expect(await access(filePath).then(() => true).catch(() => false)).toBe(true);
 
-			const content = await file.text();
+			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain("name: test-agent");
 			expect(content).toContain("capability: builder");
 			expect(content).toContain('created: "2024-01-01T00:00:00Z"');
@@ -56,7 +55,7 @@ describe("identity", () => {
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(tempDir, "test-agent", "identity.yaml");
-			const content = await Bun.file(filePath).text();
+			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain("expertiseDomains:");
 			expect(content).toContain("\t- typescript");
 			expect(content).toContain("\t- testing");
@@ -87,7 +86,7 @@ describe("identity", () => {
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(tempDir, "test-agent", "identity.yaml");
-			const content = await Bun.file(filePath).text();
+			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain("recentTasks:");
 			expect(content).toContain("\t- beadId: beads-001");
 			expect(content).toContain("\t\tsummary: Fixed authentication bug");
@@ -116,7 +115,7 @@ describe("identity", () => {
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(tempDir, "test-agent", "identity.yaml");
-			const content = await Bun.file(filePath).text();
+			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain('"domain: with colon"');
 			expect(content).toContain('"domain#with hash"');
 			expect(content).toContain('" leading space"');
@@ -134,12 +133,12 @@ describe("identity", () => {
 			};
 
 			const agentDir = join(tempDir, "new-agent");
-			expect(await Bun.file(agentDir).exists()).toBe(false);
+			expect(await access(agentDir).then(() => true).catch(() => false)).toBe(false);
 
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(agentDir, "identity.yaml");
-			expect(await Bun.file(filePath).exists()).toBe(true);
+			expect(await access(filePath).then(() => true).catch(() => false)).toBe(true);
 		});
 
 		test("overwrites existing identity file", async () => {
@@ -179,7 +178,7 @@ describe("identity", () => {
 
 			// Create a file where the directory should be
 			const blockedPath = join(tempDir, "test-agent");
-			await Bun.write(blockedPath, "blocking file");
+			await writeFile(blockedPath, "blocking file");
 
 			await expect(createIdentity(tempDir, identity)).rejects.toThrow(AgentError);
 			await expect(createIdentity(tempDir, identity)).rejects.toThrow(
@@ -330,7 +329,7 @@ describe("identity", () => {
 			const filePath = join(agentDir, "identity.yaml");
 
 			// Write invalid YAML (unbalanced quotes)
-			await Bun.write(
+			await writeFile(
 				filePath,
 				'name: "test-agent\ncapability: builder\ncreated: 2024-01-01T00:00:00Z\n',
 			);
@@ -347,7 +346,7 @@ describe("identity", () => {
 			await mkdir(agentDir, { recursive: true });
 			const filePath = join(agentDir, "identity.yaml");
 
-			await Bun.write(
+			await writeFile(
 				filePath,
 				`# Agent identity file
 name: test-agent

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
@@ -378,8 +378,7 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const file = Bun.file(outputPath);
-		const exists = await file.exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -390,7 +389,7 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		expect(content).toContain("file-writer-test");
 		expect(content).toContain(config.beadId);
 		expect(content).toContain(config.branchName);
@@ -398,28 +397,26 @@ describe("writeOverlay", () => {
 
 	test("creates .claude directory even if worktree already exists", async () => {
 		const worktreePath = join(tempDir, "existing-worktree");
-		const { mkdir } = await import("node:fs/promises");
 		await mkdir(worktreePath, { recursive: true });
 
 		const config = makeConfig();
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await Bun.file(outputPath).exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
 	test("overwrites existing CLAUDE.md if it already exists", async () => {
 		const worktreePath = join(tempDir, "worktree");
 		const claudeDir = join(worktreePath, ".claude");
-		const { mkdir } = await import("node:fs/promises");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(join(claudeDir, "CLAUDE.md"), "old content");
+		await writeFile(join(claudeDir, "CLAUDE.md"), "old content");
 
 		const config = makeConfig({ agentName: "new-agent" });
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
-		const content = await Bun.file(join(claudeDir, "CLAUDE.md")).text();
+		const content = await readFile(join(claudeDir, "CLAUDE.md"), "utf-8");
 		expect(content).toContain("new-agent");
 		expect(content).not.toContain("old content");
 	});
@@ -431,7 +428,7 @@ describe("writeOverlay", () => {
 		const generated = await generateOverlay(config);
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
-		const written = await Bun.file(join(worktreePath, ".claude", "CLAUDE.md")).text();
+		const written = await readFile(join(worktreePath, ".claude", "CLAUDE.md"), "utf-8");
 		expect(written).toBe(generated);
 	});
 
@@ -475,7 +472,7 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, fakeProjectRoot);
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await Bun.file(outputPath).exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -493,7 +490,7 @@ describe("writeOverlay", () => {
 
 		// Verify CLAUDE.md was NOT written
 		const claudeMdPath = join(fakeProjectRoot, ".claude", "CLAUDE.md");
-		const exists = await Bun.file(claudeMdPath).exists();
+		const exists = await access(claudeMdPath).then(() => true).catch(() => false);
 		expect(exists).toBe(false);
 	});
 
@@ -506,7 +503,7 @@ describe("writeOverlay", () => {
 		const worktreePath = join(fakeProjectRoot, ".legio", "worktrees", "dogfood-agent");
 		await mkdir(join(worktreePath, ".legio"), { recursive: true });
 		// Simulate tracked .legio/config.yaml appearing in the worktree checkout
-		await Bun.write(
+		await writeFile(
 			join(worktreePath, ".legio", "config.yaml"),
 			"project:\n  name: legio\n",
 		);
@@ -517,7 +514,7 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, fakeProjectRoot);
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await Bun.file(outputPath).exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 });

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, loadConfig, resolveProjectRoot } from "./config.ts";
@@ -19,11 +19,10 @@ describe("loadConfig", () => {
 
 	async function writeConfig(yaml: string): Promise<void> {
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(join(legioDir, "config.yaml"), yaml);
+		await writeFile(join(legioDir, "config.yaml"), yaml);
 	}
 
 	async function ensureLegioDir(): Promise<void> {
-		const { mkdir } = await import("node:fs/promises");
 		await mkdir(join(tempDir, ".legio"), { recursive: true });
 	}
 
@@ -159,7 +158,7 @@ project:
 agents:
   maxConcurrent: 10
 `);
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "config.local.yaml"),
 			`agents:\n  maxConcurrent: 4\n`,
 		);
@@ -174,7 +173,7 @@ agents:
 	test("config.local.yaml works when config.yaml does not exist", async () => {
 		await ensureLegioDir();
 		// No config.yaml, only config.local.yaml
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "config.local.yaml"),
 			`agents:\n  maxConcurrent: 3\n`,
 		);
@@ -191,7 +190,7 @@ agents:
 project:
   canonicalBranch: main
 `);
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "config.local.yaml"),
 			`agents:\n  maxConcurrent: -1\n`,
 		);
@@ -206,7 +205,7 @@ watchdog:
   tier0Enabled: false
   staleThresholdMs: 120000
 `);
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "config.local.yaml"),
 			`watchdog:\n  tier0Enabled: true\n`,
 		);
@@ -257,7 +256,6 @@ describe("validateConfig", () => {
 
 	beforeEach(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "legio-test-"));
-		const { mkdir } = await import("node:fs/promises");
 		await mkdir(join(tempDir, ".legio"), { recursive: true });
 	});
 
@@ -266,7 +264,7 @@ describe("validateConfig", () => {
 	});
 
 	async function writeConfig(yaml: string): Promise<void> {
-		await Bun.write(join(tempDir, ".legio", "config.yaml"), yaml);
+		await writeFile(join(tempDir, ".legio", "config.yaml"), yaml);
 	}
 
 	test("rejects negative maxConcurrent", async () => {
@@ -375,7 +373,7 @@ describe("resolveProjectRoot", () => {
 	test("returns startDir when .legio/config.yaml exists there", async () => {
 		repoDir = await createTempGitRepo();
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(repoDir, ".legio", "config.yaml"),
 			"project:\n  canonicalBranch: main\n",
 		);
@@ -389,7 +387,7 @@ describe("resolveProjectRoot", () => {
 		// Resolve symlinks (macOS /var -> /private/var) to match git's output
 		repoDir = await realpath(repoDir);
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(repoDir, ".legio", "config.yaml"),
 			"project:\n  canonicalBranch: main\n",
 		);
@@ -417,7 +415,7 @@ describe("resolveProjectRoot", () => {
 		// Commit .legio/config.yaml so the worktree gets a copy via git
 		// (this is what legio init does — the file is tracked)
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(repoDir, ".legio", "config.yaml"),
 			"project:\n  canonicalBranch: main\n",
 		);
@@ -446,7 +444,7 @@ describe("resolveProjectRoot", () => {
 		// Resolve symlinks (macOS /var -> /private/var) to match git's output
 		repoDir = await realpath(repoDir);
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(repoDir, ".legio", "config.yaml"),
 			"project:\n  canonicalBranch: develop\n",
 		);

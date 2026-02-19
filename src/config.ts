@@ -1,4 +1,8 @@
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { ConfigError, ValidationError } from "./errors.ts";
 import type { LegioConfig } from "./types.ts";
 
@@ -455,7 +459,7 @@ async function mergeLocalConfig(
 
 	let text: string;
 	try {
-		text = await localFile.text();
+		text = await readFile(localPath, "utf-8");
 	} catch (err) {
 		throw new ConfigError(`Failed to read local config file: ${localPath}`, {
 			configPath: localPath,
@@ -493,7 +497,7 @@ async function mergeLocalConfig(
  * @returns The resolved project root containing `.legio/`
  */
 export async function resolveProjectRoot(startDir: string): Promise<string> {
-	const { existsSync } = require("node:fs") as typeof import("node:fs");
+	const execFileAsync = promisify(execFile);
 
 	// Check git worktree FIRST. When running from an agent worktree
 	// (e.g., .legio/worktrees/{name}/), the worktree may contain
@@ -501,21 +505,16 @@ export async function resolveProjectRoot(startDir: string): Promise<string> {
 	// main repository root so runtime state (mail.db, metrics.db, etc.)
 	// is shared across all agents, not siloed per worktree.
 	try {
-		const proc = Bun.spawn(["git", "rev-parse", "--git-common-dir"], {
+		const { stdout } = await execFileAsync("git", ["rev-parse", "--git-common-dir"], {
 			cwd: startDir,
-			stdout: "pipe",
-			stderr: "pipe",
 		});
-		const exitCode = await proc.exited;
-		if (exitCode === 0) {
-			const gitCommonDir = (await new Response(proc.stdout).text()).trim();
-			const absGitCommon = resolve(startDir, gitCommonDir);
-			// Main repo root is the parent of the .git directory
-			const mainRoot = dirname(absGitCommon);
-			// If mainRoot differs from startDir, we're in a worktree — resolve to canonical root
-			if (mainRoot !== startDir && existsSync(join(mainRoot, LEGIO_DIR, CONFIG_FILENAME))) {
-				return mainRoot;
-			}
+		const gitCommonDir = stdout.trim();
+		const absGitCommon = resolve(startDir, gitCommonDir);
+		// Main repo root is the parent of the .git directory
+		const mainRoot = dirname(absGitCommon);
+		// If mainRoot differs from startDir, we're in a worktree — resolve to canonical root
+		if (mainRoot !== startDir && existsSync(join(mainRoot, LEGIO_DIR, CONFIG_FILENAME))) {
+			return mainRoot;
 		}
 	} catch {
 		// git not available, fall through
@@ -556,8 +555,7 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 	defaults.project.name = resolvedRoot.split("/").pop() ?? "unknown";
 
 	// Try to read the config file
-	const file = Bun.file(configPath);
-	const exists = await file.exists();
+	const exists = await access(configPath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		// No config file — use defaults, but still check for local overrides
@@ -570,7 +568,7 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 
 	let text: string;
 	try {
-		text = await file.text();
+		text = await readFile(configPath, "utf-8");
 	} catch (err) {
 		throw new ConfigError(`Failed to read config file: ${configPath}`, {
 			configPath,

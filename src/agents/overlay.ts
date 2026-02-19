@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { AgentError } from "../errors.ts";
 import type { OverlayConfig } from "../types.ts";
@@ -9,7 +9,7 @@ import type { OverlayConfig } from "../types.ts";
  */
 function getTemplatePath(): string {
 	// src/agents/overlay.ts -> repo root is ../../
-	return join(dirname(import.meta.dir), "..", "templates", "overlay.md.tmpl");
+	return join(dirname(import.meta.dirname ?? ""), "..", "templates", "overlay.md.tmpl");
 }
 
 /**
@@ -153,8 +153,7 @@ function formatCanSpawn(config: OverlayConfig): string {
  */
 export async function generateOverlay(config: OverlayConfig): Promise<string> {
 	const templatePath = getTemplatePath();
-	const file = Bun.file(templatePath);
-	const exists = await file.exists();
+	const exists = await access(templatePath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		throw new AgentError(`Overlay template not found: ${templatePath}`, {
@@ -164,7 +163,7 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 
 	let template: string;
 	try {
-		template = await file.text();
+		template = await readFile(templatePath, "utf-8");
 	} catch (err) {
 		throw new AgentError(`Failed to read overlay template: ${templatePath}`, {
 			agentName: config.agentName,
@@ -268,7 +267,7 @@ export async function writeOverlay(
 	}
 
 	try {
-		await Bun.write(outputPath, content);
+		await writeFile(outputPath, content);
 	} catch (err) {
 		throw new AgentError(`Failed to write overlay to: ${outputPath}`, {
 			agentName: config.agentName,

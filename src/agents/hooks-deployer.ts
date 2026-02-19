@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AgentError } from "../errors.ts";
 
@@ -126,7 +126,7 @@ interface HookEntry {
  */
 function getTemplatePath(): string {
 	// src/agents/hooks-deployer.ts -> repo root is ../../
-	return join(dirname(import.meta.dir), "..", "templates", "hooks.json.tmpl");
+	return join(dirname(import.meta.dirname ?? ""), "..", "templates", "hooks.json.tmpl");
 }
 
 /**
@@ -490,8 +490,7 @@ export async function deployHooks(
 	capability = "builder",
 ): Promise<void> {
 	const templatePath = getTemplatePath();
-	const file = Bun.file(templatePath);
-	const exists = await file.exists();
+	const exists = await access(templatePath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		throw new AgentError(`Hooks template not found: ${templatePath}`, {
@@ -501,7 +500,7 @@ export async function deployHooks(
 
 	let template: string;
 	try {
-		template = await file.text();
+		template = await readFile(templatePath, "utf-8");
 	} catch (err) {
 		throw new AgentError(`Failed to read hooks template: ${templatePath}`, {
 			agentName,
@@ -542,7 +541,7 @@ export async function deployHooks(
 	}
 
 	try {
-		await Bun.write(outputPath, finalContent);
+		await writeFile(outputPath, finalContent);
 	} catch (err) {
 		throw new AgentError(`Failed to write hooks config to: ${outputPath}`, {
 			agentName,
