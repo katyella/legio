@@ -611,6 +611,26 @@ export const COMMANDS: readonly CommandDef[] = [
 		],
 	},
 	{
+		name: "up",
+		desc: "Start everything (init + server + coordinator)",
+		flags: [
+			{ name: "--port", desc: "Server port", takesValue: true },
+			{ name: "--host", desc: "Bind address", takesValue: true },
+			{ name: "--no-open", desc: "Do not auto-open browser" },
+			{ name: "--force", desc: "Force reinitialize" },
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+	},
+	{
+		name: "down",
+		desc: "Stop everything (coordinator + server)",
+		flags: [
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+	},
+	{
 		name: "autopilot",
 		desc: "Coordinator autopilot daemon (start/stop/status)",
 		flags: [{ name: "--help", desc: "Show help" }],
@@ -840,9 +860,7 @@ export function generateFish(): string {
 	for (const cmd of COMMANDS) {
 		// Command name
 		lines.push(`# ${cmd.desc}`);
-		lines.push(
-			`complete -c legio -f -n '__fish_use_subcommand' -a '${cmd.name}' -d '${cmd.desc}'`,
-		);
+		lines.push(`complete -c legio -f -n '__fish_use_subcommand' -a '${cmd.name}' -d '${cmd.desc}'`);
 
 		if (cmd.subcommands && cmd.subcommands.length > 0) {
 			// Subcommand names

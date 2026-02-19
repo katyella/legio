@@ -12,8 +12,8 @@ import {
 } from "./completions.ts";
 
 describe("COMMANDS array", () => {
-	it("should have exactly 31 commands", () => {
-		expect(COMMANDS).toHaveLength(31);
+	it("should have exactly 33 commands", () => {
+		expect(COMMANDS).toHaveLength(33);
 	});
 
 	it("should include all expected command names", () => {
@@ -48,6 +48,8 @@ describe("COMMANDS array", () => {
 		expect(names).toContain("feed");
 		expect(names).toContain("logs");
 		expect(names).toContain("server");
+		expect(names).toContain("up");
+		expect(names).toContain("down");
 	});
 });
 

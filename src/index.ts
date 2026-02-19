@@ -15,6 +15,7 @@ import { coordinatorCommand } from "./commands/coordinator.ts";
 import { costsCommand } from "./commands/costs.ts";
 import { dashboardCommand } from "./commands/dashboard.ts";
 import { doctorCommand } from "./commands/doctor.ts";
+import { downCommand } from "./commands/down.ts";
 import { errorsCommand } from "./commands/errors.ts";
 import { feedCommand } from "./commands/feed.ts";
 import { groupCommand } from "./commands/group.ts";
@@ -37,6 +38,7 @@ import { specCommand } from "./commands/spec.ts";
 import { statusCommand } from "./commands/status.ts";
 import { supervisorCommand } from "./commands/supervisor.ts";
 import { traceCommand } from "./commands/trace.ts";
+import { upCommand } from "./commands/up.ts";
 import { watchCommand } from "./commands/watch.ts";
 import { worktreeCommand } from "./commands/worktree.ts";
 import { LegioError, WorktreeError } from "./errors.ts";
@@ -79,6 +81,8 @@ Commands:
   costs [options]          Token/cost analysis and breakdown
   metrics                 Show session metrics
   server <sub>            Local web UI (start)
+  up                      Start everything (init + server + coordinator)
+  down                    Stop everything (coordinator + server)
   autopilot <sub>         Coordinator autopilot (start/stop/status)
 
 Options:
@@ -120,6 +124,8 @@ const COMMANDS = [
 	"costs",
 	"metrics",
 	"server",
+	"up",
+	"down",
 	"autopilot",
 ];
 
@@ -284,6 +290,12 @@ async function main(): Promise<void> {
 			break;
 		case "server":
 			await serverCommand(commandArgs);
+			break;
+		case "up":
+			await upCommand(commandArgs);
+			break;
+		case "down":
+			await downCommand(commandArgs);
 			break;
 		case "autopilot":
 			await autopilotCommand(commandArgs);
