@@ -451,9 +451,8 @@ async function mergeLocalConfig(
 	config: LegioConfig,
 ): Promise<LegioConfig> {
 	const localPath = join(resolvedRoot, LEGIO_DIR, CONFIG_LOCAL_FILENAME);
-	const localFile = Bun.file(localPath);
 
-	if (!(await localFile.exists())) {
+	if (!(await access(localPath).then(() => true).catch(() => false))) {
 		return config;
 	}
 

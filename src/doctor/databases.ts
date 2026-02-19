@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";

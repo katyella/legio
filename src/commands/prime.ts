@@ -142,14 +142,14 @@ function formatCheckpointRecovery(checkpoint: SessionCheckpoint): string {
 async function healGitignore(legioDir: string): Promise<void> {
 	const gitignorePath = join(legioDir, ".gitignore");
 	try {
-		const current = await Bun.file(gitignorePath).text();
+		const current = await readFile(gitignorePath, "utf-8");
 		if (current === LEGIO_GITIGNORE) {
 			return; // Already up to date
 		}
 	} catch {
 		// File does not exist — write it fresh
 	}
-	await Bun.write(gitignorePath, LEGIO_GITIGNORE);
+	await writeFile(gitignorePath, LEGIO_GITIGNORE);
 }
 
 /**

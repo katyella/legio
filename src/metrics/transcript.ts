@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 /**
  * Parser for Claude Code transcript JSONL files.
  *
@@ -133,8 +135,7 @@ function extractUsageFromEntry(entry: unknown): {
  * @returns Aggregated usage data across all assistant turns
  */
 export async function parseTranscriptUsage(transcriptPath: string): Promise<TranscriptUsage> {
-	const file = Bun.file(transcriptPath);
-	const text = await file.text();
+	const text = await readFile(transcriptPath, "utf-8");
 	const lines = text.split("\n");
 
 	const result: TranscriptUsage = {

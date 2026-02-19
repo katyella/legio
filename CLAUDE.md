@@ -6,12 +6,11 @@ Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a
 
 ## Tech Stack
 
-- **Runtime:** Bun (runs TypeScript directly, no build step)
+- **Runtime:** Node (runs TypeScript directly, no build step)
 - **Language:** TypeScript with strict mode (`noUncheckedIndexedAccess`, no `any`)
 - **Linting:** Biome (formatter + linter in one tool)
-- **Runtime dependencies:** Zero. Only Bun built-in APIs (`bun:sqlite`, `Bun.spawn`, `Bun.file`, etc.)
 - **Dev dependencies:** `@types/bun`, `typescript`, `@biomejs/biome`
-- **External CLIs (not npm deps):** `bd` (beads) for issue tracking, `mulch` for expertise, `git`, `tmux`
+
 
 ## Architecture
 
@@ -43,7 +42,7 @@ Depth limit is configurable (default 2). Prevents runaway spawning.
 
 ### Messaging: Custom SQLite Mail
 
-Purpose-built messaging via `bun:sqlite` in `.legio/mail.db`. WAL mode for concurrent access from multiple agents. ~1-5ms per query. Independent of beads (which is too slow for high-frequency polling).
+Purpose-built messaging via `` in `.legio/mail.db`. WAL mode for concurrent access from multiple agents. ~1-5ms per query. Independent of beads (which is too slow for high-frequency polling).
 
 ## Directory Structure
 
@@ -188,8 +187,7 @@ target-project/
 
 ### Dependencies
 
-- **Zero runtime dependencies.** This is a hard rule.
-- Use only Bun built-in APIs: `bun:sqlite` for databases, `Bun.spawn` for subprocesses, `Bun.file` for file I/O, `Bun.write` for writes
+
 - External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `Bun.spawn`, never as npm imports
 - Dev dependencies are limited to types and tooling
 
