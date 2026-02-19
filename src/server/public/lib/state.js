@@ -13,6 +13,7 @@ export const appState = {
 	events: signal([]),
 	errors: signal([]),
 	issues: signal([]),
+	audit: signal([]),
 	config: signal(null),
 	status: signal(null),
 	autopilot: signal(null),
