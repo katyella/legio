@@ -5,7 +5,7 @@
  * tested in src/server/index.test.ts.
  */
 
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { serverCommand } from "./server.ts";
 
@@ -14,7 +14,7 @@ describe("serverCommand", () => {
 		const originalWrite = process.stdout.write;
 		let output = "";
 
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		}) as typeof process.stdout.write;
@@ -32,7 +32,7 @@ describe("serverCommand", () => {
 		const originalWrite = process.stdout.write;
 		let output = "";
 
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		}) as typeof process.stdout.write;
@@ -49,7 +49,7 @@ describe("serverCommand", () => {
 		const originalWrite = process.stdout.write;
 		let output = "";
 
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		}) as typeof process.stdout.write;
@@ -68,12 +68,12 @@ describe("serverCommand", () => {
 		let exitCode: number | undefined;
 		let stderrOutput = "";
 
-		process.exit = mock((code?: string | number | null | undefined) => {
+		process.exit = vi.fn((code?: string | number | null | undefined) => {
 			exitCode = typeof code === "number" ? code : 1;
 			throw new Error("process.exit called");
 		}) as never;
 
-		process.stderr.write = mock((chunk: unknown) => {
+		process.stderr.write = vi.fn((chunk: unknown) => {
 			stderrOutput += String(chunk);
 			return true;
 		}) as typeof process.stderr.write;

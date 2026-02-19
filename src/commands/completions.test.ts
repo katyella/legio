@@ -2,7 +2,7 @@
  * Tests for shell completion generation.
  */
 
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, vi } from "vitest";
 import {
 	COMMANDS,
 	completionsCommand,
@@ -153,7 +153,7 @@ describe("completionsCommand", () => {
 		let output = "";
 
 		// Mock stdout.write to capture output
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		});
@@ -171,7 +171,7 @@ describe("completionsCommand", () => {
 		const originalWrite = process.stdout.write;
 		let output = "";
 
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		});
@@ -189,7 +189,7 @@ describe("completionsCommand", () => {
 		const originalWrite = process.stdout.write;
 		let output = "";
 
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			output += String(chunk);
 			return true;
 		});
@@ -208,12 +208,12 @@ describe("completionsCommand", () => {
 		let exitCode: number | undefined;
 		let stderrOutput = "";
 
-		process.exit = mock((code?: string | number | null | undefined) => {
+		process.exit = vi.fn((code?: string | number | null | undefined) => {
 			exitCode = typeof code === "number" ? code : 1;
 			throw new Error("process.exit called");
 		}) as never;
 
-		process.stderr.write = mock((chunk: unknown) => {
+		process.stderr.write = vi.fn((chunk: unknown) => {
 			stderrOutput += String(chunk);
 			return true;
 		});
@@ -234,12 +234,12 @@ describe("completionsCommand", () => {
 		let exitCode: number | undefined;
 		let stderrOutput = "";
 
-		process.exit = mock((code?: string | number | null | undefined) => {
+		process.exit = vi.fn((code?: string | number | null | undefined) => {
 			exitCode = typeof code === "number" ? code : 1;
 			throw new Error("process.exit called");
 		}) as never;
 
-		process.stderr.write = mock((chunk: unknown) => {
+		process.stderr.write = vi.fn((chunk: unknown) => {
 			stderrOutput += String(chunk);
 			return true;
 		});

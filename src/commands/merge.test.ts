@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import {access, mkdir, readFile, writeFile} from "node:fs/promises";
 import { join } from "node:path";
 import { ValidationError } from "../errors.ts";

@@ -6,7 +6,7 @@
  * with developer tmux sessions. Those operations are covered by E2E testing.
  */
 
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { buildMonitorBeacon, monitorCommand } from "./monitor.ts";
 
@@ -67,12 +67,12 @@ describe("buildMonitorBeacon", () => {
 });
 
 describe("monitorCommand", () => {
-	let stdoutSpy: ReturnType<typeof spyOn>;
+	let stdoutSpy: ReturnType<typeof vi.spyOn>;
 	let stdoutWrites: string[] = [];
 
 	beforeEach(() => {
 		stdoutWrites = [];
-		stdoutSpy = spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
+		stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
 			stdoutWrites.push(String(chunk));
 			return true;
 		});
