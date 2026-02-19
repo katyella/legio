@@ -5,10 +5,10 @@
  * Uses real SQLite databases in temp directories (no mocking).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createMailClient } from "../mail/client.ts";
 import { createMailStore } from "../mail/store.ts";
@@ -263,10 +263,16 @@ describe("mailCommand", () => {
 
 			// Verify pending nudge marker was written
 			const markerPath = join(tempDir, ".legio", "pending-nudges", "builder-1.json");
-			const file = Bun.file(markerPath);
-			expect(await file.exists()).toBe(true);
+			{
+				let _e = false;
+				try {
+					await access(markerPath);
+					_e = true;
+				} catch {}
+				expect(_e).toBe(true);
+			}
 
-			const marker = JSON.parse(await file.text());
+			const marker = JSON.parse(await readFile(markerPath, "utf-8"));
 			expect(marker.from).toBe("orchestrator");
 			expect(marker.reason).toBe("urgent priority");
 			expect(marker.subject).toBe("Fix NOW");
@@ -292,10 +298,16 @@ describe("mailCommand", () => {
 			]);
 
 			const markerPath = join(tempDir, ".legio", "pending-nudges", "scout-1.json");
-			const file = Bun.file(markerPath);
-			expect(await file.exists()).toBe(true);
+			{
+				let _e = false;
+				try {
+					await access(markerPath);
+					_e = true;
+				} catch {}
+				expect(_e).toBe(true);
+			}
 
-			const marker = JSON.parse(await file.text());
+			const marker = JSON.parse(await readFile(markerPath, "utf-8"));
 			expect(marker.reason).toBe("high priority");
 		});
 
@@ -315,10 +327,16 @@ describe("mailCommand", () => {
 			]);
 
 			const markerPath = join(tempDir, ".legio", "pending-nudges", "orchestrator.json");
-			const file = Bun.file(markerPath);
-			expect(await file.exists()).toBe(true);
+			{
+				let _e = false;
+				try {
+					await access(markerPath);
+					_e = true;
+				} catch {}
+				expect(_e).toBe(true);
+			}
 
-			const marker = JSON.parse(await file.text());
+			const marker = JSON.parse(await readFile(markerPath, "utf-8"));
 			expect(marker.reason).toBe("worker_done");
 			expect(marker.from).toBe("builder-1");
 		});
@@ -479,7 +497,7 @@ describe("mailCommand", () => {
 
 		test("mail send includes run_id when current-run.txt exists", async () => {
 			const runId = "run-test-mail-456";
-			await Bun.write(join(tempDir, ".legio", "current-run.txt"), runId);
+			await writeFile(join(tempDir, ".legio", "current-run.txt"), runId);
 
 			await mailCommand([
 				"send",
@@ -593,7 +611,7 @@ describe("mailCommand", () => {
 			expect(output).toContain("First check");
 
 			// Wait for debounce window to expire
-			await Bun.sleep(150);
+			await new Promise((resolve) => setTimeout(resolve, 150));
 
 			// Send second message
 			const store2 = createMailStore(join(tempDir, ".legio", "mail.db"));
@@ -707,10 +725,16 @@ describe("mailCommand", () => {
 
 			// Verify state file was created
 			const statePath = join(tempDir, ".legio", "mail-check-state.json");
-			const file = Bun.file(statePath);
-			expect(await file.exists()).toBe(true);
+			{
+				let _e = false;
+				try {
+					await access(statePath);
+					_e = true;
+				} catch {}
+				expect(_e).toBe(true);
+			}
 
-			const state = JSON.parse(await file.text()) as Record<string, number>;
+			const state = JSON.parse(await readFile(statePath, "utf-8")) as Record<string, number>;
 			expect(state["builder-1"]).toBeTruthy();
 			expect(typeof state["builder-1"]).toBe("number");
 		});
@@ -718,7 +742,7 @@ describe("mailCommand", () => {
 		test("corrupted debounce state file is handled gracefully", async () => {
 			// Write corrupted state file
 			const statePath = join(tempDir, ".legio", "mail-check-state.json");
-			await Bun.write(statePath, "not valid json");
+			await writeFile(statePath, "not valid json");
 
 			// Should not throw, should treat as fresh state
 			output = "";
@@ -726,7 +750,7 @@ describe("mailCommand", () => {
 			expect(output).toContain("Build task");
 
 			// State should be corrected
-			const state = JSON.parse(await Bun.file(statePath).text()) as Record<string, number>;
+			const state = JSON.parse(await readFile(statePath, "utf-8")) as Record<string, number>;
 			expect(state["builder-1"]).toBeTruthy();
 		});
 
@@ -737,13 +761,20 @@ describe("mailCommand", () => {
 			await mailCommand(["check", "--agent", "builder-1"]);
 
 			// State file should not be created
-			expect(await Bun.file(statePath).exists()).toBe(false);
+			await expect(access(statePath)).rejects.toThrow();
 
 			// Check with debounce flag
 			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
 
 			// Now state file should exist
-			expect(await Bun.file(statePath).exists()).toBe(true);
+			{
+				let _e = false;
+				try {
+					await access(statePath);
+					_e = true;
+				} catch {}
+				expect(_e).toBe(true);
+			}
 		});
 	});
 
@@ -1070,7 +1101,7 @@ describe("mailCommand", () => {
 			expect(nudgeFiles).toContain("builder-2.json");
 
 			// Verify nudge content
-			const nudge1 = JSON.parse(await Bun.file(join(nudgesDir, "builder-1.json")).text()) as {
+			const nudge1 = JSON.parse(await readFile(join(nudgesDir, "builder-1.json"), "utf-8")) as {
 				reason: string;
 				subject: string;
 			};
@@ -1100,7 +1131,7 @@ describe("mailCommand", () => {
 			expect(nudgeFiles).toContain("builder-1.json");
 			expect(nudgeFiles).toContain("builder-2.json");
 
-			const nudge1 = JSON.parse(await Bun.file(join(nudgesDir, "builder-1.json")).text()) as {
+			const nudge1 = JSON.parse(await readFile(join(nudgesDir, "builder-1.json"), "utf-8")) as {
 				reason: string;
 			};
 			expect(nudge1.reason).toBe("error");

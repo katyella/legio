@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import type { AgentSession } from "../types.ts";
 import { primeCommand } from "./prime.ts";
@@ -41,7 +41,8 @@ describe("primeCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "prime-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await mkdir(legioDir, { recursive: true });
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test-project\n  root: ${tempDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 		);
@@ -156,7 +157,8 @@ describe("primeCommand", () => {
 		test("agent with identity.yaml shows identity details", async () => {
 			// Write identity.yaml
 			const agentDir = join(tempDir, ".legio", "agents", "my-builder");
-			await Bun.write(
+			await mkdir(agentDir, { recursive: true });
+			await writeFile(
 				join(agentDir, "identity.yaml"),
 				`name: my-builder
 capability: builder
@@ -207,7 +209,7 @@ recentTasks:
 				},
 			];
 
-			await Bun.write(
+			await writeFile(
 				join(tempDir, ".legio", "sessions.json"),
 				`${JSON.stringify(sessions, null, 2)}\n`,
 			);
@@ -244,7 +246,7 @@ recentTasks:
 				},
 			];
 
-			await Bun.write(
+			await writeFile(
 				join(tempDir, ".legio", "sessions.json"),
 				`${JSON.stringify(sessions, null, 2)}\n`,
 			);
@@ -260,7 +262,8 @@ recentTasks:
 		test("--compact with checkpoint.json shows Session Recovery", async () => {
 			// Write checkpoint.json
 			const agentDir = join(tempDir, ".legio", "agents", "recovery-agent");
-			await Bun.write(
+			await mkdir(agentDir, { recursive: true });
+			await writeFile(
 				join(agentDir, "checkpoint.json"),
 				`${JSON.stringify(
 					{
@@ -280,7 +283,7 @@ recentTasks:
 			);
 
 			// Also need identity to avoid warning
-			await Bun.write(
+			await writeFile(
 				join(agentDir, "identity.yaml"),
 				`name: recovery-agent
 capability: builder
@@ -305,7 +308,8 @@ recentTasks: []
 		test("--compact skips Expertise section", async () => {
 			// Write identity with expertise
 			const agentDir = join(tempDir, ".legio", "agents", "compact-agent");
-			await Bun.write(
+			await mkdir(agentDir, { recursive: true });
+			await writeFile(
 				join(agentDir, "identity.yaml"),
 				`name: compact-agent
 capability: builder
@@ -332,7 +336,7 @@ recentTasks: []
 			try {
 				const legioDir = join(gitRepoDir, ".legio");
 				await mkdir(legioDir, { recursive: true });
-				await Bun.write(
+				await writeFile(
 					join(legioDir, "config.yaml"),
 					`project:\n  name: branch-test\n  root: ${gitRepoDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 				);
@@ -347,7 +351,7 @@ recentTasks: []
 
 				// Verify session-branch.txt was written
 				const sessionBranchPath = join(legioDir, "session-branch.txt");
-				const content = await Bun.file(sessionBranchPath).text();
+				const content = await readFile(sessionBranchPath, "utf-8");
 				expect(content.trim()).toBe("main");
 			} finally {
 				process.chdir(originalCwd);
@@ -359,16 +363,13 @@ recentTasks: []
 			const gitRepoDir = await createTempGitRepo();
 			try {
 				// Create and switch to a feature branch
-				const proc = Bun.spawn(["git", "checkout", "-b", "feature/my-work"], {
-					cwd: gitRepoDir,
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				await proc.exited;
+				// Use spawnSync to checkout the feature branch
+				const { spawnSync } = await import("node:child_process");
+				spawnSync("git", ["checkout", "-b", "feature/my-work"], { cwd: gitRepoDir });
 
 				const legioDir = join(gitRepoDir, ".legio");
 				await mkdir(legioDir, { recursive: true });
-				await Bun.write(
+				await writeFile(
 					join(legioDir, "config.yaml"),
 					`project:\n  name: branch-test\n  root: ${gitRepoDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 				);
@@ -382,7 +383,7 @@ recentTasks: []
 
 				// Verify session-branch.txt was written with the feature branch
 				const sessionBranchPath = join(legioDir, "session-branch.txt");
-				const content = await Bun.file(sessionBranchPath).text();
+				const content = await readFile(sessionBranchPath, "utf-8");
 				expect(content.trim()).toBe("feature/my-work");
 			} finally {
 				process.chdir(originalCwd);
@@ -408,14 +409,20 @@ recentTasks: []
 			const gitignorePath = join(tempDir, ".legio", ".gitignore");
 
 			// Verify it doesn't exist
-			const existsBefore = await Bun.file(gitignorePath).exists();
+			let existsBefore = false;
+			try {
+				await access(gitignorePath);
+				existsBefore = true;
+			} catch {
+				existsBefore = false;
+			}
 			expect(existsBefore).toBe(false);
 
 			// Run primeCommand
 			await primeCommand([]);
 
 			// Verify .gitignore was created with correct content
-			const content = await Bun.file(gitignorePath).text();
+			const content = await readFile(gitignorePath, "utf-8");
 			expect(content).toBe(expectedGitignore);
 		});
 
@@ -428,28 +435,28 @@ logs/
 mail.db
 sessions.db
 `;
-			await Bun.write(gitignorePath, staleContent);
+			await writeFile(gitignorePath, staleContent);
 
 			// Verify stale content is present
-			const contentBefore = await Bun.file(gitignorePath).text();
+			const contentBefore = await readFile(gitignorePath, "utf-8");
 			expect(contentBefore).toBe(staleContent);
 
 			// Run primeCommand
 			await primeCommand([]);
 
 			// Verify .gitignore now has the wildcard+whitelist content
-			const contentAfter = await Bun.file(gitignorePath).text();
+			const contentAfter = await readFile(gitignorePath, "utf-8");
 			expect(contentAfter).toBe(expectedGitignore);
 		});
 
 		test("does not overwrite .legio/.gitignore if already correct", async () => {
 			// Write the correct OVERSTORY_GITIGNORE content
 			const gitignorePath = join(tempDir, ".legio", ".gitignore");
-			await Bun.write(gitignorePath, expectedGitignore);
+			await writeFile(gitignorePath, expectedGitignore);
 
 			// Get file stat before
-			const statBefore = await Bun.file(gitignorePath).stat();
-			const mtimeBefore = statBefore?.mtime;
+			const statBefore = await stat(gitignorePath);
+			const mtimeBefore = statBefore.mtime;
 
 			// Wait a tiny bit to ensure mtime would change if file is rewritten
 			await new Promise((resolve) => setTimeout(resolve, 10));
@@ -458,12 +465,12 @@ sessions.db
 			await primeCommand([]);
 
 			// Verify content is still correct
-			const contentAfter = await Bun.file(gitignorePath).text();
+			const contentAfter = await readFile(gitignorePath, "utf-8");
 			expect(contentAfter).toBe(expectedGitignore);
 
 			// Verify mtime is unchanged (file was not rewritten)
-			const statAfter = await Bun.file(gitignorePath).stat();
-			const mtimeAfter = statAfter?.mtime;
+			const statAfter = await stat(gitignorePath);
+			const mtimeAfter = statAfter.mtime;
 			expect(mtimeAfter).toEqual(mtimeBefore);
 		});
 	});

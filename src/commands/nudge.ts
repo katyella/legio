@@ -9,6 +9,7 @@
  * rapid-fire nudges to the same agent.
  */
 
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentError, ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
@@ -68,12 +69,13 @@ function getPositionalArgs(args: string[]): string[] {
  */
 async function loadOrchestratorTmuxSession(projectRoot: string): Promise<string | null> {
 	const regPath = join(projectRoot, ".legio", "orchestrator-tmux.json");
-	const file = Bun.file(regPath);
-	if (!(await file.exists())) {
+	try {
+		await access(regPath);
+	} catch {
 		return null;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(regPath, "utf-8");
 		const reg = JSON.parse(text) as { tmuxSession?: string };
 		return reg.tmuxSession ?? null;
 	} catch {
@@ -116,12 +118,13 @@ async function resolveTargetSession(
  * within the debounce window and should be skipped.
  */
 async function isDebounced(statePath: string, agentName: string): Promise<boolean> {
-	const file = Bun.file(statePath);
-	if (!(await file.exists())) {
+	try {
+		await access(statePath);
+	} catch {
 		return false;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(statePath, "utf-8");
 		const state = JSON.parse(text) as Record<string, number>;
 		const lastNudge = state[agentName];
 		if (lastNudge === undefined) {
@@ -138,17 +141,14 @@ async function isDebounced(statePath: string, agentName: string): Promise<boolea
  */
 async function recordNudge(statePath: string, agentName: string): Promise<void> {
 	let state: Record<string, number> = {};
-	const file = Bun.file(statePath);
-	if (await file.exists()) {
-		try {
-			const text = await file.text();
-			state = JSON.parse(text) as Record<string, number>;
-		} catch {
-			// Corrupt state file — start fresh
-		}
+	try {
+		const text = await readFile(statePath, "utf-8");
+		state = JSON.parse(text) as Record<string, number>;
+	} catch {
+		// File does not exist or corrupt state — start fresh
 	}
 	state[agentName] = Date.now();
-	await Bun.write(statePath, `${JSON.stringify(state, null, "\t")}\n`);
+	await writeFile(statePath, `${JSON.stringify(state, null, "\t")}\n`);
 }
 
 /**
@@ -166,12 +166,12 @@ async function sendNudgeWithRetry(tmuxSession: string, message: string): Promise
 			// Claude Code's TUI may consume the first Enter during re-render/focus
 			// events, leaving text visible but unsubmitted (legio-t62v).
 			// Same workaround as sling.ts and coordinator.ts.
-			await Bun.sleep(500);
+			await new Promise<void>((resolve) => setTimeout(resolve, 500));
 			await sendKeys(tmuxSession, "");
 			return true;
 		} catch {
 			if (attempt < MAX_RETRIES) {
-				await Bun.sleep(RETRY_DELAY_MS);
+				await new Promise<void>((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 			}
 		}
 	}
@@ -183,12 +183,13 @@ async function sendNudgeWithRetry(tmuxSession: string, message: string): Promise
  */
 async function readCurrentRunId(legioDir: string): Promise<string | null> {
 	const path = join(legioDir, "current-run.txt");
-	const file = Bun.file(path);
-	if (!(await file.exists())) {
+	try {
+		await access(path);
+	} catch {
 		return null;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(path, "utf-8");
 		const trimmed = text.trim();
 		return trimmed.length > 0 ? trimmed : null;
 	} catch {
