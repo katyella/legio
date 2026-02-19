@@ -2,11 +2,11 @@
  * SQLite-backed mail storage for inter-agent messaging.
  *
  * Provides low-level CRUD operations on the messages table.
- * Uses bun:sqlite for zero-dependency, synchronous database access.
+ * Uses better-sqlite3 for synchronous database access.
  * The higher-level mail client (L2) wraps this store.
  */
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { MailError } from "../errors.ts";
 import type { MailMessage } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
@@ -69,12 +69,10 @@ CREATE TABLE IF NOT EXISTS messages (
  * SQLite does not support ALTER TABLE ADD CONSTRAINT, so constraint changes
  * require recreating the table.
  */
-function migrateSchema(db: Database): void {
+function migrateSchema(db: InstanceType<typeof Database>): void {
 	const row = db
-		.prepare<{ sql: string }, []>(
-			"SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'",
-		)
-		.get();
+		.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'")
+		.get() as { sql: string } | undefined;
 	if (!row) {
 		// Table doesn't exist yet; CREATE TABLE IF NOT EXISTS will handle it
 		return;
@@ -193,41 +191,26 @@ export function createMailStore(dbPath: string): MailStore {
 	db.exec(CREATE_INDEXES);
 
 	// Prepare statements for all queries
-	const insertStmt = db.prepare<
-		void,
-		{
-			$id: string;
-			$from_agent: string;
-			$to_agent: string;
-			$subject: string;
-			$body: string;
-			$type: string;
-			$priority: string;
-			$thread_id: string | null;
-			$payload: string | null;
-			$read: number;
-			$created_at: string;
-		}
-	>(`
+	const insertStmt = db.prepare(`
 		INSERT INTO messages
 			(id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, read, created_at)
 		VALUES
 			($id, $from_agent, $to_agent, $subject, $body, $type, $priority, $thread_id, $payload, $read, $created_at)
 	`);
 
-	const getByIdStmt = db.prepare<MessageRow, { $id: string }>(`
+	const getByIdStmt = db.prepare(`
 		SELECT * FROM messages WHERE id = $id
 	`);
 
-	const getUnreadStmt = db.prepare<MessageRow, { $to_agent: string }>(`
+	const getUnreadStmt = db.prepare(`
 		SELECT * FROM messages WHERE to_agent = $to_agent AND read = 0 ORDER BY created_at ASC
 	`);
 
-	const getByThreadStmt = db.prepare<MessageRow, { $thread_id: string }>(`
+	const getByThreadStmt = db.prepare(`
 		SELECT * FROM messages WHERE thread_id = $thread_id ORDER BY created_at ASC
 	`);
 
-	const markReadStmt = db.prepare<void, { $id: string }>(`
+	const markReadStmt = db.prepare(`
 		UPDATE messages SET read = 1 WHERE id = $id
 	`);
 
@@ -242,21 +225,20 @@ export function createMailStore(dbPath: string): MailStore {
 
 		if (filters?.from !== undefined) {
 			conditions.push("from_agent = $from_agent");
-			params.$from_agent = filters.from;
+			params.from_agent = filters.from;
 		}
 		if (filters?.to !== undefined) {
 			conditions.push("to_agent = $to_agent");
-			params.$to_agent = filters.to;
+			params.to_agent = filters.to;
 		}
 		if (filters?.unread !== undefined) {
 			conditions.push("read = $read");
-			params.$read = filters.unread ? 0 : 1;
+			params.read = filters.unread ? 0 : 1;
 		}
 
 		const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 		const query = `SELECT * FROM messages ${whereClause} ORDER BY created_at DESC`;
-		const stmt = db.prepare<MessageRow, Record<string, string | number>>(query);
-		const rows = stmt.all(params);
+		const rows = db.prepare(query).all(params) as MessageRow[];
 		return rows.map(rowToMessage);
 	}
 
@@ -272,17 +254,17 @@ export function createMailStore(dbPath: string): MailStore {
 
 			try {
 				insertStmt.run({
-					$id: id,
-					$from_agent: message.from,
-					$to_agent: message.to,
-					$subject: message.subject,
-					$body: message.body,
-					$type: message.type,
-					$priority: message.priority,
-					$thread_id: message.threadId,
-					$payload: payload,
-					$read: 0,
-					$created_at: createdAt,
+					id,
+					from_agent: message.from,
+					to_agent: message.to,
+					subject: message.subject,
+					body: message.body,
+					type: message.type,
+					priority: message.priority,
+					thread_id: message.threadId,
+					payload,
+					read: 0,
+					created_at: createdAt,
 				});
 			} catch (err) {
 				throw new MailError(`Failed to insert message: ${id}`, {
@@ -301,7 +283,7 @@ export function createMailStore(dbPath: string): MailStore {
 		},
 
 		getUnread(agentName: string): MailMessage[] {
-			const rows = getUnreadStmt.all({ $to_agent: agentName });
+			const rows = getUnreadStmt.all({ to_agent: agentName }) as MessageRow[];
 			return rows.map(rowToMessage);
 		},
 
@@ -310,25 +292,25 @@ export function createMailStore(dbPath: string): MailStore {
 		},
 
 		getById(id: string): MailMessage | null {
-			const row = getByIdStmt.get({ $id: id });
+			const row = getByIdStmt.get({ id }) as MessageRow | undefined;
 			return row ? rowToMessage(row) : null;
 		},
 
 		getByThread(threadId: string): MailMessage[] {
-			const rows = getByThreadStmt.all({ $thread_id: threadId });
+			const rows = getByThreadStmt.all({ thread_id: threadId }) as MessageRow[];
 			return rows.map(rowToMessage);
 		},
 
 		markRead(id: string): void {
-			markReadStmt.run({ $id: id });
+			markReadStmt.run({ id });
 		},
 
 		purge(options: { all?: boolean; olderThanMs?: number; agent?: string }): number {
 			// Count matching rows before deletion so we can report accurate numbers
 			if (options.all) {
-				const countRow = db
-					.prepare<{ cnt: number }, []>("SELECT COUNT(*) as cnt FROM messages")
-					.get();
+				const countRow = db.prepare("SELECT COUNT(*) as cnt FROM messages").get() as
+					| { cnt: number }
+					| undefined;
 				const count = countRow?.cnt ?? 0;
 				db.prepare("DELETE FROM messages").run();
 				return count;
@@ -340,12 +322,12 @@ export function createMailStore(dbPath: string): MailStore {
 			if (options.olderThanMs !== undefined) {
 				const cutoff = new Date(Date.now() - options.olderThanMs).toISOString();
 				conditions.push("created_at < $cutoff");
-				params.$cutoff = cutoff;
+				params.cutoff = cutoff;
 			}
 
 			if (options.agent !== undefined) {
 				conditions.push("(from_agent = $agent OR to_agent = $agent)");
-				params.$agent = options.agent;
+				params.agent = options.agent;
 			}
 
 			if (conditions.length === 0) {
@@ -354,11 +336,11 @@ export function createMailStore(dbPath: string): MailStore {
 
 			const whereClause = conditions.join(" AND ");
 			const countQuery = `SELECT COUNT(*) as cnt FROM messages WHERE ${whereClause}`;
-			const countRow = db.prepare<{ cnt: number }, Record<string, string>>(countQuery).get(params);
+			const countRow = db.prepare(countQuery).get(params) as { cnt: number } | undefined;
 			const count = countRow?.cnt ?? 0;
 
 			const deleteQuery = `DELETE FROM messages WHERE ${whereClause}`;
-			db.prepare<void, Record<string, string>>(deleteQuery).run(params);
+			db.prepare(deleteQuery).run(params);
 
 			return count;
 		},

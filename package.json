@@ -27,8 +27,8 @@
 		"legio": "./src/index.ts"
 	},
 	"scripts": {
-		"test": "vitest run",
-		"test:watch": "vitest",
+		"test": "bun test src/",
+		"test:vitest": "vitest run src/mail src/sessions src/events src/metrics src/merge",
 		"test:e2e": "playwright test",
 		"start": "tsx src/index.ts",
 		"lint": "biome check .",
@@ -40,14 +40,15 @@
 		"better-sqlite3": "^11.0.0",
 		"ws": "^8.18.0"
 	},
+	"dependencies": {
+		"better-sqlite3": "^12.6.2"
+	},
 	"devDependencies": {
-		"@types/better-sqlite3": "^7.6.0",
-		"@types/node": "^22.0.0",
-		"@types/ws": "^8.5.0",
-		"@playwright/test": "^1.49.0",
-		"typescript": "^5.9.0",
 		"@biomejs/biome": "^2.3.15",
-		"vitest": "^3.0.0",
-		"tsx": "^4.19.0"
+		"@playwright/test": "^1.49.0",
+		"@types/better-sqlite3": "^7.6.13",
+		"@types/bun": "latest",
+		"typescript": "^5.9.0",
+		"vitest": "^4.0.18"
 	}
 }
