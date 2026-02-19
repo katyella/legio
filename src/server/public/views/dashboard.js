@@ -66,7 +66,7 @@ function AgentsTable({ agents }) {
 			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400">
 				Agents
 			</div>
-			<div class="overflow-x-auto">
+			<div class="overflow-x-auto overflow-y-auto max-h-[60vh]">
 				<table class="w-full text-sm">
 					<thead>
 						<tr class="border-b border-border text-left text-xs text-gray-400">
@@ -125,7 +125,7 @@ function RecentMail({ mail }) {
 			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400">
 				Recent Mail
 			</div>
-			<div class="p-2 space-y-1">
+			<div class="p-2 space-y-1 overflow-y-auto max-h-[40vh]">
 				${sorted.length === 0
 					? html`<div class="px-2 py-6 text-center text-gray-500">No messages</div>`
 					: sorted.map(
@@ -152,7 +152,7 @@ function MergeQueue({ mergeQueue }) {
 			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400">
 				Merge Queue
 			</div>
-			<div class="p-2 space-y-1">
+			<div class="p-2 space-y-1 overflow-y-auto max-h-[40vh]">
 				${mergeQueue.length === 0
 					? html`<div class="px-2 py-6 text-center text-gray-500">Queue is empty</div>`
 					: mergeQueue.map(
