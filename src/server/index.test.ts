@@ -6,10 +6,11 @@
  * If routes.ts doesn't exist, the /api/ tests will verify error handling.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { WebSocket } from "ws";
 import { createServer } from "./index.ts";
 
 let tempDir: string;
@@ -17,7 +18,8 @@ let tempDir: string;
 beforeEach(async () => {
 	tempDir = await mkdtemp(join(tmpdir(), "server-test-"));
 	const legioDir = join(tempDir, ".legio");
-	await Bun.write(
+	await mkdir(legioDir, { recursive: true });
+	await writeFile(
 		join(legioDir, "config.yaml"),
 		"project:\n  name: test\n  canonicalBranch: main\nagents:\n  maxDepth: 2\ncoordinator:\n  model: sonnet\n",
 	);
@@ -28,8 +30,8 @@ afterEach(async () => {
 });
 
 describe("createServer", () => {
-	it("starts on a random port (port 0) and the assigned port is non-zero", () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+	it("starts on a random port (port 0) and the assigned port is non-zero", async () => {
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			expect(server.port).toBeGreaterThan(0);
 		} finally {
@@ -38,7 +40,7 @@ describe("createServer", () => {
 	});
 
 	it("returns 200 (SPA fallback) for unknown routes when public dir exists", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const res = await fetch(`http://localhost:${server.port}/unknown-path-xyz`);
 			expect(res.status).toBe(200);
@@ -48,7 +50,7 @@ describe("createServer", () => {
 	});
 
 	it("returns 200 (SPA fallback) for missing static files", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const res = await fetch(`http://localhost:${server.port}/nonexistent.js`);
 			expect(res.status).toBe(200);
@@ -58,7 +60,7 @@ describe("createServer", () => {
 	});
 
 	it("returns 200 for root path when public/index.html exists", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const res = await fetch(`http://localhost:${server.port}/`);
 			expect(res.status).toBe(200);
@@ -68,7 +70,7 @@ describe("createServer", () => {
 	});
 
 	it("delegates /api/ requests to handleApiRequest (or returns 500 if routes.ts throws)", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			// routes.ts may or may not exist; the server catches errors and returns 500
 			const res = await fetch(`http://localhost:${server.port}/api/anything`);
@@ -80,7 +82,7 @@ describe("createServer", () => {
 	});
 
 	it("WebSocket upgrade succeeds at /ws", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const ws = new WebSocket(`ws://localhost:${server.port}/ws`);
 
@@ -104,7 +106,7 @@ describe("createServer", () => {
 	});
 
 	it("WebSocket sends initial snapshot on connect", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const ws = new WebSocket(`ws://localhost:${server.port}/ws`);
 
@@ -131,13 +133,13 @@ describe("createServer", () => {
 		}
 	});
 
-	it("server can be stopped gracefully", () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+	it("server can be stopped gracefully", async () => {
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		expect(() => server.stop(true)).not.toThrow();
 	});
 
 	it("serves static files from public/ when they exist", async () => {
-		const server = createServer({ port: 0, host: "localhost", root: tempDir });
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
 			const res = await fetch(`http://localhost:${server.port}/test.txt`);
 			// test.txt doesn't exist but SPA fallback serves index.html

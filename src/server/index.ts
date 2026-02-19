@@ -1,6 +1,13 @@
-import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
+import * as http from "node:http";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { WebSocketServer } from "ws";
 import { createAutopilot } from "../autopilot/daemon.ts";
 import { createWebSocketManager, type WebSocketData } from "./websocket.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export interface ServerOptions {
 	port: number;
@@ -9,37 +16,74 @@ export interface ServerOptions {
 	shouldOpen?: boolean; // Auto-open browser
 }
 
+export interface ServerInstance {
+	port: number;
+	stop(force?: boolean): void;
+}
+
+const MIME_TYPES: Record<string, string> = {
+	".html": "text/html",
+	".js": "application/javascript",
+	".css": "text/css",
+	".json": "application/json",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".ico": "image/x-icon",
+	".txt": "text/plain",
+};
+
+function fileExists(filePath: string): Promise<boolean> {
+	return access(filePath).then(
+		() => true,
+		() => false,
+	);
+}
+
+function collectBody(req: http.IncomingMessage): Promise<Buffer> {
+	return new Promise((resolve, reject) => {
+		const chunks: Buffer[] = [];
+		req.on("data", (chunk: Buffer) => chunks.push(chunk));
+		req.on("end", () => resolve(Buffer.concat(chunks)));
+		req.on("error", reject);
+	});
+}
+
+async function sendWebResponse(webRes: Response, res: http.ServerResponse): Promise<void> {
+	res.statusCode = webRes.status;
+	webRes.headers.forEach((value, key) => {
+		res.setHeader(key, value);
+	});
+	const body = await webRes.arrayBuffer();
+	res.end(Buffer.from(body));
+}
+
 /**
- * Create and return a Bun server instance without blocking.
+ * Create and return a server instance without blocking.
  * Exported for testing; production code should use startServer().
  */
-export function createServer(options: ServerOptions): ReturnType<typeof Bun.serve> {
+export async function createServer(options: ServerOptions): Promise<ServerInstance> {
 	const { port, host, root } = options;
 	const legioDir = join(root, ".legio");
-	const publicDir = join(import.meta.dir, "public");
+	const publicDir = join(__dirname, "public");
 
 	const autopilot = createAutopilot(root);
 	const wsManager = createWebSocketManager(legioDir, () => autopilot.getState());
 
-	const server = Bun.serve<WebSocketData>({
-		port,
-		hostname: host,
+	const httpServer = http.createServer(async (req, res) => {
+		try {
+			const urlStr = `http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`;
+			const url = new URL(urlStr);
+			const pathname = url.pathname;
 
-		async fetch(req, server) {
-			const url = new URL(req.url);
-			const path = url.pathname;
-
-			// WebSocket upgrade
-			if (path === "/ws") {
-				const upgraded = server.upgrade(req, {
-					data: { connectedAt: new Date().toISOString() },
-				});
-				if (upgraded) return undefined;
-				return new Response("WebSocket upgrade failed", { status: 400 });
+			// WebSocket upgrade requests are handled by the upgrade event, not here
+			if (pathname === "/ws") {
+				res.writeHead(400);
+				res.end("WebSocket upgrade required");
+				return;
 			}
 
 			// API routes — dynamic import so routes.ts can be provided by another builder
-			if (path.startsWith("/api/")) {
+			if (pathname.startsWith("/api/")) {
 				try {
 					type RoutesModule = {
 						handleApiRequest(
@@ -50,56 +94,118 @@ export function createServer(options: ServerOptions): ReturnType<typeof Bun.serv
 						): Promise<Response>;
 					};
 					const { handleApiRequest } = (await import("./routes.ts")) as RoutesModule;
-					return await handleApiRequest(req, legioDir, root, autopilot);
+
+					const body = await collectBody(req);
+					const headers = new Headers();
+					for (const [key, value] of Object.entries(req.headers)) {
+						if (value !== undefined) {
+							if (Array.isArray(value)) {
+								for (const v of value) headers.append(key, v);
+							} else {
+								headers.set(key, value);
+							}
+						}
+					}
+
+					const webReq = new Request(urlStr, {
+						method: req.method ?? "GET",
+						headers,
+						body: body.length > 0 ? body.toString("utf8") : undefined,
+					});
+
+					const webRes = await handleApiRequest(webReq, legioDir, root, autopilot);
+					await sendWebResponse(webRes, res);
 				} catch (err) {
 					const message = err instanceof Error ? err.message : "Internal server error";
-					return new Response(JSON.stringify({ error: message }), {
-						status: 500,
-						headers: { "Content-Type": "application/json" },
-					});
+					res.writeHead(500, { "Content-Type": "application/json" });
+					res.end(JSON.stringify({ error: message }));
 				}
+				return;
 			}
 
 			// Static files
 			const filePath =
-				path === "/" ? join(publicDir, "index.html") : join(publicDir, path.slice(1));
-			const file = Bun.file(filePath);
-			if (await file.exists()) {
-				return new Response(file);
+				pathname === "/" ? join(publicDir, "index.html") : join(publicDir, pathname.slice(1));
+
+			if (await fileExists(filePath)) {
+				const content = await readFile(filePath);
+				const ext = extname(filePath);
+				const mimeType = MIME_TYPES[ext] ?? "application/octet-stream";
+				res.writeHead(200, { "Content-Type": mimeType });
+				res.end(content);
+				return;
 			}
 
 			// SPA fallback — serve index.html for non-file paths (hash routing)
-			const indexFile = Bun.file(join(publicDir, "index.html"));
-			if (await indexFile.exists()) {
-				return new Response(indexFile);
+			const indexPath = join(publicDir, "index.html");
+			if (await fileExists(indexPath)) {
+				const content = await readFile(indexPath);
+				res.writeHead(200, { "Content-Type": "text/html" });
+				res.end(content);
+				return;
 			}
 
-			return new Response("Not found", { status: 404 });
-		},
+			res.writeHead(404);
+			res.end("Not found");
+		} catch (err) {
+			const message = err instanceof Error ? err.message : "Server error";
+			res.writeHead(500);
+			res.end(message);
+		}
+	});
 
-		websocket: {
-			open(ws) {
-				wsManager.addClient(ws);
-			},
-			message(ws, message) {
-				wsManager.handleMessage(ws, message);
-			},
-			close(ws) {
-				wsManager.removeClient(ws);
-			},
-		},
+	const wss = new WebSocketServer({ noServer: true });
+
+	httpServer.on("upgrade", (req, socket, head) => {
+		const urlStr = `http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`;
+		const url = new URL(urlStr);
+		if (url.pathname === "/ws") {
+			wss.handleUpgrade(req, socket as import("node:net").Socket, head, (ws) => {
+				wss.emit("connection", ws, req);
+			});
+		} else {
+			socket.destroy();
+		}
+	});
+
+	wss.on("connection", (ws) => {
+		const _data: WebSocketData = { connectedAt: new Date().toISOString() };
+		wsManager.addClient(ws);
+		ws.on("message", (message) => {
+			wsManager.handleMessage(ws, message);
+		});
+		ws.on("close", () => {
+			wsManager.removeClient(ws);
+		});
 	});
 
 	// Start WebSocket polling
 	wsManager.startPolling();
 
-	return server;
+	// Start listening and wait for the port to be assigned
+	await new Promise<void>((resolve, reject) => {
+		httpServer.once("listening", resolve);
+		httpServer.once("error", reject);
+		httpServer.listen(port, host);
+	});
+
+	const address = httpServer.address();
+	const actualPort = typeof address === "object" && address !== null ? address.port : port;
+
+	return {
+		port: actualPort,
+		stop(_force?: boolean) {
+			wsManager.stopPolling();
+			wss.close();
+			httpServer.close();
+		},
+	};
 }
 
 export async function startServer(options: ServerOptions): Promise<void> {
 	const { host, shouldOpen } = options;
 
-	const server = createServer(options);
+	const server = await createServer(options);
 
 	const url = `http://${host}:${server.port}`;
 	process.stdout.write(`Legio web UI running at ${url}\n`);
@@ -107,20 +213,20 @@ export async function startServer(options: ServerOptions): Promise<void> {
 	if (shouldOpen) {
 		// Open browser (macOS: open, Linux: xdg-open)
 		const cmd = process.platform === "darwin" ? "open" : "xdg-open";
-		Bun.spawn([cmd, url], { stdout: "ignore", stderr: "ignore" });
+		const child = spawn(cmd, [url], { detached: true, stdio: "ignore" });
+		child.unref();
 	}
 
 	// Graceful shutdown
 	const shutdown = () => {
 		process.stdout.write("\nShutting down server...\n");
-		server.stop(true); // close=true to gracefully close connections
+		server.stop(true);
 		process.exit(0);
 	};
 
 	process.on("SIGINT", shutdown);
 	process.on("SIGTERM", shutdown);
 
-	// Keep alive — Bun.serve() already keeps the process alive, but
-	// we explicitly wait on a never-resolving promise for clarity
-	await new Promise(() => {});
+	// http.createServer + listen keeps the process alive naturally via the event loop.
+	// No need to await an infinite promise.
 }
