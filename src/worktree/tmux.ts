@@ -1,14 +1,46 @@
 /**
  * Tmux session management for legio agent workers.
  *
- * All operations use Bun.spawn to call the tmux CLI directly.
+ * All operations use child_process.spawn to call the tmux CLI directly.
  * Session naming convention: `legio-{projectName}-{agentName}`.
  * The project name prefix prevents cross-project tmux session collisions
  * and enables project-scoped cleanup (legio-pcef).
  */
 
+import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
+import { setTimeout } from "node:timers/promises";
 import { AgentError } from "../errors.ts";
+
+/**
+ * Run a shell command and capture its output.
+ */
+async function runCommand(
+	cmd: string[],
+	cwd?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const [command, ...args] = cmd;
+	if (!command) throw new Error("Empty command");
+	return new Promise(
+		(resolve: (value: { stdout: string; stderr: string; exitCode: number }) => void, reject) => {
+			const proc = spawn(command, args, {
+				cwd,
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
+			proc.stdout.on("data", (data: Buffer) => chunks.stdout.push(data));
+			proc.stderr.on("data", (data: Buffer) => chunks.stderr.push(data));
+			proc.on("error", reject);
+			proc.on("close", (code) => {
+				resolve({
+					stdout: Buffer.concat(chunks.stdout).toString(),
+					stderr: Buffer.concat(chunks.stderr).toString(),
+					exitCode: code ?? 1,
+				});
+			});
+		},
+	);
+}
 
 /**
  * Detect the directory containing the legio binary.
@@ -24,13 +56,9 @@ async function detectLegioBinDir(): Promise<string | null> {
 	// The legio binary (bun link) resolves to a bin dir
 	// Try `which legio` for the most reliable result
 	try {
-		const proc = Bun.spawn(["which", "legio"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const exitCode = await proc.exited;
-		if (exitCode === 0) {
-			const binPath = (await new Response(proc.stdout).text()).trim();
+		const result = await runCommand(["which", "legio"]);
+		if (result.exitCode === 0) {
+			const binPath = result.stdout.trim();
 			if (binPath.length > 0) {
 				return dirname(resolve(binPath));
 			}
@@ -50,24 +78,6 @@ async function detectLegioBinDir(): Promise<string | null> {
 	}
 
 	return null;
-}
-
-/**
- * Run a shell command and capture its output.
- */
-async function runCommand(
-	cmd: string[],
-	cwd?: string,
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-	const proc = Bun.spawn(cmd, {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const stdout = await new Response(proc.stdout).text();
-	const stderr = await new Response(proc.stderr).text();
-	const exitCode = await proc.exited;
-	return { stdout, stderr, exitCode };
 }
 
 /**
@@ -309,7 +319,7 @@ export async function killProcessTree(
 	sendSignal(rootPid, "SIGTERM");
 
 	// Phase 2: Wait grace period for processes to clean up
-	await Bun.sleep(gracePeriodMs);
+	await setTimeout(gracePeriodMs);
 
 	// Phase 3: SIGKILL any survivors (same order: deepest-first, then root)
 	for (const pid of descendants) {
