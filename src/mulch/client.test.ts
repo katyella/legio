@@ -5,19 +5,19 @@
  * All tests are skipped if mulch is not installed.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
 import { createMulchClient } from "./client.ts";
 
 // Check if mulch is available
 let hasMulch = false;
 try {
-	const proc = Bun.spawn(["which", "mulch"], { stdout: "pipe", stderr: "pipe" });
-	const exitCode = await proc.exited;
-	hasMulch = exitCode === 0;
+	const result = spawnSync("which", ["mulch"], { stdio: "pipe" });
+	hasMulch = result.status === 0;
 } catch {
 	hasMulch = false;
 }
@@ -37,46 +37,24 @@ describe("createMulchClient", () => {
 	 * Helper to initialize git repo in tempDir.
 	 * Some mulch commands (diff, learn) require a git repository.
 	 */
-	async function initGit(): Promise<void> {
-		const initProc = Bun.spawn(["git", "init"], {
-			cwd: tempDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await initProc.exited;
-
-		const configNameProc = Bun.spawn(["git", "config", "user.name", "Test User"], {
-			cwd: tempDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await configNameProc.exited;
-
-		const configEmailProc = Bun.spawn(["git", "config", "user.email", "test@example.com"], {
-			cwd: tempDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await configEmailProc.exited;
+	function initGit(): void {
+		spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
+		spawnSync("git", ["config", "user.name", "Test User"], { cwd: tempDir, stdio: "pipe" });
+		spawnSync("git", ["config", "user.email", "test@example.com"], { cwd: tempDir, stdio: "pipe" });
 	}
 
 	/**
 	 * Helper to initialize mulch in tempDir.
 	 * Creates .mulch/ directory and initial structure.
 	 */
-	async function initMulch(): Promise<void> {
+	function initMulch(): void {
 		if (!hasMulch) return;
-		const proc = Bun.spawn(["mulch", "init"], {
-			cwd: tempDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		await proc.exited;
+		spawnSync("mulch", ["init"], { cwd: tempDir, stdio: "pipe" });
 	}
 
 	describe("prime", () => {
 		test.skipIf(!hasMulch)("returns non-empty string", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.prime();
 			expect(result).toBeTruthy();
@@ -85,14 +63,9 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes domain args when provided", async () => {
-			await initMulch();
+			initMulch();
 			// Add a domain first so we can prime it
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.prime(["architecture"]);
@@ -100,20 +73,15 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --format flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.prime([], "markdown");
 			expect(typeof result).toBe("string");
 		});
 
 		test.skipIf(!hasMulch)("passes both domains and format", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.prime(["architecture"], "xml");
@@ -121,7 +89,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --files flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.prime([], "markdown", {
 				files: ["src/config.ts", "src/types.ts"],
@@ -130,13 +98,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --exclude-domain flag", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.prime([], "markdown", {
@@ -146,14 +109,9 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes both --files and --exclude-domain", async () => {
-			await initMulch();
+			initMulch();
 			// Add a domain to exclude
-			const addProc = Bun.spawn(["mulch", "add", "internal"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			spawnSync("mulch", ["add", "internal"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.prime([], "markdown", {
@@ -166,7 +124,7 @@ describe("createMulchClient", () => {
 
 	describe("status", () => {
 		test.skipIf(!hasMulch)("returns MulchStatus shape", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.status();
 			expect(result).toHaveProperty("domains");
@@ -174,21 +132,16 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("with no domains returns empty array", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.status();
 			expect(result.domains).toEqual([]);
 		});
 
 		test.skipIf(!hasMulch)("includes domain data when domains exist", async () => {
-			await initMulch();
+			initMulch();
 			// Add a domain
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.status();
@@ -200,14 +153,9 @@ describe("createMulchClient", () => {
 
 	describe("record", () => {
 		test.skipIf(!hasMulch)("with required args succeeds", async () => {
-			await initMulch();
+			initMulch();
 			// Add domain first
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			await expect(
@@ -219,13 +167,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("with optional args succeeds", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			await expect(
@@ -241,13 +184,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("with multiple tags", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "typescript"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "typescript"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			await expect(
@@ -260,13 +198,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("with --stdin flag passes flag to CLI", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "testing"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "testing"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			// --stdin expects JSON input, which we're not providing, so this will fail
@@ -281,13 +214,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("with --evidence-bead flag passes flag to CLI", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "testing"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "testing"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			// The flag is passed correctly, but may fail if the bead ID is invalid
@@ -311,13 +239,8 @@ describe("createMulchClient", () => {
 
 	describe("query", () => {
 		test.skipIf(!hasMulch)("passes domain arg when provided", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "architecture"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "architecture"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.query("architecture");
@@ -325,7 +248,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("query without domain requires --all flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			// Current implementation doesn't pass --all, so this will fail
 			// This documents the current behavior
@@ -335,21 +258,16 @@ describe("createMulchClient", () => {
 
 	describe("search", () => {
 		test.skipIf(!hasMulch)("returns string output", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.search("test");
 			expect(typeof result).toBe("string");
 		});
 
 		test.skipIf(!hasMulch)("searches across domains", async () => {
-			await initMulch();
+			initMulch();
 			// Add a domain and record
-			const addProc = Bun.spawn(["mulch", "add", "testing"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			spawnSync("mulch", ["add", "testing"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			await client.record("testing", {
@@ -364,8 +282,8 @@ describe("createMulchClient", () => {
 
 	describe("diff", () => {
 		test.skipIf(!hasMulch)("shows expertise changes", async () => {
-			await initGit();
-			await initMulch();
+			initGit();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.diff();
 			expect(result).toHaveProperty("success");
@@ -375,8 +293,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --since flag", async () => {
-			await initGit();
-			await initMulch();
+			initGit();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.diff({ since: "HEAD~5" });
 			expect(result).toHaveProperty("success");
@@ -386,8 +304,8 @@ describe("createMulchClient", () => {
 
 	describe("learn", () => {
 		test.skipIf(!hasMulch)("suggests domains for learnings", async () => {
-			await initGit();
-			await initMulch();
+			initGit();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.learn();
 			expect(result).toHaveProperty("success");
@@ -397,8 +315,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --since flag", async () => {
-			await initGit();
-			await initMulch();
+			initGit();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.learn({ since: "HEAD~3" });
 			expect(result).toHaveProperty("success");
@@ -408,7 +326,7 @@ describe("createMulchClient", () => {
 
 	describe("prune", () => {
 		test.skipIf(!hasMulch)("prunes records", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.prune();
 			expect(result).toHaveProperty("success");
@@ -417,7 +335,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("supports --dry-run flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.prune({ dryRun: true });
 			expect(result).toHaveProperty("success");
@@ -428,7 +346,7 @@ describe("createMulchClient", () => {
 
 	describe("doctor", () => {
 		test.skipIf(!hasMulch)("runs health checks", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.doctor();
 			expect(result).toHaveProperty("success");
@@ -438,7 +356,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --fix flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.doctor({ fix: true });
 			expect(result).toHaveProperty("success");
@@ -448,7 +366,7 @@ describe("createMulchClient", () => {
 
 	describe("ready", () => {
 		test.skipIf(!hasMulch)("shows recently updated records", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.ready();
 			expect(result).toHaveProperty("success");
@@ -458,7 +376,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --limit flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.ready({ limit: 5 });
 			expect(result).toHaveProperty("success");
@@ -466,13 +384,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --domain flag", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "testing"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "testing"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.ready({ domain: "testing" });
@@ -481,7 +394,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --since flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.ready({ since: "7d" });
 			expect(result).toHaveProperty("success");
@@ -491,7 +404,7 @@ describe("createMulchClient", () => {
 
 	describe("compact", () => {
 		test.skipIf(!hasMulch)("runs with --analyze flag", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.compact(undefined, { analyze: true });
 			expect(result).toHaveProperty("success");
@@ -500,13 +413,8 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("compacts specific domain with --analyze", async () => {
-			await initMulch();
-			const addProc = Bun.spawn(["mulch", "add", "large"], {
-				cwd: tempDir,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			await addProc.exited;
+			initMulch();
+			spawnSync("mulch", ["add", "large"], { cwd: tempDir, stdio: "pipe" });
 
 			const client = createMulchClient(tempDir);
 			const result = await client.compact("large", { analyze: true });
@@ -515,7 +423,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes --auto with --dry-run flags", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.compact(undefined, { auto: true, dryRun: true });
 			expect(result).toHaveProperty("success");
@@ -523,7 +431,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("passes multiple options", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.compact(undefined, {
 				auto: true,
@@ -557,7 +465,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("record fails with descriptive error for missing domain", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			// Try to record to a domain that doesn't exist
 			await expect(
@@ -569,7 +477,7 @@ describe("createMulchClient", () => {
 		});
 
 		test.skipIf(!hasMulch)("handles empty status output correctly", async () => {
-			await initMulch();
+			initMulch();
 			const client = createMulchClient(tempDir);
 			const result = await client.status();
 			// With no domains, should have empty array (not throw)

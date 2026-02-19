@@ -6,14 +6,15 @@
  * Expected API: bd mol create --name, bd mol step add, bd mol list, bd mol status
  * Actual API: bd formula, bd cook, bd mol pour, bd mol wisp
  *
- * These tests mock Bun.spawn to verify the module's logic is correct.
+ * These tests mock node:child_process to verify the module's logic is correct.
  * When the bd API is implemented to match the module's expectations,
  * these can be converted to integration tests using the real bd CLI.
  *
  * See mulch record mx-56558b for why mocking is normally avoided.
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { EventEmitter } from "node:events";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AgentError } from "../errors.ts";
 import {
 	createMoleculePrototype,
@@ -22,59 +23,51 @@ import {
 	pourMolecule,
 } from "./molecules.ts";
 
+vi.mock("node:child_process");
+
+import { spawn } from "node:child_process";
+
+const mockSpawn = vi.mocked(spawn);
+
 /**
- * Mock Bun.spawn to simulate bd mol CLI responses.
- * Returns a mock process with configurable stdout/stderr/exitCode.
+ * Create a mock ChildProcess-like object that emits stdout/stderr data then closes.
+ * Uses setImmediate so listeners are attached before events fire.
  */
-function mockSpawn(
-	stdout: string,
-	stderr = "",
-	exitCode = 0,
-): {
-	stdout: ReadableStream<Uint8Array>;
-	stderr: ReadableStream<Uint8Array>;
-	exited: Promise<number>;
-} {
-	const stdoutBody = new Response(stdout).body;
-	const stderrBody = new Response(stderr).body;
-	if (!stdoutBody || !stderrBody) {
-		throw new Error("Response body is null");
-	}
-	return {
-		stdout: stdoutBody,
-		stderr: stderrBody,
-		exited: Promise.resolve(exitCode),
-	};
+function makeMockProcess(stdout: string, stderr = "", exitCode = 0) {
+	const stdoutEE = new EventEmitter();
+	const stderrEE = new EventEmitter();
+	const proc = new EventEmitter();
+	// @ts-expect-error - Test mock attaches streams to EventEmitter
+	proc.stdout = stdoutEE;
+	// @ts-expect-error - Test mock attaches streams to EventEmitter
+	proc.stderr = stderrEE;
+	setImmediate(() => {
+		if (stdout) stdoutEE.emit("data", Buffer.from(stdout));
+		if (stderr) stderrEE.emit("data", Buffer.from(stderr));
+		proc.emit("close", exitCode);
+	});
+	return proc;
 }
 
-let originalSpawn: typeof Bun.spawn;
-
 beforeEach(() => {
-	// Save original spawn
-	originalSpawn = Bun.spawn;
+	vi.clearAllMocks();
+});
+
+afterEach(() => {
+	vi.clearAllMocks();
 });
 
 describe("molecules", () => {
-	beforeEach(() => {
-		// Restore original spawn before each test
-		Bun.spawn = originalSpawn;
-	});
-
-	afterEach(() => {
-		// Ensure cleanup after each test to prevent mock leaks
-		Bun.spawn = originalSpawn;
-	});
-
 	describe("createMoleculePrototype", () => {
 		test("creates a prototype with ordered steps", async () => {
 			let callCount = 0;
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock((cmd: string[], _opts?: unknown) => {
+			mockSpawn.mockImplementation(((command: string, args: string[]) => {
 				callCount++;
+				const cmd = [command, ...(args ?? [])];
 				// First call: bd mol create
 				if (callCount === 1) {
 					expect(cmd).toEqual(["bd", "mol", "create", "--name", "Test Workflow", "--json"]);
-					return mockSpawn(JSON.stringify({ id: "mol-123" }));
+					return makeMockProcess(JSON.stringify({ id: "mol-123" }));
 				}
 				// Subsequent calls: bd mol step add
 				expect(cmd[0]).toBe("bd");
@@ -82,8 +75,8 @@ describe("molecules", () => {
 				expect(cmd[2]).toBe("step");
 				expect(cmd[3]).toBe("add");
 				expect(cmd[4]).toBe("mol-123");
-				return mockSpawn(JSON.stringify({ success: true }));
-			});
+				return makeMockProcess(JSON.stringify({ success: true }));
+			}) as unknown as typeof spawn);
 
 			const molId = await createMoleculePrototype("/test/dir", {
 				name: "Test Workflow",
@@ -100,18 +93,18 @@ describe("molecules", () => {
 
 		test("creates a prototype with default type (task)", async () => {
 			let callCount = 0;
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock((cmd: string[], _opts?: unknown) => {
+			mockSpawn.mockImplementation(((command: string, args: string[]) => {
 				callCount++;
+				const cmd = [command, ...(args ?? [])];
 				if (callCount === 1) {
-					return mockSpawn(JSON.stringify({ id: "mol-456" }));
+					return makeMockProcess(JSON.stringify({ id: "mol-456" }));
 				}
 				// Check that default type is "task"
 				expect(cmd).toContain("--type");
 				const typeIndex = cmd.indexOf("--type");
 				expect(cmd[typeIndex + 1]).toBe("task");
-				return mockSpawn(JSON.stringify({ success: true }));
-			});
+				return makeMockProcess(JSON.stringify({ success: true }));
+			}) as unknown as typeof spawn);
 
 			const molId = await createMoleculePrototype("/test/dir", {
 				name: "Default Type Workflow",
@@ -123,10 +116,9 @@ describe("molecules", () => {
 		});
 
 		test("creates a prototype with empty steps array", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn(JSON.stringify({ id: "mol-empty" }));
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess(JSON.stringify({ id: "mol-empty" }));
+			}) as unknown as typeof spawn);
 
 			const molId = await createMoleculePrototype("/test/dir", {
 				name: "Empty Workflow",
@@ -137,10 +129,9 @@ describe("molecules", () => {
 		});
 
 		test("throws AgentError on create failure", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn("", "bd mol create failed: invalid name", 1);
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess("", "bd mol create failed: invalid name", 1);
+			}) as unknown as typeof spawn);
 
 			await expect(
 				createMoleculePrototype("/test/dir", {
@@ -152,15 +143,14 @@ describe("molecules", () => {
 
 		test("throws AgentError on step add failure", async () => {
 			let callCount = 0;
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
+			mockSpawn.mockImplementation((() => {
 				callCount++;
 				if (callCount === 1) {
-					return mockSpawn(JSON.stringify({ id: "mol-789" }));
+					return makeMockProcess(JSON.stringify({ id: "mol-789" }));
 				}
 				// Step add fails
-				return mockSpawn("", "step add failed", 1);
-			});
+				return makeMockProcess("", "step add failed", 1);
+			}) as unknown as typeof spawn);
 
 			await expect(
 				createMoleculePrototype("/test/dir", {
@@ -173,15 +163,14 @@ describe("molecules", () => {
 
 	describe("listPrototypes", () => {
 		test("returns all created prototypes", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn(
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess(
 					JSON.stringify([
 						{ id: "mol-1", name: "List Test 1", stepCount: 1 },
 						{ id: "mol-2", name: "List Test 2", stepCount: 2 },
 					]),
 				);
-			});
+			}) as unknown as typeof spawn);
 
 			const prototypes = await listPrototypes("/test/dir");
 
@@ -191,10 +180,9 @@ describe("molecules", () => {
 		});
 
 		test("returns empty array when no prototypes exist", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn(JSON.stringify([]));
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess(JSON.stringify([]));
+			}) as unknown as typeof spawn);
 
 			const prototypes = await listPrototypes("/test/dir");
 
@@ -203,19 +191,17 @@ describe("molecules", () => {
 		});
 
 		test("throws AgentError on failure", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn("", "bd mol list failed", 1);
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess("", "bd mol list failed", 1);
+			}) as unknown as typeof spawn);
 
 			await expect(listPrototypes("/test/dir")).rejects.toThrow(AgentError);
 		});
 
 		test("throws AgentError on empty output", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn("");
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess("");
+			}) as unknown as typeof spawn);
 
 			await expect(listPrototypes("/test/dir")).rejects.toThrow(AgentError);
 		});
@@ -223,11 +209,11 @@ describe("molecules", () => {
 
 	describe("pourMolecule", () => {
 		test("pours a prototype into actual issues", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock((cmd: string[]) => {
+			mockSpawn.mockImplementation(((command: string, args: string[]) => {
+				const cmd = [command, ...(args ?? [])];
 				expect(cmd).toEqual(["bd", "mol", "pour", "mol-123", "--json"]);
-				return mockSpawn(JSON.stringify({ ids: ["issue-1", "issue-2", "issue-3"] }));
-			});
+				return makeMockProcess(JSON.stringify({ ids: ["issue-1", "issue-2", "issue-3"] }));
+			}) as unknown as typeof spawn);
 
 			const issueIds = await pourMolecule("/test/dir", {
 				prototypeId: "mol-123",
@@ -239,11 +225,11 @@ describe("molecules", () => {
 		});
 
 		test("applies prefix when provided", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock((cmd: string[]) => {
+			mockSpawn.mockImplementation(((command: string, args: string[]) => {
+				const cmd = [command, ...(args ?? [])];
 				expect(cmd).toEqual(["bd", "mol", "pour", "mol-456", "--json", "--prefix", "v2.0"]);
-				return mockSpawn(JSON.stringify({ ids: ["issue-4", "issue-5"] }));
-			});
+				return makeMockProcess(JSON.stringify({ ids: ["issue-4", "issue-5"] }));
+			}) as unknown as typeof spawn);
 
 			const issueIds = await pourMolecule("/test/dir", {
 				prototypeId: "mol-456",
@@ -254,10 +240,9 @@ describe("molecules", () => {
 		});
 
 		test("handles empty prototype (0 steps)", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn(JSON.stringify({ ids: [] }));
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess(JSON.stringify({ ids: [] }));
+			}) as unknown as typeof spawn);
 
 			const issueIds = await pourMolecule("/test/dir", {
 				prototypeId: "mol-empty",
@@ -268,10 +253,9 @@ describe("molecules", () => {
 		});
 
 		test("throws AgentError for nonexistent prototype", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn("", "prototype not found", 1);
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess("", "prototype not found", 1);
+			}) as unknown as typeof spawn);
 
 			await expect(
 				pourMolecule("/test/dir", {
@@ -283,10 +267,10 @@ describe("molecules", () => {
 
 	describe("getConvoyStatus", () => {
 		test("returns status for poured prototype", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock((cmd: string[]) => {
+			mockSpawn.mockImplementation(((command: string, args: string[]) => {
+				const cmd = [command, ...(args ?? [])];
 				expect(cmd).toEqual(["bd", "mol", "status", "mol-123", "--json"]);
-				return mockSpawn(
+				return makeMockProcess(
 					JSON.stringify({
 						total: 3,
 						completed: 1,
@@ -294,7 +278,7 @@ describe("molecules", () => {
 						blocked: 0,
 					}),
 				);
-			});
+			}) as unknown as typeof spawn);
 
 			const status = await getConvoyStatus("/test/dir", "mol-123");
 
@@ -306,9 +290,8 @@ describe("molecules", () => {
 		});
 
 		test("handles empty poured prototype", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn(
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess(
 					JSON.stringify({
 						total: 0,
 						completed: 0,
@@ -316,7 +299,7 @@ describe("molecules", () => {
 						blocked: 0,
 					}),
 				);
-			});
+			}) as unknown as typeof spawn);
 
 			const status = await getConvoyStatus("/test/dir", "mol-empty");
 
@@ -327,10 +310,9 @@ describe("molecules", () => {
 		});
 
 		test("throws AgentError for nonexistent prototype", async () => {
-			// @ts-expect-error - Mocking Bun.spawn for testing
-			Bun.spawn = mock(() => {
-				return mockSpawn("", "prototype not found", 1);
-			});
+			mockSpawn.mockImplementation((() => {
+				return makeMockProcess("", "prototype not found", 1);
+			}) as unknown as typeof spawn);
 
 			await expect(getConvoyStatus("/test/dir", "nonexistent-mol-id")).rejects.toThrow(AgentError);
 		});

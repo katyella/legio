@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,10 +26,10 @@ async function getTemplateRepo(): Promise<string> {
 	if (_templateDir) return _templateDir;
 
 	const dir = await mkdtemp(join(tmpdir(), "legio-template-"));
-	await runGitInDir(dir, ["init", "-b", "main"]);
-	await Bun.write(join(dir, ".gitkeep"), "");
-	await runGitInDir(dir, ["add", ".gitkeep"]);
-	await runGitInDir(dir, ["commit", "-m", "initial commit"]);
+	runGitInDir(dir, ["init", "-b", "main"]);
+	await writeFile(join(dir, ".gitkeep"), "");
+	runGitInDir(dir, ["add", ".gitkeep"]);
+	runGitInDir(dir, ["commit", "-m", "initial commit"]);
 
 	_templateDir = dir;
 	return dir;
@@ -47,12 +48,12 @@ export async function createTempGitRepo(): Promise<string> {
 	const template = await getTemplateRepo();
 	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
 	// Clone into the empty dir. Avoid --local (hardlinks trigger EFAULT in Bun's rm).
-	await runGitInDir(".", ["clone", template, dir]);
+	runGitInDir(".", ["clone", template, dir]);
 	// Set git identity at repo level so code that doesn't use GIT_TEST_ENV
 	// (e.g., resolver's runGit) can still commit. Locally this is covered by
 	// ~/.gitconfig, but CI runners have no global git identity.
-	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
-	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
+	runGitInDir(dir, ["config", "user.name", "Legio Test"]);
+	runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	return dir;
 }
 
@@ -77,9 +78,9 @@ export async function commitFile(
 	const { mkdir } = await import("node:fs/promises");
 	await mkdir(parentDir, { recursive: true });
 
-	await Bun.write(fullPath, content);
-	await runGitInDir(repoDir, ["add", filePath]);
-	await runGitInDir(repoDir, ["commit", "-m", message ?? `add ${filePath}`]);
+	await writeFile(fullPath, content);
+	runGitInDir(repoDir, ["add", filePath]);
+	runGitInDir(repoDir, ["commit", "-m", message ?? `add ${filePath}`]);
 }
 
 /**
@@ -88,9 +89,8 @@ export async function commitFile(
  *
  * Useful in tests to avoid hardcoding "main" -- CI runners may default to "master".
  */
-export async function getDefaultBranch(repoDir: string): Promise<string> {
-	const stdout = await runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]);
-	return stdout.trim();
+export function getDefaultBranch(repoDir: string): string {
+	return runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]).trim();
 }
 
 /**
@@ -104,23 +104,18 @@ export async function cleanupTempDir(dir: string): Promise<void> {
  * Run a git command in the given directory. Throws on non-zero exit.
  * Passes GIT_AUTHOR/COMMITTER env vars so repos don't need per-repo config.
  */
-export async function runGitInDir(cwd: string, args: string[]): Promise<string> {
-	const proc = Bun.spawn(["git", ...args], {
+export function runGitInDir(cwd: string, args: string[]): string {
+	const result = spawnSync("git", args, {
 		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
+		stdio: "pipe",
 		env: { ...process.env, ...GIT_TEST_ENV },
 	});
 
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
+	const exitCode = result.status ?? 1;
 	if (exitCode !== 0) {
+		const stderr = (result.stderr ?? Buffer.alloc(0)).toString();
 		throw new Error(`git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
 	}
 
-	return stdout;
+	return (result.stdout ?? Buffer.alloc(0)).toString();
 }
