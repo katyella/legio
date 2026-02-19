@@ -5,7 +5,7 @@
 //   - Chat input with POST /api/mail/send integration
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
-import { MessageBubble } from "../components/message-bubble.js";
+import { ActivityCard, MessageBubble } from "../components/message-bubble.js";
 import {
 	html,
 	useCallback,
@@ -15,15 +15,7 @@ import {
 	useRef,
 	useState,
 } from "../lib/preact-setup.js";
-
-// State dot colors per agent state (Tailwind text color classes)
-const STATE_DOT_COLORS = {
-	working: "text-green-500",
-	booting: "text-yellow-500",
-	stalled: "text-red-500",
-	zombie: "text-gray-600",
-	completed: "text-gray-400",
-};
+import { agentColor, inferCapability, isActivityMessage, timeAgo } from "../lib/utils.js";
 
 // Issue status icon colors
 const STATUS_ICON_COLORS = {
@@ -149,12 +141,9 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const [expandedTasks, setExpandedTasks] = useState(() => new Set());
 	const [collapsedThreads, setCollapsedThreads] = useState(() => new Set());
 
-	// Chat input form state
-	const [fromVal, setFromVal] = useState("orchestrator");
+	// Chat input form state (simplified: no From, Subject, or Type)
 	const [toVal, setToVal] = useState("");
-	const [subjectVal, setSubjectVal] = useState("");
 	const [bodyVal, setBodyVal] = useState("");
-	const [typeVal, setTypeVal] = useState("status");
 	const [sending, setSending] = useState(false);
 	const [sendError, setSendError] = useState("");
 
@@ -298,8 +287,8 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	}, []);
 
 	const handleSend = useCallback(async () => {
-		if (!fromVal.trim() || !toVal.trim()) {
-			setSendError("From and To are required.");
+		if (!toVal.trim() || !bodyVal.trim()) {
+			setSendError("To and body are required.");
 			return;
 		}
 		setSendError("");
@@ -308,18 +297,18 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 			const sendFn =
 				propOnSendMessage || (typeof window !== "undefined" ? window.sendChatMessage : null);
 			if (sendFn) {
-				await sendFn(fromVal.trim(), toVal.trim(), subjectVal.trim(), bodyVal.trim(), typeVal);
+				await sendFn("orchestrator", toVal.trim(), "", bodyVal.trim(), "status");
 			} else {
 				// Direct fetch fallback when app.js globals are unavailable
 				const res = await fetch("/api/mail/send", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
-						from: fromVal.trim(),
+						from: "orchestrator",
 						to: toVal.trim(),
-						subject: subjectVal.trim(),
+						subject: "",
 						body: bodyVal.trim(),
-						type: typeVal,
+						type: "status",
 						priority: "normal",
 					}),
 				});
@@ -332,15 +321,14 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					window.state.mail.push(msg);
 				}
 			}
-			// Clear body/subject on success; preserve from/to/type
-			setSubjectVal("");
+			// Clear body on success; preserve to
 			setBodyVal("");
 		} catch (err) {
 			setSendError(err.message || "Send failed");
 		} finally {
 			setSending(false);
 		}
-	}, [fromVal, toVal, subjectVal, bodyVal, typeVal, propOnSendMessage]);
+	}, [toVal, bodyVal, propOnSendMessage]);
 
 	// ----- Header data -----
 
@@ -361,6 +349,27 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const showGeneral = generalAgentNames.size > 0 || generalCounts.msgCount > 0;
 
 	// ----- Message feed rendering helpers -----
+
+	// Render a single message as ActivityCard or MessageBubble based on type.
+	function renderMessage(msg, showName, compact) {
+		if (isActivityMessage(msg)) {
+			return html`<${ActivityCard}
+				key=${msg.id}
+				event=${msg}
+				capability=${inferCapability(msg.from, agents) || inferCapability(msg.to, agents)}
+			/>`;
+		}
+		const capability = inferCapability(msg.from, agents);
+		const isUser = msg.from === "orchestrator" || msg.from === "coordinator";
+		return html`<${MessageBubble}
+			key=${msg.id}
+			msg=${msg}
+			capability=${capability || (isUser ? "coordinator" : null)}
+			isUser=${false}
+			showName=${showName}
+			compact=${compact}
+		/>`;
+	}
 
 	// Render root messages with grouping and time dividers.
 	// Tracks prevRootMsg via closure to determine showHeader and time gaps.
@@ -395,51 +404,27 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		}
 
 		if (replies.length === 0) {
-			items.push(html`
-				<${MessageBubble}
-					key=${root.id}
-					msg=${root}
-					isReply=${false}
-					selectedAgent=${selectedAgent}
-					selectedPair=${null}
-					showHeader=${showHeader}
-				/>
-			`);
+			items.push(renderMessage(root, showHeader, !showHeader));
 		} else {
 			const isCollapsed = collapsedThreads.has(root.id);
 			const replyWord = replies.length === 1 ? "reply" : "replies";
+			const lastReply = replies[replies.length - 1];
 			items.push(html`
 				<div key=${root.id}>
-					<${MessageBubble}
-						msg=${root}
-						isReply=${false}
-						selectedAgent=${selectedAgent}
-						selectedPair=${null}
-						showHeader=${showHeader}
-					/>
+					${renderMessage(root, showHeader, !showHeader)}
 					<div class="ml-3 mb-2">
 						<button
 							class="text-xs text-[#666] hover:text-[#999] flex items-center gap-1 mb-1 bg-transparent border-none cursor-pointer p-0"
 							onClick=${() => handleThreadToggle(root.id)}
 						>
-							${isCollapsed ? "\u25B6" : "\u25BC"} ${replies.length}
-							${replyWord}
+							${isCollapsed ? "\u25B6" : "\u25BC"} ${replies.length} ${replyWord}
+							${
+								lastReply
+									? html`<span class="text-[#444] ml-1">· ${timeAgo(lastReply.createdAt)}</span>`
+									: null
+							}
 						</button>
-						${
-							!isCollapsed &&
-							replies.map(
-								(reply) => html`
-								<${MessageBubble}
-									key=${reply.id}
-									msg=${reply}
-									isReply=${true}
-									selectedAgent=${selectedAgent}
-									selectedPair=${null}
-									showHeader=${true}
-								/>
-							`,
-							)
-						}
+						${!isCollapsed && replies.map((reply) => renderMessage(reply, true, false))}
 					</div>
 				</div>
 			`);
@@ -447,6 +432,13 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 		return items;
 	});
+
+	// ----- Agent color helpers for sidebar and header -----
+
+	// Get capability colors for an agent (safe fallback for missing capability)
+	function capabilityColors(capability) {
+		return agentColor(capability || null);
+	}
 
 	return html`
 		<div class="flex h-full">
@@ -493,6 +485,10 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-1.5 text-sm" +
 						(isTaskSelected ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "");
 
+					// Primary agent capability color for the task row dot
+					const primaryAgent = group.agents[0];
+					const primaryColors = capabilityColors(primaryAgent?.capability);
+
 					return html`
 						<div key=${beadId}>
 							<div class=${taskItemClass} onClick=${() => handleTaskClick(beadId)}>
@@ -504,6 +500,11 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 								</button>
 								<span class=${`text-xs shrink-0 ${statusColor}`}>${statusIcon}</span>
 								<span class="flex-1 truncate text-[#e5e5e5] text-xs">${title}</span>
+								${
+									primaryAgent
+										? html`<span class=${`text-xs shrink-0 ${primaryColors.dot}`}>\u25CF</span>`
+										: null
+								}
 								${
 									group.unreadCount > 0
 										? html`<span
@@ -522,7 +523,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 								isExpanded &&
 								group.agents.map((ag) => {
 									const isAgentSelected = selectedAgent === ag.agentName;
-									const dotColor = STATE_DOT_COLORS[ag.state] || "text-gray-400";
+									const colors = capabilityColors(ag.capability);
 									const agentItemClass =
 										"pl-8 pr-3 py-1.5 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-1.5 text-xs" +
 										(isAgentSelected ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "");
@@ -533,9 +534,16 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 										class=${agentItemClass}
 										onClick=${(e) => handleAgentClick(e, ag.agentName)}
 									>
-										<span class=${`text-xs ${dotColor}`}>\u25CF</span>
+										<span class=${`text-xs ${colors.dot}`}>\u25CF</span>
 										<span class="flex-1 truncate text-[#e5e5e5]">${ag.agentName}</span>
-										<span class="text-[#555] shrink-0">${ag.capability || ""}</span>
+										${
+											ag.capability
+												? html`<span
+													class=${`text-xs px-1 rounded shrink-0 ${colors.bg} ${colors.text}`}
+												>${ag.capability}</span>`
+												: null
+										}
+										<span class="text-[#555] shrink-0 ml-1">${ag.state || ""}</span>
 									</div>
 								`;
 								})
@@ -586,24 +594,30 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					${
 						selectedAgent
 							? html`
-								<span class="font-semibold text-[#e5e5e5]">${selectedAgent}</span>
-								${
-									selectedAgentData &&
-									html`
-									<span class="text-xs px-1.5 py-0.5 rounded bg-[#333] text-[#999]">
-										${selectedAgentData.capability || ""}
-									</span>
-									<span
-										class=${
-											"text-xs px-1.5 py-0.5 rounded bg-[#333] " +
-											(STATE_DOT_COLORS[selectedAgentData.state] || "text-gray-400")
-										}
-									>
-										${selectedAgentData.state || ""}
-									</span>
-								`
-								}
-						  `
+								<div class=${
+									"flex items-center gap-2 border-l-4 pl-2" +
+									(selectedAgentData
+										? ` ${capabilityColors(selectedAgentData.capability).border}`
+										: "")
+								}>
+									<span class="font-semibold text-[#e5e5e5]">${selectedAgent}</span>
+									${
+										selectedAgentData &&
+										html`
+										<span class=${
+											`text-xs px-1.5 py-0.5 rounded` +
+											` ${capabilityColors(selectedAgentData.capability).bg}` +
+											` ${capabilityColors(selectedAgentData.capability).text}`
+										}>
+											${selectedAgentData.capability || ""}
+										</span>
+										<span class="text-xs px-1.5 py-0.5 rounded bg-[#333] text-[#999]">
+											${selectedAgentData.state || ""}
+										</span>
+									`
+									}
+								</div>
+							  `
 							: selectedTask === "__general__"
 								? html`<span class="font-semibold text-[#e5e5e5]">Unassigned Messages</span>`
 								: selectedTaskData
@@ -623,6 +637,15 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 									${selectedTaskData.issue.status}
 								</span>`
 								}
+								<span class="flex items-center gap-1">
+									${selectedTaskData.agents.map(
+										(ag) => html`<span
+											key=${ag.agentName}
+											class=${`text-xs ${capabilityColors(ag.capability).dot}`}
+											title=${ag.agentName}
+										>\u25CF</span>`,
+									)}
+								</span>
 								<span class="text-xs text-[#666]">
 									${selectedTaskData.agents.length}
 									${selectedTaskData.agents.length === 1 ? "agent" : "agents"}
@@ -655,65 +678,43 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					}
 				</div>
 
-				<!-- Chat input -->
+				<!-- Chat input (simplified: To + Body + Send) -->
 				<div class="border-t border-[#2a2a2a] p-3">
-					<div class="flex gap-2 mb-2">
-						<input
-							type="text"
-							placeholder="From"
-							value=${fromVal}
-							onInput=${(e) => setFromVal(e.target.value)}
-							class=${`flex-1 ${inputClass}`}
-						/>
-						<input
-							type="text"
-							placeholder="To"
-							value=${toVal}
-							onInput=${(e) => setToVal(e.target.value)}
-							class=${`flex-1 ${inputClass}`}
-						/>
-					</div>
-					<input
-						type="text"
-						placeholder="Subject"
-						value=${subjectVal}
-						onInput=${(e) => setSubjectVal(e.target.value)}
-						class=${`w-full ${inputClass} mb-2`}
-					/>
-					<textarea
-						placeholder="Message body... (Ctrl+Enter or Cmd+Enter to send)"
-						rows="2"
-						value=${bodyVal}
-						onInput=${(e) => setBodyVal(e.target.value)}
-						onKeyDown=${(e) => {
-							if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-								e.preventDefault();
-								if (!bodyVal.trim()) return;
-								handleSend();
-							}
-						}}
-						class=${`w-full ${inputClass} mb-2 resize-none`}
-					/>
-					<div class="flex items-center gap-2 flex-wrap">
-						<select
-							value=${typeVal}
-							onChange=${(e) => setTypeVal(e.target.value)}
-							class="bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5] outline-none"
-						>
-							<option value="status">status</option>
-							<option value="question">question</option>
-							<option value="result">result</option>
-							<option value="error">error</option>
-						</select>
+					<div class="flex gap-2 items-end">
+						<div class="flex-1">
+							<div class="flex items-center gap-1 mb-1">
+								<span class="text-xs text-[#555]">To:</span>
+								<input
+									type="text"
+									value=${toVal}
+									onInput=${(e) => setToVal(e.target.value)}
+									class="bg-transparent border-none text-xs text-[#e5e5e5] outline-none w-24"
+								/>
+							</div>
+							<textarea
+								placeholder="Message... (Ctrl+Enter or Cmd+Enter to send)"
+								rows="2"
+								value=${bodyVal}
+								onInput=${(e) => setBodyVal(e.target.value)}
+								onKeyDown=${(e) => {
+									if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+										e.preventDefault();
+										if (!bodyVal.trim()) return;
+										handleSend();
+									}
+								}}
+								class=${`w-full ${inputClass} resize-none`}
+							/>
+						</div>
 						<button
 							onClick=${handleSend}
 							disabled=${sending || !bodyVal.trim()}
-							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none self-end"
 						>
-							${sending ? "Sending..." : "Send"}
+							${sending ? "..." : "Send"}
 						</button>
-						${sendError && html`<span class="text-xs text-red-400">${sendError}</span>`}
 					</div>
+					${sendError && html`<span class="text-xs text-red-400 mt-1 block">${sendError}</span>`}
 				</div>
 
 			</div>
