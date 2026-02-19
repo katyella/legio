@@ -5,6 +5,7 @@ import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import { html } from 'htm/preact';
 import { appState, setLastUpdated } from './lib/state.js';
+import { CommandView } from './views/command.js';
 import { ChatView } from './views/chat.js';
 import { DashboardView } from './views/dashboard.js';
 import { EventsView } from './views/events.js';
@@ -48,9 +49,9 @@ export async function initData() {
 // ===== Hash Router Helpers =====
 
 function parseHash(hash) {
-	const withoutHash = (hash || '#chat').replace(/^#\/?/, '');
+	const withoutHash = (hash || '#command').replace(/^#\/?/, '');
 	const parts = withoutHash.split('/');
-	return { view: parts[0] || 'chat', param: parts[1] ?? null };
+	return { view: parts[0] || 'command', param: parts[1] ?? null };
 }
 
 // ===== Router =====
@@ -62,6 +63,7 @@ function Router({ view, param }) {
 		issues: appState.issues.value,
 	};
 	switch (view) {
+		case 'command':   return html`<${CommandView} />`;
 		case 'chat':      return html`<${ChatView} state=${chatState} />`;
 		case 'dashboard': return html`<${DashboardView} agents=${appState.agents.value} mail=${appState.mail.value} mergeQueue=${appState.mergeQueue.value} status=${appState.status.value} />`;
 		case 'events':    return html`<${EventsView} events=${appState.events.value} />`;
@@ -70,13 +72,14 @@ function Router({ view, param }) {
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'terminal':  return html`<${TerminalView} />`;
 		case 'autopilot': return html`<${AutopilotView} />`;
-		default:          return html`<${ChatView} />`;
+		default:          return html`<${CommandView} />`;
 	}
 }
 
 // ===== Layout =====
 
 const NAV_LINKS = [
+	{ href: '#command',   label: 'Command',   view: 'command' },
 	{ href: '#chat',      label: 'Chat',      view: 'chat' },
 	{ href: '#dashboard', label: 'Dashboard', view: 'dashboard' },
 	{ href: '#events',    label: 'Events',    view: 'events' },
