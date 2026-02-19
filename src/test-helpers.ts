@@ -1,6 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Git environment variables for test repos.
@@ -26,7 +30,7 @@ async function getTemplateRepo(): Promise<string> {
 
 	const dir = await mkdtemp(join(tmpdir(), "legio-template-"));
 	await runGitInDir(dir, ["init", "-b", "main"]);
-	await Bun.write(join(dir, ".gitkeep"), "");
+	await writeFile(join(dir, ".gitkeep"), "");
 	await runGitInDir(dir, ["add", ".gitkeep"]);
 	await runGitInDir(dir, ["commit", "-m", "initial commit"]);
 
@@ -74,10 +78,9 @@ export async function commitFile(
 
 	// Ensure parent directories exist
 	const parentDir = join(fullPath, "..");
-	const { mkdir } = await import("node:fs/promises");
 	await mkdir(parentDir, { recursive: true });
 
-	await Bun.write(fullPath, content);
+	await writeFile(fullPath, content);
 	await runGitInDir(repoDir, ["add", filePath]);
 	await runGitInDir(repoDir, ["commit", "-m", message ?? `add ${filePath}`]);
 }
@@ -105,22 +108,17 @@ export async function cleanupTempDir(dir: string): Promise<void> {
  * Passes GIT_AUTHOR/COMMITTER env vars so repos don't need per-repo config.
  */
 export async function runGitInDir(cwd: string, args: string[]): Promise<string> {
-	const proc = Bun.spawn(["git", ...args], {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
-		env: { ...process.env, ...GIT_TEST_ENV },
-	});
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	if (exitCode !== 0) {
-		throw new Error(`git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
+	try {
+		const { stdout } = await execFileAsync("git", args, {
+			cwd,
+			env: { ...process.env, ...GIT_TEST_ENV },
+			maxBuffer: 10 * 1024 * 1024,
+		});
+		return stdout;
+	} catch (error: unknown) {
+		const execError = error as { stderr?: string; code?: number };
+		throw new Error(
+			`git ${args.join(" ")} failed (exit ${execError.code ?? "unknown"}): ${execError.stderr?.trim() ?? ""}`,
+		);
 	}
-
-	return stdout;
 }
