@@ -5,8 +5,16 @@
 //   - Chat input with POST /api/mail/send integration
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
-import { h, html, useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "../lib/preact-setup.js";
 import { MessageBubble } from "../components/message-bubble.js";
+import {
+	html,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "../lib/preact-setup.js";
 
 // State dot colors per agent state (Tailwind text color classes)
 const STATE_DOT_COLORS = {
@@ -33,6 +41,23 @@ const STATUS_ICONS = {
 
 // Status sort order for task groups
 const STATUS_ORDER = { in_progress: 0, open: 1, closed: 2 };
+
+/**
+ * Format a timestamp as a time divider label.
+ * Shows "Today at HH:MM", "Yesterday at HH:MM", or "MMM DD at HH:MM".
+ */
+function formatTimeDivider(isoString) {
+	if (!isoString) return "";
+	const d = new Date(isoString);
+	const now = new Date();
+	const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+	const hhmm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	if (d >= todayStart) return `Today at ${hhmm}`;
+	if (d >= yesterdayStart) return `Yesterday at ${hhmm}`;
+	const month = d.toLocaleString("default", { month: "short" });
+	return `${month} ${d.getDate()} at ${hhmm}`;
+}
 
 /**
  * Build task groups from agents, issues, and mail.
@@ -113,8 +138,7 @@ function sortTaskGroups(taskGroups) {
  * @param {Function} [props.onSendMessage]   - Send callback(from, to, subject, body, type)
  */
 export function ChatView({ state: propState, onSendMessage: propOnSendMessage }) {
-	const appState =
-		propState || (typeof window !== "undefined" ? window.state : null) || {};
+	const appState = propState || (typeof window !== "undefined" ? window.state : null) || {};
 	const mail = appState.mail || [];
 	const agents = appState.agents || [];
 	const issues = appState.issues || [];
@@ -155,8 +179,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const handleFeedScroll = useCallback(() => {
 		const feed = feedRef.current;
 		if (!feed) return;
-		isNearBottomRef.current =
-			feed.scrollHeight - feed.scrollTop - feed.clientHeight < 50;
+		isNearBottomRef.current = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 50;
 	}, []);
 
 	// Build task groups (memoized)
@@ -283,16 +306,9 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		setSending(true);
 		try {
 			const sendFn =
-				propOnSendMessage ||
-				(typeof window !== "undefined" ? window.sendChatMessage : null);
+				propOnSendMessage || (typeof window !== "undefined" ? window.sendChatMessage : null);
 			if (sendFn) {
-				await sendFn(
-					fromVal.trim(),
-					toVal.trim(),
-					subjectVal.trim(),
-					bodyVal.trim(),
-					typeVal,
-				);
+				await sendFn(fromVal.trim(), toVal.trim(), subjectVal.trim(), bodyVal.trim(), typeVal);
 			} else {
 				// Direct fetch fallback when app.js globals are unavailable
 				const res = await fetch("/api/mail/send", {
@@ -333,15 +349,104 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		: null;
 
 	const selectedTaskData =
-		selectedTask && selectedTask !== "__general__"
-			? taskGroups.get(selectedTask)
-			: null;
+		selectedTask && selectedTask !== "__general__" ? taskGroups.get(selectedTask) : null;
+
+	// Unread count for messages in the current view
+	const unreadInView = filteredMessages.filter((m) => !m.read).length;
 
 	// Input field shared classes
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5] placeholder-[#666] outline-none focus:border-[#E64415]";
 
 	const showGeneral = generalAgentNames.size > 0 || generalCounts.msgCount > 0;
+
+	// ----- Message feed rendering helpers -----
+
+	// Render root messages with grouping and time dividers.
+	// Tracks prevRootMsg via closure to determine showHeader and time gaps.
+	// Returns flat array so each root can emit [divider?, bubble].
+	let prevRootMsg = null;
+	const feedItems = roots.flatMap((root) => {
+		const replies = replyMap[root.id] || [];
+
+		// Show header when sender changes or gap > 2 minutes
+		const showHeader =
+			!prevRootMsg ||
+			prevRootMsg.from !== root.from ||
+			new Date(root.createdAt).getTime() - new Date(prevRootMsg.createdAt).getTime() > 120000;
+
+		// Time divider when gap > 30 minutes between root messages
+		const showDivider =
+			prevRootMsg &&
+			new Date(root.createdAt).getTime() - new Date(prevRootMsg.createdAt).getTime() > 1800000;
+
+		prevRootMsg = root;
+
+		const items = [];
+
+		if (showDivider) {
+			items.push(html`
+				<div key=${`divider-${root.id}`} class="flex items-center gap-3 my-4">
+					<div class="flex-1 border-t border-[#2a2a2a]"></div>
+					<span class="text-xs text-[#555]">${formatTimeDivider(root.createdAt)}</span>
+					<div class="flex-1 border-t border-[#2a2a2a]"></div>
+				</div>
+			`);
+		}
+
+		if (replies.length === 0) {
+			items.push(html`
+				<${MessageBubble}
+					key=${root.id}
+					msg=${root}
+					isReply=${false}
+					selectedAgent=${selectedAgent}
+					selectedPair=${null}
+					showHeader=${showHeader}
+				/>
+			`);
+		} else {
+			const isCollapsed = collapsedThreads.has(root.id);
+			const replyWord = replies.length === 1 ? "reply" : "replies";
+			items.push(html`
+				<div key=${root.id}>
+					<${MessageBubble}
+						msg=${root}
+						isReply=${false}
+						selectedAgent=${selectedAgent}
+						selectedPair=${null}
+						showHeader=${showHeader}
+					/>
+					<div class="ml-3 mb-2">
+						<button
+							class="text-xs text-[#666] hover:text-[#999] flex items-center gap-1 mb-1 bg-transparent border-none cursor-pointer p-0"
+							onClick=${() => handleThreadToggle(root.id)}
+						>
+							${isCollapsed ? "\u25B6" : "\u25BC"} ${replies.length}
+							${replyWord}
+						</button>
+						${
+							!isCollapsed &&
+							replies.map(
+								(reply) => html`
+								<${MessageBubble}
+									key=${reply.id}
+									msg=${reply}
+									isReply=${true}
+									selectedAgent=${selectedAgent}
+									selectedPair=${null}
+									showHeader=${true}
+								/>
+							`,
+							)
+						}
+					</div>
+				</div>
+			`);
+		}
+
+		return items;
+	});
 
 	return html`
 		<div class="flex h-full">
@@ -352,20 +457,24 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 			>
 				<!-- All Messages item -->
 				<div
-					class=${"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
-						(!selectedTask && !selectedAgent ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "")}
+					class=${
+						"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
+						(!selectedTask && !selectedAgent ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "")
+					}
 					onClick=${handleAllMessagesClick}
 				>
 					<span class="text-[#e5e5e5]">All Messages</span>
 				</div>
 
 				<!-- Tasks section header -->
-				${sortedGroups.length > 0 &&
-				html`<div
+				${
+					sortedGroups.length > 0 &&
+					html`<div
 					class="px-3 py-1 text-xs text-[#555] uppercase tracking-wider border-b border-[#1a1a1a] mt-1"
 				>
 					Tasks
-				</div>`}
+				</div>`
+				}
 
 				<!-- Task list -->
 				${sortedGroups.map(([beadId, group]) => {
@@ -377,7 +486,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					const rawTitle = group.issue?.title;
 					const title = rawTitle
 						? rawTitle.length > 32
-							? rawTitle.slice(0, 32) + "\u2026"
+							? `${rawTitle.slice(0, 32)}\u2026`
 							: rawTitle
 						: beadId;
 					const taskItemClass =
@@ -393,70 +502,80 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 								>
 									${isExpanded ? "\u25BC" : "\u25B6"}
 								</button>
-								<span class=${"text-xs shrink-0 " + statusColor}>${statusIcon}</span>
+								<span class=${`text-xs shrink-0 ${statusColor}`}>${statusIcon}</span>
 								<span class="flex-1 truncate text-[#e5e5e5] text-xs">${title}</span>
-								${group.unreadCount > 0
-									? html`<span
+								${
+									group.unreadCount > 0
+										? html`<span
 											class="text-xs bg-[#E64415] text-white px-1 rounded-full shrink-0"
 										>${group.unreadCount}</span
 									  >`
-									: group.msgCount > 0
-									? html`<span class="text-xs text-[#555] shrink-0"
+										: group.msgCount > 0
+											? html`<span class="text-xs text-[#555] shrink-0"
 											>${group.msgCount}</span
 									  >`
-									: null}
+											: null
+								}
 							</div>
 
-							${isExpanded &&
-							group.agents.map((ag) => {
-								const isAgentSelected = selectedAgent === ag.agentName;
-								const dotColor = STATE_DOT_COLORS[ag.state] || "text-gray-400";
-								const agentItemClass =
-									"pl-8 pr-3 py-1.5 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-1.5 text-xs" +
-									(isAgentSelected ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "");
+							${
+								isExpanded &&
+								group.agents.map((ag) => {
+									const isAgentSelected = selectedAgent === ag.agentName;
+									const dotColor = STATE_DOT_COLORS[ag.state] || "text-gray-400";
+									const agentItemClass =
+										"pl-8 pr-3 py-1.5 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-1.5 text-xs" +
+										(isAgentSelected ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "");
 
-								return html`
+									return html`
 									<div
 										key=${ag.agentName}
 										class=${agentItemClass}
 										onClick=${(e) => handleAgentClick(e, ag.agentName)}
 									>
-										<span class=${"text-xs " + dotColor}>\u25CF</span>
+										<span class=${`text-xs ${dotColor}`}>\u25CF</span>
 										<span class="flex-1 truncate text-[#e5e5e5]">${ag.agentName}</span>
 										<span class="text-[#555] shrink-0">${ag.capability || ""}</span>
 									</div>
 								`;
-							})}
+								})
+							}
 						</div>
 					`;
 				})}
 
 				<!-- General / Unassigned section -->
-				${showGeneral &&
-				html`<div class="mt-1 border-t border-[#1a1a1a]">
+				${
+					showGeneral &&
+					html`<div class="mt-1 border-t border-[#1a1a1a]">
 					<div class="px-3 py-1 text-xs text-[#555] uppercase tracking-wider">
 						General
 					</div>
 					<div
-						class=${"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
+						class=${
+							"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
 							(selectedTask === "__general__" && !selectedAgent
 								? " bg-[#1a1a1a] border-l-2 border-[#E64415]"
-								: "")}
+								: "")
+						}
 						onClick=${() => handleTaskClick("__general__")}
 					>
 						<span class="flex-1 truncate text-[#e5e5e5] text-xs">Unassigned</span>
-						${generalCounts.unreadCount > 0
-							? html`<span
+						${
+							generalCounts.unreadCount > 0
+								? html`<span
 									class="text-xs bg-[#E64415] text-white px-1 rounded-full shrink-0"
 								>${generalCounts.unreadCount}</span
 							  >`
-							: generalCounts.msgCount > 0
-							? html`<span class="text-xs text-[#555] shrink-0"
+								: generalCounts.msgCount > 0
+									? html`<span class="text-xs text-[#555] shrink-0"
 									>${generalCounts.msgCount}</span
 							  >`
-							: null}
+									: null
+						}
 					</div>
-				</div>`}
+				</div>`
+				}
 			</div>
 
 			<!-- Chat main area -->
@@ -464,43 +583,59 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 				<!-- Header -->
 				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
-					${selectedAgent
-						? html`
+					${
+						selectedAgent
+							? html`
 								<span class="font-semibold text-[#e5e5e5]">${selectedAgent}</span>
-								${selectedAgentData &&
-								html`
+								${
+									selectedAgentData &&
+									html`
 									<span class="text-xs px-1.5 py-0.5 rounded bg-[#333] text-[#999]">
 										${selectedAgentData.capability || ""}
 									</span>
 									<span
-										class=${"text-xs px-1.5 py-0.5 rounded bg-[#333] " +
-											(STATE_DOT_COLORS[selectedAgentData.state] || "text-gray-400")}
+										class=${
+											"text-xs px-1.5 py-0.5 rounded bg-[#333] " +
+											(STATE_DOT_COLORS[selectedAgentData.state] || "text-gray-400")
+										}
 									>
 										${selectedAgentData.state || ""}
 									</span>
-								`}
+								`
+								}
 						  `
-						: selectedTask === "__general__"
-						? html`<span class="font-semibold text-[#e5e5e5]">Unassigned Messages</span>`
-						: selectedTaskData
-						? html`
+							: selectedTask === "__general__"
+								? html`<span class="font-semibold text-[#e5e5e5]">Unassigned Messages</span>`
+								: selectedTaskData
+									? html`
 								<span class="font-mono text-xs text-[#999]">${selectedTask}</span>
 								<span class="font-semibold text-[#e5e5e5] truncate">
 									${selectedTaskData.issue?.title || selectedTask}
 								</span>
-								${selectedTaskData.issue &&
-								html`<span
-									class=${"text-xs px-1.5 py-0.5 rounded bg-[#333] " +
-										(STATUS_ICON_COLORS[selectedTaskData.issue.status] || "text-gray-400")}
+								${
+									selectedTaskData.issue &&
+									html`<span
+									class=${
+										"text-xs px-1.5 py-0.5 rounded bg-[#333] " +
+										(STATUS_ICON_COLORS[selectedTaskData.issue.status] || "text-gray-400")
+									}
 								>
 									${selectedTaskData.issue.status}
-								</span>`}
+								</span>`
+								}
 								<span class="text-xs text-[#666]">
 									${selectedTaskData.agents.length}
 									${selectedTaskData.agents.length === 1 ? "agent" : "agents"}
 								</span>
 						  `
-						: html`<span class="font-semibold text-[#e5e5e5]">All Messages</span>`}
+									: html`<span class="font-semibold text-[#e5e5e5]">All Messages</span>`
+					}
+					${
+						unreadInView > 0 &&
+						html`<span class="text-xs bg-[#E64415] text-white px-1.5 py-0.5 rounded-full">
+						${unreadInView} unread
+					</span>`
+					}
 				</div>
 
 				<!-- Message feed -->
@@ -509,62 +644,15 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					ref=${feedRef}
 					onScroll=${handleFeedScroll}
 				>
-					${roots.length === 0
-						? html`<div
+					${
+						roots.length === 0
+							? html`<div
 								class="flex items-center justify-center h-full text-[#666] text-sm"
 							>
 								No messages yet
 							</div>`
-						: roots.map((root) => {
-								const replies = replyMap[root.id] || [];
-
-								if (replies.length === 0) {
-									return html`
-										<${MessageBubble}
-											key=${root.id}
-											msg=${root}
-											isReply=${false}
-											selectedAgent=${selectedAgent}
-											selectedPair=${null}
-										/>
-									`;
-								}
-
-								const isCollapsed = collapsedThreads.has(root.id);
-								const replyWord = replies.length === 1 ? "reply" : "replies";
-
-								return html`
-									<div key=${root.id}>
-										<${MessageBubble}
-											msg=${root}
-											isReply=${false}
-											selectedAgent=${selectedAgent}
-											selectedPair=${null}
-										/>
-										<div class="ml-3 mb-2">
-											<button
-												class="text-xs text-[#666] hover:text-[#999] flex items-center gap-1 mb-1 bg-transparent border-none cursor-pointer p-0"
-												onClick=${() => handleThreadToggle(root.id)}
-											>
-												${isCollapsed ? "\u25B6" : "\u25BC"} ${replies.length}
-												${replyWord}
-											</button>
-											${!isCollapsed &&
-											replies.map(
-												(reply) => html`
-													<${MessageBubble}
-														key=${reply.id}
-														msg=${reply}
-														isReply=${true}
-														selectedAgent=${selectedAgent}
-														selectedPair=${null}
-													/>
-												`,
-											)}
-										</div>
-									</div>
-								`;
-							})}
+							: feedItems
+					}
 				</div>
 
 				<!-- Chat input -->
@@ -593,10 +681,16 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						class=${`w-full ${inputClass} mb-2`}
 					/>
 					<textarea
-						placeholder="Message body..."
+						placeholder="Message body... (Ctrl+Enter or Cmd+Enter to send)"
 						rows="2"
 						value=${bodyVal}
 						onInput=${(e) => setBodyVal(e.target.value)}
+						onKeyDown=${(e) => {
+							if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+								e.preventDefault();
+								handleSend();
+							}
+						}}
 						class=${`w-full ${inputClass} mb-2 resize-none`}
 					/>
 					<div class="flex items-center gap-2 flex-wrap">
@@ -612,13 +706,12 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						</select>
 						<button
 							onClick=${handleSend}
-							disabled=${sending}
+							disabled=${sending || !bodyVal.trim()}
 							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
 						>
 							${sending ? "Sending..." : "Send"}
 						</button>
-						${sendError &&
-						html`<span class="text-xs text-red-400">${sendError}</span>`}
+						${sendError && html`<span class="text-xs text-red-400">${sendError}</span>`}
 					</div>
 				</div>
 
