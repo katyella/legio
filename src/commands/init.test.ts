@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readdir } from "node:fs/promises";
+import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { initCommand, LEGIO_GITIGNORE } from "./init.ts";
 
@@ -23,7 +23,7 @@ const AGENT_DEF_FILES = [
 ];
 
 /** Resolve the source agents directory (same logic as init.ts). */
-const SOURCE_AGENTS_DIR = join(import.meta.dir, "..", "..", "agents");
+const SOURCE_AGENTS_DIR = join(import.meta.dirname, "..", "..", "agents");
 
 describe("initCommand: agent-defs deployment", () => {
 	let tempDir: string;
@@ -63,8 +63,8 @@ describe("initCommand: agent-defs deployment", () => {
 			const sourcePath = join(SOURCE_AGENTS_DIR, fileName);
 			const targetPath = join(tempDir, ".legio", "agent-defs", fileName);
 
-			const sourceContent = await Bun.file(sourcePath).text();
-			const targetContent = await Bun.file(targetPath).text();
+			const sourceContent = await readFile(sourcePath, "utf-8");
+			const targetContent = await readFile(targetPath, "utf-8");
 
 			expect(targetContent).toBe(sourceContent);
 		}
@@ -76,18 +76,18 @@ describe("initCommand: agent-defs deployment", () => {
 
 		// Tamper with one of the deployed files
 		const tamperPath = join(tempDir, ".legio", "agent-defs", "scout.md");
-		await Bun.write(tamperPath, "# tampered content\n");
+		await writeFile(tamperPath, "# tampered content\n");
 
 		// Verify tamper worked
-		const tampered = await Bun.file(tamperPath).text();
+		const tampered = await readFile(tamperPath, "utf-8");
 		expect(tampered).toBe("# tampered content\n");
 
 		// Reinit with --force
 		await initCommand(["--force"]);
 
 		// Verify the file was overwritten with the original source
-		const sourceContent = await Bun.file(join(SOURCE_AGENTS_DIR, "scout.md")).text();
-		const restored = await Bun.file(tamperPath).text();
+		const sourceContent = await readFile(join(SOURCE_AGENTS_DIR, "scout.md"), "utf-8");
+		const restored = await readFile(tamperPath, "utf-8");
 		expect(restored).toBe(sourceContent);
 	});
 
@@ -95,7 +95,7 @@ describe("initCommand: agent-defs deployment", () => {
 		await initCommand([]);
 
 		const hooksPath = join(tempDir, ".legio", "hooks.json");
-		const content = await Bun.file(hooksPath).text();
+		const content = await readFile(hooksPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const stopHooks = parsed.hooks.Stop[0].hooks;
 
@@ -130,7 +130,7 @@ describe("initCommand: .legio/.gitignore", () => {
 		await initCommand([]);
 
 		const gitignorePath = join(tempDir, ".legio", ".gitignore");
-		const content = await Bun.file(gitignorePath).text();
+		const content = await readFile(gitignorePath, "utf-8");
 
 		// Verify wildcard+whitelist pattern
 		expect(content).toContain("*\n");
@@ -150,13 +150,15 @@ describe("initCommand: .legio/.gitignore", () => {
 		await initCommand([]);
 
 		const gitignorePath = join(tempDir, ".legio", ".gitignore");
-		const content = await Bun.file(gitignorePath).text();
+		const content = await readFile(gitignorePath, "utf-8");
 
 		// Verify gitignore was written with correct content
 		expect(content).toBe(LEGIO_GITIGNORE);
 
 		// Verify the file exists
-		const exists = await Bun.file(gitignorePath).exists();
+		const exists = await access(gitignorePath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -167,10 +169,10 @@ describe("initCommand: .legio/.gitignore", () => {
 		const gitignorePath = join(tempDir, ".legio", ".gitignore");
 
 		// Tamper with the gitignore file (simulate old deny-list format)
-		await Bun.write(gitignorePath, "# old format\nworktrees/\nlogs/\nmail.db\n");
+		await writeFile(gitignorePath, "# old format\nworktrees/\nlogs/\nmail.db\n");
 
 		// Verify tamper worked
-		const tampered = await Bun.file(gitignorePath).text();
+		const tampered = await readFile(gitignorePath, "utf-8");
 		expect(tampered).not.toContain("*\n");
 		expect(tampered).not.toContain("!.gitignore\n");
 
@@ -178,8 +180,8 @@ describe("initCommand: .legio/.gitignore", () => {
 		await initCommand(["--force"]);
 
 		// Verify the file was overwritten with the new wildcard+whitelist format
-		const restored = await Bun.file(gitignorePath).text();
-		expect(restored).toBe(LEGIO_GITIGNORE);
+		const restored = await readFile(gitignorePath, "utf-8");
+		expect(restored).toBe(OVERSTORY_GITIGNORE);
 		expect(restored).toContain("*\n");
 		expect(restored).toContain("!.gitignore\n");
 	});
@@ -191,17 +193,17 @@ describe("initCommand: .legio/.gitignore", () => {
 		const gitignorePath = join(tempDir, ".legio", ".gitignore");
 
 		// Tamper with the gitignore file
-		await Bun.write(gitignorePath, "# custom content\n");
+		await writeFile(gitignorePath, "# custom content\n");
 
 		// Verify tamper worked
-		const tampered = await Bun.file(gitignorePath).text();
+		const tampered = await readFile(gitignorePath, "utf-8");
 		expect(tampered).toBe("# custom content\n");
 
 		// Second init without --force should return early (not overwrite)
 		await initCommand([]);
 
 		// Verify the file was NOT overwritten (early return prevented it)
-		const afterSecondInit = await Bun.file(gitignorePath).text();
+		const afterSecondInit = await readFile(gitignorePath, "utf-8");
 		expect(afterSecondInit).toBe("# custom content\n");
 	});
 });

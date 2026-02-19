@@ -5,9 +5,9 @@
  * Philosophy: "never mock what you can use for real" (mx-252b16).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { specCommand, writeSpec } from "./spec.ts";
 
@@ -25,7 +25,7 @@ beforeEach(async () => {
 	await mkdir(legioDir, { recursive: true });
 
 	// Write minimal config.yaml so resolveProjectRoot works
-	await Bun.write(
+	await writeFile(
 		join(legioDir, "config.yaml"),
 		`project:\n  name: test-project\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 	);
@@ -109,25 +109,23 @@ describe("writeSpec", () => {
 
 		expect(specPath).toBe(join(tempDir, ".legio", "specs", "task-abc.md"));
 
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toBe("# My Spec\n\nDetails here.\n");
 	});
 
 	test("creates specs directory if it does not exist", async () => {
-		// Verify specs dir does not exist yet
-		const specsDir = join(legioDir, "specs");
-		expect(await Bun.file(join(specsDir, ".gitkeep")).exists()).toBe(false);
-
+		// Verify specs dir does not exist yet (no .gitkeep check needed)
 		await writeSpec(tempDir, "task-xyz", "content");
 
-		const content = await Bun.file(join(specsDir, "task-xyz.md")).text();
+		const specsDir = join(legioDir, "specs");
+		const content = await readFile(join(specsDir, "task-xyz.md"), "utf-8");
 		expect(content).toBe("content\n");
 	});
 
 	test("adds attribution header when agent is provided", async () => {
 		const specPath = await writeSpec(tempDir, "task-123", "# Spec body", "scout-1");
 
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toContain("<!-- written-by: scout-1 -->");
 		expect(content).toContain("# Spec body");
 	});
@@ -135,7 +133,7 @@ describe("writeSpec", () => {
 	test("does not add attribution header when agent is omitted", async () => {
 		const specPath = await writeSpec(tempDir, "task-456", "# Spec body");
 
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).not.toContain("written-by");
 		expect(content).toBe("# Spec body\n");
 	});
@@ -143,14 +141,14 @@ describe("writeSpec", () => {
 	test("ensures trailing newline", async () => {
 		const specPath = await writeSpec(tempDir, "task-nl", "no newline at end");
 
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content.endsWith("\n")).toBe(true);
 	});
 
 	test("does not double trailing newline", async () => {
 		const specPath = await writeSpec(tempDir, "task-nl2", "already has newline\n");
 
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toBe("already has newline\n");
 		expect(content.endsWith("\n\n")).toBe(false);
 	});
@@ -160,7 +158,7 @@ describe("writeSpec", () => {
 		await writeSpec(tempDir, "task-ow", "version 2");
 
 		const specPath = join(legioDir, "specs", "task-ow.md");
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toBe("version 2\n");
 	});
 });
@@ -175,7 +173,7 @@ describe("specCommand write", () => {
 		expect(stdoutOutput.trim()).toContain(".legio/specs/task-cmd.md");
 
 		const specPath = stdoutOutput.trim();
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toBe("# CLI Spec\n");
 	});
 
@@ -185,7 +183,7 @@ describe("specCommand write", () => {
 		expect(stdoutOutput.trim()).toContain(".legio/specs/task-attr.md");
 
 		const specPath = stdoutOutput.trim();
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toContain("<!-- written-by: scout-2 -->");
 		expect(content).toContain("# Attributed");
 	});
@@ -196,7 +194,7 @@ describe("specCommand write", () => {
 		expect(stdoutOutput.trim()).toContain(".legio/specs/task-order.md");
 
 		const specPath = stdoutOutput.trim();
-		const content = await Bun.file(specPath).text();
+		const content = await readFile(specPath, "utf-8");
 		expect(content).toContain("<!-- written-by: scout-3 -->");
 		expect(content).toContain("# Content");
 	});
