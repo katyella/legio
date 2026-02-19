@@ -15,6 +15,8 @@ import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type { AgentSession, Run } from "../types.ts";
+import { access, readFile } from "node:fs/promises";
+
 
 const RUN_HELP = `legio run -- Manage runs (coordinator session groupings)
 
@@ -72,12 +74,13 @@ function currentRunPath(legioDir: string): string {
  */
 async function readCurrentRunId(legioDir: string): Promise<string | null> {
 	const path = currentRunPath(legioDir);
-	const file = Bun.file(path);
-	if (!(await file.exists())) {
+	let fileText: string;
+	try {
+		fileText = await readFile(path, "utf-8");
+	} catch {
 		return null;
 	}
-	const text = await file.text();
-	const trimmed = text.trim();
+	const trimmed = fileText.trim();
 	return trimmed.length > 0 ? trimmed : null;
 }
 
@@ -141,8 +144,9 @@ async function showCurrentRun(legioDir: string, json: boolean): Promise<void> {
  */
 async function listRuns(legioDir: string, limit: number, json: boolean): Promise<void> {
 	const dbPath = join(legioDir, "sessions.db");
-	const dbFile = Bun.file(dbPath);
-	if (!(await dbFile.exists())) {
+	let dbFileExists = false;
+	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write('{"runs":[]}\n');
 		} else {
@@ -228,8 +232,9 @@ async function completeCurrentRun(legioDir: string, json: boolean): Promise<void
  */
 async function showRun(legioDir: string, runId: string, json: boolean): Promise<void> {
 	const dbPath = join(legioDir, "sessions.db");
-	const dbFile = Bun.file(dbPath);
-	if (!(await dbFile.exists())) {
+	let dbFileExists = false;
+	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write(`${JSON.stringify({ run: null, message: `Run ${runId} not found` })}\n`);
 		} else {

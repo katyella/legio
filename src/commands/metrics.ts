@@ -8,6 +8,8 @@
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { createMetricsStore } from "../metrics/store.ts";
+import { access } from "node:fs/promises";
+
 
 /**
  * Parse a named flag value from args.
@@ -65,8 +67,9 @@ export async function metricsCommand(args: string[]): Promise<void> {
 	const config = await loadConfig(cwd);
 	const dbPath = join(config.project.root, ".legio", "metrics.db");
 
-	const dbFile = Bun.file(dbPath);
-	if (!(await dbFile.exists())) {
+	let dbFileExists = false;
+	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write('{"sessions":[]}\n');
 		} else {

@@ -6,6 +6,7 @@
  * mail activity, merge queue, and metrics.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -129,8 +130,9 @@ export async function loadDashboardData(root: string): Promise<DashboardData> {
 	let recentMail: MailMessage[] = [];
 	try {
 		const mailDbPath = join(root, ".legio", "mail.db");
-		const mailFile = Bun.file(mailDbPath);
-		if (await mailFile.exists()) {
+		let mailDbExists = false;
+		try { await access(mailDbPath); mailDbExists = true; } catch { /* not found */ }
+		if (mailDbExists) {
 			const mailStore = createMailStore(mailDbPath);
 			recentMail = mailStore.getAll().slice(0, 5);
 			mailStore.close();
@@ -160,8 +162,9 @@ export async function loadDashboardData(root: string): Promise<DashboardData> {
 	const byCapability: Record<string, number> = {};
 	try {
 		const metricsDbPath = join(root, ".legio", "metrics.db");
-		const metricsFile = Bun.file(metricsDbPath);
-		if (await metricsFile.exists()) {
+		let metricsDbExists = false;
+		try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+		if (metricsDbExists) {
 			const store = createMetricsStore(metricsDbPath);
 			const sessions = store.getRecentSessions(100);
 			totalSessions = sessions.length;
@@ -593,6 +596,6 @@ export async function dashboardCommand(args: string[]): Promise<void> {
 	while (running) {
 		const data = await loadDashboardData(root);
 		renderDashboard(data, interval);
-		await Bun.sleep(interval);
+		await new Promise((resolve) => setTimeout(resolve, interval));
 	}
 }

@@ -5,6 +5,8 @@
  * MetricsStore, and tmux capture-pane.
  */
 
+import { spawn } from "node:child_process";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -116,16 +118,20 @@ function summarizeArgs(toolArgs: string | null): string {
  */
 async function captureTmux(sessionName: string, lines: number): Promise<string | null> {
 	try {
-		const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", `-${lines}`], {
-			stdout: "pipe",
-			stderr: "pipe",
+		const result = await new Promise<{ exitCode: number; stdout: string }>((resolve) => {
+			const proc = spawn("tmux", ["capture-pane", "-t", sessionName, "-p", "-S", `-${lines}`], {
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			const stdoutChunks: Buffer[] = [];
+			proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+			proc.on("close", (code: number | null) => {
+				resolve({ exitCode: code ?? 1, stdout: Buffer.concat(stdoutChunks).toString("utf-8") });
+			});
 		});
-		const exitCode = await proc.exited;
-		if (exitCode !== 0) {
+		if (result.exitCode !== 0) {
 			return null;
 		}
-		const output = await new Response(proc.stdout).text();
-		return output.trim();
+		return result.stdout.trim();
 	} catch {
 		return null;
 	}
@@ -187,8 +193,9 @@ export async function gatherInspectData(
 		let toolStats: ToolStats[] = [];
 
 		const eventsDbPath = join(legioDir, "events.db");
-		const eventsFile = Bun.file(eventsDbPath);
-		if (await eventsFile.exists()) {
+		let eventsDbExists = false;
+		try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+		if (eventsDbExists) {
 			const eventStore = createEventStore(eventsDbPath);
 			try {
 				// Get recent events for this agent
@@ -217,8 +224,9 @@ export async function gatherInspectData(
 		// MetricsStore: token usage
 		let tokenUsage: InspectData["tokenUsage"] = null;
 		const metricsDbPath = join(legioDir, "metrics.db");
-		const metricsFile = Bun.file(metricsDbPath);
-		if (await metricsFile.exists()) {
+		let metricsDbExists = false;
+		try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+		if (metricsDbExists) {
 			const metricsStore = createMetricsStore(metricsDbPath);
 			try {
 				const sessions = metricsStore.getSessionsByAgent(agentName);
@@ -417,7 +425,7 @@ export async function inspectCommand(args: string[]): Promise<void> {
 			} else {
 				printInspectData(data);
 			}
-			await Bun.sleep(interval);
+			await new Promise((resolve) => setTimeout(resolve, interval));
 		}
 	} else {
 		// Single snapshot

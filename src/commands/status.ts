@@ -5,6 +5,7 @@
  * and merge queue state. --watch mode uses polling for live updates.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -113,8 +114,9 @@ export async function gatherStatus(
 		let mailStore: ReturnType<typeof createMailStore> | null = null;
 		try {
 			const mailDbPath = join(root, ".legio", "mail.db");
-			const mailFile = Bun.file(mailDbPath);
-			if (await mailFile.exists()) {
+			let mailDbExists = false;
+			try { await access(mailDbPath); mailDbExists = true; } catch { /* not found */ }
+			if (mailDbExists) {
 				mailStore = createMailStore(mailDbPath);
 				const unread = mailStore.getAll({ to: agentName, unread: true });
 				unreadMailCount = unread.length;
@@ -136,8 +138,9 @@ export async function gatherStatus(
 		let recentMetricsCount = 0;
 		try {
 			const metricsDbPath = join(root, ".legio", "metrics.db");
-			const metricsFile = Bun.file(metricsDbPath);
-			if (await metricsFile.exists()) {
+			let metricsDbExists = false;
+			try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+			if (metricsDbExists) {
 				const metricsStore = createMetricsStore(metricsDbPath);
 				recentMetricsCount = metricsStore.getRecentSessions(100).length;
 				metricsStore.close();
@@ -310,7 +313,7 @@ export async function statusCommand(args: string[]): Promise<void> {
 			} else {
 				printStatus(data);
 			}
-			await Bun.sleep(interval);
+			await new Promise((resolve) => setTimeout(resolve, interval));
 		}
 	} else {
 		const data = await gatherStatus(root, agentName, verbose);

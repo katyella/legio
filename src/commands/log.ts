@@ -10,6 +10,7 @@
  * and writes structured events to the EventStore for observability.
  */
 
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { updateIdentity } from "../agents/identity.ts";
 import { loadConfig } from "../config.ts";
@@ -46,12 +47,13 @@ async function getSessionDir(logsBase: string, agentName: string): Promise<strin
 	const agentLogsDir = join(logsBase, agentName);
 	const markerPath = join(agentLogsDir, ".current-session");
 
-	const markerFile = Bun.file(markerPath);
-	if (await markerFile.exists()) {
-		const sessionDir = (await markerFile.text()).trim();
+	try {
+		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
 		if (sessionDir.length > 0) {
 			return sessionDir;
 		}
+	} catch {
+		// marker doesn't exist yet
 	}
 
 	// Create a new session directory
@@ -59,7 +61,7 @@ async function getSessionDir(logsBase: string, agentName: string): Promise<strin
 	const sessionDir = join(agentLogsDir, timestamp);
 	const { mkdir } = await import("node:fs/promises");
 	await mkdir(sessionDir, { recursive: true });
-	await Bun.write(markerPath, sessionDir);
+	await writeFile(markerPath, sessionDir);
 	return sessionDir;
 }
 
@@ -150,24 +152,12 @@ function getAgentSession(projectRoot: string, agentName: string): AgentSession |
  */
 async function readStdinJson(): Promise<Record<string, unknown> | null> {
 	try {
-		const reader = Bun.stdin.stream().getReader();
-		const chunks: Uint8Array[] = [];
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			if (value) chunks.push(value);
+		const chunks: Buffer[] = [];
+		for await (const chunk of process.stdin) {
+			chunks.push(chunk as Buffer);
 		}
-		reader.releaseLock();
 		if (chunks.length === 0) return null;
-		// Concatenate all chunks
-		const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-		const combined = new Uint8Array(totalLength);
-		let offset = 0;
-		for (const chunk of chunks) {
-			combined.set(chunk, offset);
-			offset += chunk.length;
-		}
-		const text = new TextDecoder().decode(combined).trim();
+		const text = Buffer.concat(chunks).toString("utf-8").trim();
 		if (text.length === 0) return null;
 		return JSON.parse(text) as Record<string, unknown>;
 	} catch {
@@ -188,12 +178,18 @@ async function resolveTranscriptPath(
 ): Promise<string | null> {
 	// Check cached path first
 	const cachePath = join(logsBase, agentName, ".transcript-path");
-	const cacheFile = Bun.file(cachePath);
-	if (await cacheFile.exists()) {
-		const cached = (await cacheFile.text()).trim();
-		if (cached.length > 0 && (await Bun.file(cached).exists())) {
-			return cached;
+	try {
+		const cached = (await readFile(cachePath, "utf-8")).trim();
+		if (cached.length > 0) {
+			try {
+				await access(cached);
+				return cached;
+			} catch {
+				// cached path no longer exists
+			}
 		}
+	} catch {
+		// cache file doesn't exist
 	}
 
 	const homeDir = process.env.HOME ?? "";
@@ -202,9 +198,12 @@ async function resolveTranscriptPath(
 	// Try direct construction from project root
 	const projectKey = projectRoot.replace(/\//g, "-");
 	const directPath = join(claudeProjectsDir, projectKey, `${sessionId}.jsonl`);
-	if (await Bun.file(directPath).exists()) {
-		await Bun.write(cachePath, directPath);
+	try {
+		await access(directPath);
+		await writeFile(cachePath, directPath);
 		return directPath;
+	} catch {
+		// direct path doesn't exist
 	}
 
 	// Search all project directories for the session file
@@ -213,9 +212,12 @@ async function resolveTranscriptPath(
 		const projects = await readdir(claudeProjectsDir);
 		for (const project of projects) {
 			const candidate = join(claudeProjectsDir, project, `${sessionId}.jsonl`);
-			if (await Bun.file(candidate).exists()) {
-				await Bun.write(cachePath, candidate);
+			try {
+				await access(candidate);
+				await writeFile(cachePath, candidate);
 				return candidate;
+			} catch {
+				// candidate doesn't exist, continue
 			}
 		}
 	} catch {
@@ -494,14 +496,15 @@ export async function logCommand(args: string[]): Promise<void> {
 						// Throttle check
 						const snapshotMarkerPath = join(logsBase, agentName, ".last-snapshot");
 						const SNAPSHOT_INTERVAL_MS = 30_000;
-						const snapshotMarkerFile = Bun.file(snapshotMarkerPath);
 						let shouldSnapshot = true;
 
-						if (await snapshotMarkerFile.exists()) {
-							const lastTs = Number.parseInt(await snapshotMarkerFile.text(), 10);
+						try {
+							const lastTs = Number.parseInt(await readFile(snapshotMarkerPath, "utf-8"), 10);
 							if (!Number.isNaN(lastTs) && Date.now() - lastTs < SNAPSHOT_INTERVAL_MS) {
 								shouldSnapshot = false;
 							}
+						} catch {
+							// marker does not exist, proceed with snapshot
 						}
 
 						if (shouldSnapshot) {
@@ -527,7 +530,7 @@ export async function logCommand(args: string[]): Promise<void> {
 									createdAt: new Date().toISOString(),
 								});
 								metricsStore.close();
-								await Bun.write(snapshotMarkerPath, String(Date.now()));
+								await writeFile(snapshotMarkerPath, String(Date.now()));
 							}
 						}
 					} catch {
@@ -573,7 +576,7 @@ export async function logCommand(args: string[]): Promise<void> {
 							messageId: `auto-nudge-${agentName}-${Date.now()}`,
 							createdAt: new Date().toISOString(),
 						};
-						await Bun.write(markerPath, `${JSON.stringify(marker, null, "\t")}\n`);
+						await writeFile(markerPath, `${JSON.stringify(marker, null, "\t")}\n`);
 					} catch {
 						// Non-fatal: nudge failure should not break session-end
 					}
@@ -587,9 +590,9 @@ export async function logCommand(args: string[]): Promise<void> {
 					if (agentSession.capability === "coordinator") {
 						try {
 							const currentRunPath = join(config.project.root, ".legio", "current-run.txt");
-							const currentRunFile = Bun.file(currentRunPath);
-							if (await currentRunFile.exists()) {
-								const runId = (await currentRunFile.text()).trim();
+							const runIdContent = await readFile(currentRunPath, "utf-8").catch(() => null);
+							if (runIdContent !== null) {
+								const runId = runIdContent.trim();
 								if (runId.length > 0) {
 									const runStore = createRunStore(
 										join(config.project.root, ".legio", "sessions.db"),

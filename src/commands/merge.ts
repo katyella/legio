@@ -11,6 +11,8 @@
  *   legio merge --json            Output results as JSON
  */
 
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { MergeError, ValidationError } from "../errors.ts";
@@ -71,22 +73,35 @@ async function detectModifiedFiles(
 	canonicalBranch: string,
 	branchName: string,
 ): Promise<string[]> {
-	const proc = Bun.spawn(["git", "diff", "--name-only", `${canonicalBranch}...${branchName}`], {
-		cwd: repoRoot,
-		stdout: "pipe",
-		stderr: "pipe",
+	const { exitCode, stdout, stderr } = await new Promise<{
+		exitCode: number;
+		stdout: string;
+		stderr: string;
+	}>((resolve) => {
+		const proc = spawn("git", ["diff", "--name-only", `${canonicalBranch}...${branchName}`], {
+			cwd: repoRoot,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+		proc.on("close", (code: number | null) => {
+			resolve({
+				exitCode: code ?? 1,
+				stdout: Buffer.concat(stdoutChunks).toString("utf-8"),
+				stderr: Buffer.concat(stderrChunks).toString("utf-8"),
+			});
+		});
 	});
-	const exitCode = await proc.exited;
 
 	if (exitCode !== 0) {
-		const stderr = await new Response(proc.stderr).text();
 		throw new MergeError(
 			`Failed to detect modified files for branch "${branchName}": ${stderr.trim()}`,
 			{ branchName },
 		);
 	}
 
-	const stdout = await new Response(proc.stdout).text();
 	return stdout
 		.trim()
 		.split("\n")
@@ -178,12 +193,13 @@ export async function mergeCommand(args: string[]): Promise<void> {
 	let sessionBranch: string | null = null;
 	if (into === undefined) {
 		const sessionBranchPath = join(config.project.root, ".legio", "session-branch.txt");
-		const sessionBranchFile = Bun.file(sessionBranchPath);
-		if (await sessionBranchFile.exists()) {
-			const content = (await sessionBranchFile.text()).trim();
+		try {
+			const content = (await readFile(sessionBranchPath, "utf-8")).trim();
 			if (content) {
 				sessionBranch = content;
 			}
+		} catch {
+			// session-branch.txt doesn't exist
 		}
 	}
 	const targetBranch = into ?? sessionBranch ?? config.project.canonicalBranch;
@@ -227,13 +243,16 @@ async function handleBranch(
 	// If not in queue, create one by detecting info from the branch
 	if (entry === null) {
 		// Validate that the branch exists before attempting any git operations
-		const verifyProc = Bun.spawn(["git", "rev-parse", "--verify", `refs/heads/${branchName}`], {
-			cwd: repoRoot,
-			stdout: "pipe",
-			stderr: "pipe",
+		const verifyResult = await new Promise<{ exitCode: number }>((resolve) => {
+			const proc = spawn("git", ["rev-parse", "--verify", `refs/heads/${branchName}`], {
+				cwd: repoRoot,
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			proc.on("close", (code: number | null) => {
+				resolve({ exitCode: code ?? 1 });
+			});
 		});
-		const verifyExit = await verifyProc.exited;
-		if (verifyExit !== 0) {
+		if (verifyResult.exitCode !== 0) {
 			throw new ValidationError(`Branch "${branchName}" not found`, {
 				field: "branch",
 				value: branchName,

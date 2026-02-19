@@ -9,6 +9,8 @@ import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { type AgentSession, SUPPORTED_CAPABILITIES } from "../types.ts";
+import { readFile } from "node:fs/promises";
+
 
 /**
  * Parse a named flag value from args.
@@ -52,13 +54,13 @@ export interface DiscoveredAgent {
 export async function extractFileScope(worktreePath: string): Promise<string[]> {
 	try {
 		const overlayPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const overlayFile = Bun.file(overlayPath);
-
-		if (!(await overlayFile.exists())) {
+		let overlayContent: string;
+		try {
+			overlayContent = await readFile(overlayPath, "utf-8");
+		} catch {
 			return [];
 		}
-
-		const content = await overlayFile.text();
+		const content = overlayContent;
 
 		// Find the section between "## File Scope (exclusive ownership)" and "## Expertise"
 		const startMarker = "## File Scope (exclusive ownership)";

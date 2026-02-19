@@ -2,10 +2,12 @@
  * CLI command: legio watch [--interval <ms>] [--background]
  *
  * Starts the Tier 0 mechanical watchdog daemon. Foreground mode shows real-time status.
- * Background mode spawns a detached process via Bun.spawn and writes a PID file.
+ * Background mode spawns a detached process via node:child_process and writes a PID file.
  * Interval configurable, default 30000ms.
  */
 
+import { spawn } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { LegioError } from "../errors.ts";
@@ -55,14 +57,8 @@ function formatCheck(check: HealthCheck): string {
  * Returns null if the file doesn't exist or can't be parsed.
  */
 async function readPidFile(pidFilePath: string): Promise<number | null> {
-	const file = Bun.file(pidFilePath);
-	const exists = await file.exists();
-	if (!exists) {
-		return null;
-	}
-
 	try {
-		const text = await file.text();
+		const text = await readFile(pidFilePath, "utf-8");
 		const pid = Number.parseInt(text.trim(), 10);
 		if (Number.isNaN(pid) || pid <= 0) {
 			return null;
@@ -77,7 +73,7 @@ async function readPidFile(pidFilePath: string): Promise<number | null> {
  * Write a PID to the watchdog PID file.
  */
 async function writePidFile(pidFilePath: string, pid: number): Promise<void> {
-	await Bun.write(pidFilePath, `${pid}\n`);
+	await writeFile(pidFilePath, `${pid}\n`);
 }
 
 /**
@@ -98,13 +94,16 @@ async function removePidFile(pidFilePath: string): Promise<void> {
  */
 async function resolveLegioBin(): Promise<string> {
 	try {
-		const proc = Bun.spawn(["which", "legio"], {
-			stdout: "pipe",
-			stderr: "pipe",
+		const result = await new Promise<{ exitCode: number; stdout: string }>((resolve) => {
+			const proc = spawn("which", ["legio"], { stdio: ["ignore", "pipe", "pipe"] });
+			const stdoutChunks: Buffer[] = [];
+			proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+			proc.on("close", (code: number | null) => {
+				resolve({ exitCode: code ?? 1, stdout: Buffer.concat(stdoutChunks).toString("utf-8") });
+			});
 		});
-		const exitCode = await proc.exited;
-		if (exitCode === 0) {
-			const binPath = (await new Response(proc.stdout).text()).trim();
+		if (result.exitCode === 0) {
+			const binPath = result.stdout.trim();
 			if (binPath.length > 0) {
 				return binPath;
 			}
@@ -190,17 +189,16 @@ export async function watchCommand(args: string[]): Promise<void> {
 		const legioBin = await resolveLegioBin();
 
 		// Spawn a detached background process running `legio watch` (without --background)
-		const child = Bun.spawn(["bun", "run", legioBin, ...childArgs], {
+		const child = spawn("bun", ["run", legioBin, ...childArgs], {
 			cwd,
-			stdout: "ignore",
-			stderr: "ignore",
-			stdin: "ignore",
+			stdio: "ignore",
+			detached: true,
 		});
 
 		// Unref the child so the parent can exit without waiting for it
 		child.unref();
 
-		const childPid = child.pid;
+		const childPid = child.pid ?? 0;
 
 		// Write PID file for later cleanup
 		await writePidFile(pidFilePath, childPid);

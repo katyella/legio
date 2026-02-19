@@ -6,6 +6,7 @@
  * Human output groups errors by agent; JSON output returns a flat array.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -204,8 +205,9 @@ export async function errorsCommand(args: string[]): Promise<void> {
 
 	// Open event store
 	const eventsDbPath = join(legioDir, "events.db");
-	const eventsFile = Bun.file(eventsDbPath);
-	if (!(await eventsFile.exists())) {
+	let eventsDbExists = false;
+	try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+	if (!eventsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");
 		} else {

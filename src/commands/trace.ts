@@ -12,6 +12,8 @@ import { createEventStore } from "../events/store.ts";
 import { color } from "../logging/color.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { EventType, StoredEvent } from "../types.ts";
+import { access } from "node:fs/promises";
+
 
 /** Labels and colors for each event type. */
 const EVENT_LABELS: Record<EventType, { label: string; color: string }> = {
@@ -292,8 +294,9 @@ export async function traceCommand(args: string[]): Promise<void> {
 
 	// Open event store and query events
 	const eventsDbPath = join(legioDir, "events.db");
-	const eventsFile = Bun.file(eventsDbPath);
-	if (!(await eventsFile.exists())) {
+	let eventsDbExists = false;
+	try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+	if (!eventsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");
 		} else {

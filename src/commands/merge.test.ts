@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import {access, mkdir, readFile, writeFile} from "node:fs/promises";
 import { join } from "node:path";
 import { ValidationError } from "../errors.ts";
 import { createMergeQueue } from "../merge/queue.ts";
@@ -44,7 +44,7 @@ merge:
   aiResolveEnabled: false
   reimagineEnabled: false
 `;
-		await Bun.write(join(legioDir, "config.yaml"), configYaml);
+		await writeFile(join(legioDir, "config.yaml"), configYaml);
 	}
 
 	/**
@@ -54,7 +54,7 @@ merge:
 	async function createCleanFeatureBranch(dir: string, branchName: string): Promise<void> {
 		// Only commit base file if it doesn't exist
 		const baseFilePath = join(dir, "src/base.ts");
-		const baseFileExists = await Bun.file(baseFilePath).exists();
+		const baseFileExists = await access(baseFilePath).then(() => true, () => false);
 		if (!baseFileExists) {
 			await commitFile(dir, "src/base.ts", "base content");
 		}
@@ -198,7 +198,7 @@ merge:
 
 			// Verify feature file exists after merge
 			const featureFilePath = join(repoDir, `src/${branchName}.ts`);
-			const featureFile = await Bun.file(featureFilePath).text();
+			const featureFile = await readFile(featureFilePath, "utf-8");
 			expect(featureFile).toBe("feature content");
 		});
 
@@ -373,8 +373,8 @@ merge:
 			expect(output).toContain("2 merged");
 
 			// Verify both feature files exist after merge
-			const file1 = await Bun.file(join(repoDir, `src/${branch1}.ts`)).text();
-			const file2 = await Bun.file(join(repoDir, `src/${branch2}.ts`)).text();
+			const file1 = await readFile(join(repoDir, `src/${branch1}.ts`), "utf-8");
+			const file2 = await readFile(join(repoDir, `src/${branch2}.ts`), "utf-8");
 			expect(file1).toBe("feature content");
 			expect(file2).toBe("feature content");
 		});
@@ -453,12 +453,12 @@ merge:
 			expect(currentBranch.trim()).toBe("develop");
 
 			// Verify feature file exists on develop
-			const featureFile = await Bun.file(join(repoDir, `src/${branchName}.ts`)).text();
+			const featureFile = await readFile(join(repoDir, `src/${branchName}.ts`), "utf-8");
 			expect(featureFile).toBe("feature for develop");
 
 			// Verify defaultBranch was NOT modified (switch back and check)
 			await runGitInDir(repoDir, ["checkout", defaultBranch]);
-			const featureOnDefault = await Bun.file(join(repoDir, `src/${branchName}.ts`)).exists();
+			const featureOnDefault = await access(join(repoDir, `src/${branchName}.ts`)).then(() => true, () => false);
 			expect(featureOnDefault).toBe(false);
 		});
 
@@ -557,7 +557,7 @@ merge:
 			await runGitInDir(repoDir, ["checkout", defaultBranch]);
 
 			// Write session-branch.txt pointing to the feature branch
-			await Bun.write(join(repoDir, ".legio", "session-branch.txt"), "feature/session-work\n");
+			await writeFile(join(repoDir, ".legio", "session-branch.txt"), "feature/session-work\n");
 
 			// Create a feature branch to merge
 			const branchName = "legio/builder/bead-session-branch";
@@ -587,7 +587,7 @@ merge:
 			expect(currentBranch.trim()).toBe("feature/session-work");
 
 			// Verify feature file exists on the session branch
-			const featureFile = await Bun.file(join(repoDir, `src/${branchName}.ts`)).text();
+			const featureFile = await readFile(join(repoDir, `src/${branchName}.ts`), "utf-8");
 			expect(featureFile).toBe("feature for session branch");
 		});
 
@@ -604,7 +604,7 @@ merge:
 			await runGitInDir(repoDir, ["checkout", defaultBranch]);
 
 			// Write session-branch.txt pointing to session-branch-target
-			await Bun.write(join(repoDir, ".legio", "session-branch.txt"), "session-branch-target\n");
+			await writeFile(join(repoDir, ".legio", "session-branch.txt"), "session-branch-target\n");
 
 			// Create a feature branch to merge
 			const branchName = "legio/builder/bead-override-test";
@@ -663,7 +663,7 @@ merge:
 			}
 
 			// Verify incoming (feature branch) content wins
-			const sharedFile = await Bun.file(join(repoDir, "src/shared.ts")).text();
+			const sharedFile = await readFile(join(repoDir, "src/shared.ts"), "utf-8");
 			expect(sharedFile).toBe("feature branch content");
 		});
 	});
