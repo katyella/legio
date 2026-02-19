@@ -1,13 +1,14 @@
 /**
  * Beads molecule management helpers.
  *
- * Wraps `bd mol` commands via Bun.spawn for multi-step workflow prototypes.
+ * Wraps `bd mol` commands via node:child_process for multi-step workflow prototypes.
  * Molecules are templates with ordered steps. "Pouring" a prototype creates
  * actual issues with dependencies pre-wired.
  *
- * Zero runtime dependencies — only Bun built-in APIs.
+ * Zero runtime npm dependencies — only node:child_process built-in.
  */
 
+import { spawn } from "node:child_process";
 import { AgentError } from "../errors.ts";
 
 // === Types ===
@@ -39,15 +40,25 @@ async function runCommand(
 	cmd: string[],
 	cwd: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-	const proc = Bun.spawn(cmd, {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
+	const [command, ...args] = cmd;
+	if (!command) throw new Error("Empty command");
+	return new Promise((resolve, reject) => {
+		const proc = spawn(command, args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
+		proc.stdout.on("data", (data: Buffer) => chunks.stdout.push(data));
+		proc.stderr.on("data", (data: Buffer) => chunks.stderr.push(data));
+		proc.on("error", reject);
+		proc.on("close", (code) => {
+			resolve({
+				stdout: Buffer.concat(chunks.stdout).toString(),
+				stderr: Buffer.concat(chunks.stderr).toString(),
+				exitCode: code ?? 1,
+			});
+		});
 	});
-	const stdout = await new Response(proc.stdout).text();
-	const stderr = await new Response(proc.stderr).text();
-	const exitCode = await proc.exited;
-	return { stdout, stderr, exitCode };
 }
 
 /**

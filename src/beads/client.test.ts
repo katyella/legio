@@ -1,21 +1,19 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { type BeadsClient, createBeadsClient } from "./client.ts";
 
 /**
  * Check if the bd CLI is available on this machine (synchronous).
- * Uses Bun.spawnSync so the result is available at test registration time
+ * Uses spawnSync so the result is available at test registration time
  * for use with test.skipIf().
  */
 function isBdAvailable(): boolean {
 	try {
-		const result = Bun.spawnSync(["bd", "--version"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		return result.exitCode === 0;
+		const result = spawnSync("bd", ["--version"], { stdio: "pipe" });
+		return result.status === 0;
 	} catch {
 		return false;
 	}
@@ -24,15 +22,10 @@ function isBdAvailable(): boolean {
 /**
  * Initialize beads in a git repo directory.
  */
-async function initBeads(cwd: string): Promise<void> {
-	const proc = Bun.spawn(["bd", "init"], {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const exitCode = await proc.exited;
-	if (exitCode !== 0) {
-		const stderr = await new Response(proc.stderr).text();
+function initBeads(cwd: string): void {
+	const result = spawnSync("bd", ["init"], { cwd, stdio: "pipe" });
+	if (result.status !== 0) {
+		const stderr = (result.stderr ?? Buffer.alloc(0)).toString();
 		throw new Error(`bd init failed: ${stderr}`);
 	}
 }
@@ -58,7 +51,7 @@ describe("createBeadsClient (integration)", () => {
 		if (!bdAvailable) return;
 		// realpathSync resolves macOS /var -> /private/var symlink so paths match
 		tempDir = realpathSync(await createTempGitRepo());
-		await initBeads(tempDir);
+		initBeads(tempDir);
 		client = createBeadsClient(tempDir);
 
 		// Pre-create issues used by read-only tests (list, ready, show)
