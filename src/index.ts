@@ -1,4 +1,4 @@
-#!/usr/bin/env node --experimental-strip-types
+#!/usr/bin/env tsx
 
 /**
  * Legio CLI — main entry point and command router.
