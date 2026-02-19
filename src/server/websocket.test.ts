@@ -69,7 +69,7 @@ describe("createWebSocketManager", () => {
 		expect(Array.isArray(parsed.data.agents)).toBe(true);
 		expect(typeof parsed.data.mail.unreadCount).toBe("number");
 		expect(Array.isArray(parsed.data.mergeQueue)).toBe(true);
-		expect(typeof parsed.data.metrics.totalSessions).toBe("number");
+		expect(typeof parsed.data.metricsSummary.totalSessions).toBe("number");
 		expect(parsed.timestamp).toBeDefined();
 	});
 

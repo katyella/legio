@@ -191,7 +191,7 @@ function CapabilityChart({ metrics }) {
 export function CostsView({ metrics, snapshots }) {
 	const [groupByCapability, setGroupByCapability] = useState(false);
 
-	const safeMetrics = metrics || [];
+	const safeMetrics = Array.isArray(metrics) ? metrics : [];
 	const safeSnapshots = snapshots || [];
 
 	const onToggleGroup = useCallback(() => setGroupByCapability((v) => !v), []);

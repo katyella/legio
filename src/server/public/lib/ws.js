@@ -14,7 +14,7 @@ function handleSnapshot(d) {
 		appState.mail.value = Array.isArray(d.mail) ? d.mail : d.mail.recent || [];
 	}
 	if (d.mergeQueue !== undefined) appState.mergeQueue.value = d.mergeQueue;
-	if (d.metrics !== undefined) appState.metrics.value = d.metrics;
+	if (d.metrics !== undefined && Array.isArray(d.metrics)) appState.metrics.value = d.metrics;
 	if (d.snapshots !== undefined) appState.snapshots.value = d.snapshots;
 	if (d.runs !== undefined) appState.runs.value = d.runs;
 	if (d.events !== undefined) appState.events.value = d.events;

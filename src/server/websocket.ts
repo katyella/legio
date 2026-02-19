@@ -17,7 +17,7 @@ interface Snapshot {
 		agents: unknown[];
 		mail: { unreadCount: number; recent: unknown[] };
 		mergeQueue: unknown[];
-		metrics: { totalSessions: number; avgDuration: number };
+		metricsSummary: { totalSessions: number; avgDuration: number };
 		runs: { active: unknown | null };
 		autopilot?: AutopilotState | null;
 	};
@@ -45,7 +45,7 @@ export function createWebSocketManager(
 			agents: [],
 			mail: { unreadCount: 0, recent: [] },
 			mergeQueue: [],
-			metrics: { totalSessions: 0, avgDuration: 0 },
+			metricsSummary: { totalSessions: 0, avgDuration: 0 },
 			runs: { active: null },
 		};
 
@@ -93,8 +93,8 @@ export function createWebSocketManager(
 			const store = createMetricsStore(join(legioDir, "metrics.db"));
 			try {
 				const sessions = store.getRecentSessions(100);
-				data.metrics.totalSessions = sessions.length;
-				data.metrics.avgDuration = store.getAverageDuration();
+				data.metricsSummary.totalSessions = sessions.length;
+				data.metricsSummary.avgDuration = store.getAverageDuration();
 			} finally {
 				store.close();
 			}
