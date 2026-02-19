@@ -121,6 +121,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createAuditStore } from "./audit-store.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
@@ -1036,6 +1037,201 @@ describe("GET /api/terminal/capture", () => {
 			projectRoot,
 		);
 		expect(res.status).toBe(405);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Audit routes
+// ---------------------------------------------------------------------------
+
+function seedAuditDb(dbPath: string): void {
+	const store = createAuditStore(dbPath);
+	store.insert({ type: "command", agent: "orchestrator", source: "web_ui", summary: "cmd1" });
+	store.insert({ type: "response", agent: "coordinator", source: "system", summary: "resp1" });
+	store.insert({ type: "error", agent: "orchestrator", source: "cli", summary: "err1" });
+	store.close();
+}
+
+describe("POST /api/audit", () => {
+	it("creates an audit event and returns 201 with the event", async () => {
+		const res = await dispatchPost("/api/audit", {
+			type: "command",
+			summary: "User sent a command",
+			agent: "orchestrator",
+			source: "web_ui",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as {
+			id: number;
+			type: string;
+			summary: string;
+			agent: string;
+			source: string;
+		};
+		expect(body.type).toBe("command");
+		expect(body.summary).toBe("User sent a command");
+		expect(body.agent).toBe("orchestrator");
+		expect(body.source).toBe("web_ui");
+		expect(typeof body.id).toBe("number");
+	});
+
+	it("defaults source to web_ui when not provided", async () => {
+		const res = await dispatchPost("/api/audit", {
+			type: "command",
+			summary: "No source provided",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { source: string };
+		expect(body.source).toBe("web_ui");
+	});
+
+	it("returns 400 when type is missing", async () => {
+		const res = await dispatchPost("/api/audit", { summary: "Missing type" });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("type");
+	});
+
+	it("returns 400 when summary is missing", async () => {
+		const res = await dispatchPost("/api/audit", { type: "command" });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("summary");
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/audit", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("accepts optional detail and sessionId fields", async () => {
+		const res = await dispatchPost("/api/audit", {
+			type: "state_change",
+			summary: "Agent started",
+			detail: "Starting work on task",
+			sessionId: "sess-abc",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { detail: string; sessionId: string };
+		expect(body.detail).toBe("Starting work on task");
+		expect(body.sessionId).toBe("sess-abc");
+	});
+});
+
+describe("GET /api/audit", () => {
+	it("returns empty array when audit.db does not exist", async () => {
+		const res = await dispatch("/api/audit");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns all audit events", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(3);
+	});
+
+	it("filters by ?type= param", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit", { type: "command" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ type: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.type).toBe("command");
+	});
+
+	it("filters by ?agent= param", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit", { agent: "orchestrator" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ agent: string }>;
+		expect(body.length).toBe(2);
+		expect(body.every((e) => e.agent === "orchestrator")).toBe(true);
+	});
+
+	it("filters by ?source= param", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit", { source: "web_ui" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ source: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.source).toBe("web_ui");
+	});
+
+	it("applies ?limit= param", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit", { limit: "2" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(2);
+	});
+
+	it("returns 405 for unsupported methods", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/audit", { method: "PUT", body: "{}" }),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(405);
+	});
+});
+
+describe("GET /api/audit/timeline", () => {
+	it("returns empty array when audit.db does not exist", async () => {
+		const res = await dispatch("/api/audit/timeline");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns events in chronological order", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit/timeline");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ createdAt: string }>;
+		expect(body.length).toBeGreaterThan(0);
+		for (let i = 0; i < body.length - 1; i++) {
+			const a = body[i];
+			const b = body[i + 1];
+			if (a && b) {
+				expect(a.createdAt <= b.createdAt).toBe(true);
+			}
+		}
+	});
+
+	it("defaults to 24h window when since not provided", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		// Events just inserted are within the 24h window
+		const res = await dispatch("/api/audit/timeline");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(3);
+	});
+
+	it("accepts ?since= param override", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		// Future timestamp — should return no events
+		const res = await dispatch("/api/audit/timeline", { since: "2099-01-01T00:00:00.000Z" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(0);
+	});
+
+	it("applies ?limit= param", async () => {
+		seedAuditDb(join(legioDir, "audit.db"));
+		const res = await dispatch("/api/audit/timeline", { limit: "2" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(2);
 	});
 });
 
