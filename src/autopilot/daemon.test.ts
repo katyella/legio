@@ -5,8 +5,8 @@
  * operations. Does NOT start real subprocesses.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMailStore } from "../mail/store.ts";
@@ -21,7 +21,8 @@ let tempDir: string;
 
 beforeEach(async () => {
 	tempDir = await mkdtemp(join(tmpdir(), "autopilot-test-"));
-	await Bun.write(join(tempDir, ".legio", "config.yaml"), "project:\n  root: .\n");
+	await mkdir(join(tempDir, ".legio"), { recursive: true });
+	await writeFile(join(tempDir, ".legio", "config.yaml"), "project:\n  root: .\n", "utf-8");
 });
 
 afterEach(async () => {
@@ -255,7 +256,12 @@ describe("runAutopilotTick", () => {
 			type: "merge_ready",
 			priority: "normal",
 			threadId: null,
-			payload: JSON.stringify({ branch: "legio/agent-1/task-3", beadId: "task-3", agentName: "agent-1", filesModified: [] }),
+			payload: JSON.stringify({
+				branch: "legio/agent-1/task-3",
+				beadId: "task-3",
+				agentName: "agent-1",
+				filesModified: [],
+			}),
 		});
 		rawStore.close();
 
@@ -414,7 +420,12 @@ describe("runAutopilotTick", () => {
 			type: "merge_ready",
 			priority: "normal",
 			threadId: null,
-			payload: JSON.stringify({ branch: "legio/agent/task-x", beadId: "task-x", agentName: "agent", filesModified: [] }),
+			payload: JSON.stringify({
+				branch: "legio/agent/task-x",
+				beadId: "task-x",
+				agentName: "agent",
+				filesModified: [],
+			}),
 		});
 		rawStore.close();
 

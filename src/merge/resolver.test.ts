@@ -1,14 +1,23 @@
-import {
-	afterAll,
-	afterEach,
-	beforeAll,
-	beforeEach,
-	describe,
-	expect,
-	spyOn,
-	test,
-} from "bun:test";
+/**
+ * Tests for the tiered merge conflict resolver.
+ *
+ * Uses real git repos (temp dirs) for filesystem/git operations.
+ * Claude subprocess calls are intercepted via the _spawn DI option on
+ * createMergeResolver — no vi.mock or vi.spyOn needed (avoids ESM namespace
+ * limitations in Bun where module namespace objects are not configurable).
+ *
+ * The selective spawn pattern: pass _spawn that routes "claude" calls to a
+ * mock ChildProcess and passes everything else to the real spawn, so git
+ * operations run for real while claude is intercepted.
+ */
+
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import type { ChildProcess } from "node:child_process";
+import * as cp from "node:child_process";
+import { EventEmitter } from "node:events";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { MergeError } from "../errors.ts";
 import type { MulchClient } from "../mulch/client.ts";
 import {
@@ -27,27 +36,54 @@ import {
 } from "./resolver.ts";
 
 /**
- * Helper to create a mock Bun.spawn return value for claude CLI mocking.
- *
- * The resolver reads stdout/stderr via `new Response(proc.stdout).text()`
- * and `new Response(proc.stderr).text()`, so we need ReadableStreams.
+ * Saved real spawn so selective mocks can pass git calls through.
  */
-function mockSpawnResult(
-	stdout: string,
-	stderr: string,
-	exitCode: number,
-): {
-	stdout: ReadableStream<Uint8Array>;
-	stderr: ReadableStream<Uint8Array>;
-	exited: Promise<number>;
-	pid: number;
-} {
-	return {
-		stdout: new Response(stdout).body as ReadableStream<Uint8Array>,
-		stderr: new Response(stderr).body as ReadableStream<Uint8Array>,
-		exited: Promise.resolve(exitCode),
-		pid: 12345,
+const realSpawn = cp.spawn.bind(cp);
+
+/**
+ * Build a selective spawn function: routes "claude" calls to a mock process,
+ * passes all other commands (git) through to the real spawn.
+ */
+function makeSelectiveSpawn(
+	claudeStdout: string,
+	claudeStderr = "",
+	claudeExitCode = 0,
+	onClaude?: () => void,
+): (cmd: string, args: string[], opts: cp.SpawnOptions) => ChildProcess {
+	return (command, args, opts) => {
+		if (command === "claude") {
+			onClaude?.();
+			return createMockProcess(claudeStdout, claudeStderr, claudeExitCode);
+		}
+		return realSpawn(command, args, opts);
 	};
+}
+
+/**
+ * Create a mock ChildProcess for intercepting claude CLI calls.
+ *
+ * Uses PassThrough streams and an EventEmitter to simulate the child process.
+ * The resolver reads stdout/stderr via "data" events and resolves on "close".
+ */
+function createMockProcess(stdout: string, stderr: string, exitCode: number): ChildProcess {
+	const stdoutStream = new PassThrough();
+	const stderrStream = new PassThrough();
+	const emitter = new EventEmitter();
+
+	process.nextTick(() => {
+		stdoutStream.push(stdout);
+		stdoutStream.push(null);
+		stderrStream.push(stderr);
+		stderrStream.push(null);
+		emitter.emit("close", exitCode);
+	});
+
+	return Object.assign(emitter, {
+		stdout: stdoutStream,
+		stderr: stderrStream,
+		stdin: null,
+		pid: 12345,
+	}) as unknown as ChildProcess;
 }
 
 function makeTestEntry(overrides?: Partial<MergeEntry>): MergeEntry {
@@ -233,8 +269,7 @@ describe("createMergeResolver", () => {
 				expect(result.errorMessage).toBeNull();
 
 				// After merge, the feature file should exist on main
-				const file = Bun.file(join(repoDir, "src/feature-file.ts"));
-				const content = await file.text();
+				const content = await readFile(join(repoDir, "src/feature-file.ts"), "utf-8");
 				expect(content).toBe("feature content\n");
 			} finally {
 				await cleanupTempDir(repoDir);
@@ -311,8 +346,7 @@ describe("createMergeResolver", () => {
 				expect(result.entry.resolvedTier).toBe("auto-resolve");
 
 				// The resolved file should contain the incoming (feature branch) content
-				const file = Bun.file(join(repoDir, "src/test.ts"));
-				const content = await file.text();
+				const content = await readFile(join(repoDir, "src/test.ts"), "utf-8");
 				expect(content).toBe("feature content\n");
 			} finally {
 				await cleanupTempDir(repoDir);
@@ -356,42 +390,28 @@ describe("createMergeResolver", () => {
 
 		// This test runs second -- repo is clean from the abort, same conflict is available
 		test("invokes claude when aiResolveEnabled is true and tier 2 fails", async () => {
-			// Selective spy: mock only claude, let git commands through.
-			const originalSpawn = Bun.spawn;
 			let claudeCalled = false;
 
-			const selectiveMock = (...args: unknown[]): unknown => {
-				const cmd = args[0] as string[];
-				if (cmd?.[0] === "claude") {
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/test.ts"],
+			});
+
+			const resolver = createMergeResolver({
+				aiResolveEnabled: true,
+				reimagineEnabled: false,
+				_spawn: makeSelectiveSpawn("resolved content from AI\n", "", 0, () => {
 					claudeCalled = true;
-					return mockSpawnResult("resolved content from AI\n", "", 0);
-				}
-				return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-			};
+				}),
+			});
 
-			const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-			try {
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
-
-				const resolver = createMergeResolver({
-					aiResolveEnabled: true,
-					reimagineEnabled: false,
-				});
-
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				expect(claudeCalled).toBe(true);
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("ai-resolve");
-				expect(result.entry.status).toBe("merged");
-				expect(result.entry.resolvedTier).toBe("ai-resolve");
-			} finally {
-				spawnSpy.mockRestore();
-			}
+			expect(claudeCalled).toBe(true);
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("ai-resolve");
+			expect(result.entry.status).toBe("merged");
+			expect(result.entry.resolvedTier).toBe("ai-resolve");
 		});
 	});
 
@@ -431,47 +451,32 @@ describe("createMergeResolver", () => {
 
 		// This test runs second -- repo is clean from the abort, same conflict is available
 		test("aborts merge and reimplements when reimagineEnabled is true", async () => {
-			// Selective spy: mock only claude, let git commands through.
-			const originalSpawn = Bun.spawn;
 			let claudeCalled = false;
 
-			const selectiveMock = (...args: unknown[]): unknown => {
-				const cmd = args[0] as string[];
-				if (cmd?.[0] === "claude") {
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/reimagine-target.ts"],
+			});
+
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: true,
+				_spawn: makeSelectiveSpawn("reimagined content\n", "", 0, () => {
 					claudeCalled = true;
-					return mockSpawnResult("reimagined content\n", "", 0);
-				}
-				return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-			};
+				}),
+			});
 
-			const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-			try {
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/reimagine-target.ts"],
-				});
+			expect(claudeCalled).toBe(true);
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("reimagine");
+			expect(result.entry.status).toBe("merged");
+			expect(result.entry.resolvedTier).toBe("reimagine");
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: true,
-				});
-
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				expect(claudeCalled).toBe(true);
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("reimagine");
-				expect(result.entry.status).toBe("merged");
-				expect(result.entry.resolvedTier).toBe("reimagine");
-
-				// Verify the reimagined content was written
-				const file = Bun.file(join(repoDir, "src/reimagine-target.ts"));
-				const content = await file.text();
-				expect(content).toBe("reimagined content\n");
-			} finally {
-				spawnSpy.mockRestore();
-			}
+			// Verify the reimagined content was written
+			const content = await readFile(join(repoDir, "src/reimagine-target.ts"), "utf-8");
+			expect(content).toBe("reimagined content\n");
 		});
 	});
 
@@ -669,40 +674,26 @@ describe("createMergeResolver", () => {
 				const defaultBranch = await getDefaultBranch(repoDir);
 				await setupDeleteModifyConflict(repoDir, defaultBranch);
 
-				const originalSpawn = Bun.spawn;
-				const selectiveMock = (...args: unknown[]): unknown => {
-					const cmd = args[0] as string[];
-					if (cmd?.[0] === "claude") {
-						// Return prose instead of code
-						return mockSpawnResult(
-							"I need permission to edit the file. Here's the resolved content:\n```\nresolved\n```",
-							"",
-							0,
-						);
-					}
-					return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-				};
+				const entry = makeTestEntry({
+					branchName: "feature-branch",
+					filesModified: ["src/test.ts"],
+				});
 
-				const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+				const resolver = createMergeResolver({
+					aiResolveEnabled: true,
+					reimagineEnabled: false,
+					// Return prose instead of code
+					_spawn: makeSelectiveSpawn(
+						"I need permission to edit the file. Here's the resolved content:\n```\nresolved\n```",
+						"",
+						0,
+					),
+				});
 
-				try {
-					const entry = makeTestEntry({
-						branchName: "feature-branch",
-						filesModified: ["src/test.ts"],
-					});
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-					const resolver = createMergeResolver({
-						aiResolveEnabled: true,
-						reimagineEnabled: false,
-					});
-
-					const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-					// Should fail because prose was rejected
-					expect(result.success).toBe(false);
-				} finally {
-					spawnSpy.mockRestore();
-				}
+				// Should fail because prose was rejected
+				expect(result.success).toBe(false);
 			} finally {
 				await cleanupTempDir(repoDir);
 			}
@@ -932,42 +923,27 @@ describe("createMergeResolver", () => {
 					});
 				});
 
-				// Mock claude to succeed
-				const originalSpawn = Bun.spawn;
-				const selectiveMock = (...args: unknown[]): unknown => {
-					const cmd = args[0] as string[];
-					if (cmd?.[0] === "claude") {
-						return mockSpawnResult("resolved content from AI\n", "", 0);
-					}
-					return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-				};
+				const resolver = createMergeResolver({
+					aiResolveEnabled: true,
+					reimagineEnabled: false,
+					mulchClient: mockMulchClient,
+					_spawn: makeSelectiveSpawn("resolved content from AI\n", "", 0),
+				});
 
-				const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				try {
-					const resolver = createMergeResolver({
-						aiResolveEnabled: true,
-						reimagineEnabled: false,
-						mulchClient: mockMulchClient,
-					});
+				expect(result.success).toBe(true);
+				expect(result.tier).toBe("ai-resolve");
 
-					const result = await resolver.resolve(entry, defaultBranch, repoDir);
+				// Verify record was called
+				expect(recordCalls.length).toBe(1);
+				const call = recordCalls[0];
+				expect(call?.domain).toBe("architecture");
+				expect(call?.options.evidenceBead).toBe("bead-ai-789");
 
-					expect(result.success).toBe(true);
-					expect(result.tier).toBe("ai-resolve");
-
-					// Verify record was called
-					expect(recordCalls.length).toBe(1);
-					const call = recordCalls[0];
-					expect(call?.domain).toBe("architecture");
-					expect(call?.options.evidenceBead).toBe("bead-ai-789");
-
-					const desc = call?.options.description ?? "";
-					expect(desc).toContain("resolved");
-					expect(desc).toContain("ai-resolve");
-				} finally {
-					spawnSpy.mockRestore();
-				}
+				const desc = call?.options.description ?? "";
+				expect(desc).toContain("resolved");
+				expect(desc).toContain("ai-resolve");
 			} finally {
 				await cleanupTempDir(repoDir);
 			}
@@ -1007,42 +983,27 @@ describe("createMergeResolver", () => {
 					});
 				});
 
-				// Mock claude to succeed
-				const originalSpawn = Bun.spawn;
-				const selectiveMock = (...args: unknown[]): unknown => {
-					const cmd = args[0] as string[];
-					if (cmd?.[0] === "claude") {
-						return mockSpawnResult("reimagined content\n", "", 0);
-					}
-					return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-				};
+				const resolver = createMergeResolver({
+					aiResolveEnabled: false,
+					reimagineEnabled: true,
+					mulchClient: mockMulchClient,
+					_spawn: makeSelectiveSpawn("reimagined content\n", "", 0),
+				});
 
-				const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				try {
-					const resolver = createMergeResolver({
-						aiResolveEnabled: false,
-						reimagineEnabled: true,
-						mulchClient: mockMulchClient,
-					});
+				expect(result.success).toBe(true);
+				expect(result.tier).toBe("reimagine");
 
-					const result = await resolver.resolve(entry, defaultBranch, repoDir);
+				// Verify record was called
+				expect(recordCalls.length).toBe(1);
+				const call = recordCalls[0];
+				expect(call?.domain).toBe("architecture");
+				expect(call?.options.evidenceBead).toBe("bead-reimagine-xyz");
 
-					expect(result.success).toBe(true);
-					expect(result.tier).toBe("reimagine");
-
-					// Verify record was called
-					expect(recordCalls.length).toBe(1);
-					const call = recordCalls[0];
-					expect(call?.domain).toBe("architecture");
-					expect(call?.options.evidenceBead).toBe("bead-reimagine-xyz");
-
-					const desc = call?.options.description ?? "";
-					expect(desc).toContain("resolved");
-					expect(desc).toContain("reimagine");
-				} finally {
-					spawnSpy.mockRestore();
-				}
+				const desc = call?.options.description ?? "";
+				expect(desc).toContain("resolved");
+				expect(desc).toContain("reimagine");
 			} finally {
 				await cleanupTempDir(repoDir);
 			}
@@ -1306,37 +1267,28 @@ describe("createMergeResolver", () => {
 					return "Merge conflict resolved at tier ai-resolve. Branch: old-branch. Agent: old-agent. Conflicting files: src/test.ts.";
 				};
 
-				// Capture the prompt sent to claude
+				// Capture the prompt sent to claude (args[2] is the prompt after "--print" and "-p")
 				let capturedPrompt = "";
-				const originalSpawn = Bun.spawn;
-				const selectiveMock = (...args: unknown[]): unknown => {
-					const cmd = args[0] as string[];
-					if (cmd?.[0] === "claude") {
-						capturedPrompt = cmd[3] ?? "";
-						return mockSpawnResult("resolved content\n", "", 0);
-					}
-					return originalSpawn.apply(Bun, args as Parameters<typeof Bun.spawn>);
-				};
+				const resolver = createMergeResolver({
+					aiResolveEnabled: true,
+					reimagineEnabled: false,
+					mulchClient: mockMulchClient,
+					_spawn: (command, args, opts) => {
+						if (command === "claude") {
+							capturedPrompt = args[2] ?? "";
+							return createMockProcess("resolved content\n", "", 0);
+						}
+						return realSpawn(command, args, opts);
+					},
+				});
 
-				const spawnSpy = spyOn(Bun, "spawn").mockImplementation(selectiveMock as typeof Bun.spawn);
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				try {
-					const resolver = createMergeResolver({
-						aiResolveEnabled: true,
-						reimagineEnabled: false,
-						mulchClient: mockMulchClient,
-					});
-
-					const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-					expect(result.success).toBe(true);
-					expect(result.tier).toBe("ai-resolve");
-					// Verify historical context was included in the prompt
-					expect(capturedPrompt).toContain("Historical context");
-					expect(capturedPrompt).toContain("ai-resolve");
-				} finally {
-					spawnSpy.mockRestore();
-				}
+				expect(result.success).toBe(true);
+				expect(result.tier).toBe("ai-resolve");
+				// Verify historical context was included in the prompt
+				expect(capturedPrompt).toContain("Historical context");
+				expect(capturedPrompt).toContain("ai-resolve");
 			} finally {
 				await cleanupTempDir(repoDir);
 			}

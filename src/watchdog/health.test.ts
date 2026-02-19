@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { AgentSession } from "../types.ts";
 import { evaluateHealth, isProcessRunning, transitionState } from "./health.ts";
 

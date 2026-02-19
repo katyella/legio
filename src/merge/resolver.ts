@@ -8,9 +8,12 @@
  *   4. Re-imagine — abort merge and reimplement changes from scratch
  *
  * Each tier is attempted in order. If a tier fails, the next is tried.
- * Disabled tiers are skipped. Uses Bun.spawn for all subprocess calls.
+ * Disabled tiers are skipped. Uses child_process.spawn for all subprocess calls.
  */
 
+import * as cp from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { MergeError } from "../errors.ts";
 import type { MulchClient } from "../mulch/client.ts";
 import type {
@@ -24,39 +27,6 @@ import type {
 export interface MergeResolver {
 	/** Attempt to merge the entry's branch into the canonical branch with tiered resolution. */
 	resolve(entry: MergeEntry, canonicalBranch: string, repoRoot: string): Promise<MergeResult>;
-}
-
-/**
- * Run a git command in the given repo root. Returns stdout, stderr, and exit code.
- */
-async function runGit(
-	repoRoot: string,
-	args: string[],
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-	const proc = Bun.spawn(["git", ...args], {
-		cwd: repoRoot,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	return { stdout, stderr, exitCode };
-}
-
-/**
- * Get the list of conflicted files from `git diff --name-only --diff-filter=U`.
- */
-async function getConflictedFiles(repoRoot: string): Promise<string[]> {
-	const { stdout } = await runGit(repoRoot, ["diff", "--name-only", "--diff-filter=U"]);
-	return stdout
-		.trim()
-		.split("\n")
-		.filter((line) => line.length > 0);
 }
 
 /**
@@ -90,79 +60,17 @@ function resolveConflictsKeepIncoming(content: string): string | null {
 }
 
 /**
- * Read a file's content using Bun.file().
+ * Read a file's content.
  */
 async function readFile(filePath: string): Promise<string> {
-	const file = Bun.file(filePath);
-	return file.text();
+	return fsReadFile(filePath, "utf-8");
 }
 
 /**
- * Write content to a file using Bun.write().
+ * Write content to a file.
  */
 async function writeFile(filePath: string, content: string): Promise<void> {
-	await Bun.write(filePath, content);
-}
-
-/**
- * Tier 1: Attempt a clean merge (git merge --no-edit).
- * Returns true if the merge succeeds with no conflicts.
- */
-async function tryCleanMerge(
-	entry: MergeEntry,
-	repoRoot: string,
-): Promise<{ success: boolean; conflictFiles: string[] }> {
-	const { exitCode } = await runGit(repoRoot, ["merge", "--no-edit", entry.branchName]);
-
-	if (exitCode === 0) {
-		return { success: true, conflictFiles: [] };
-	}
-
-	// Merge failed — get the list of conflicted files
-	const conflictFiles = await getConflictedFiles(repoRoot);
-	return { success: false, conflictFiles };
-}
-
-/**
- * Tier 2: Auto-resolve conflicts by keeping incoming (agent) changes.
- * Parses conflict markers and keeps the content between ======= and >>>>>>>.
- */
-async function tryAutoResolve(
-	conflictFiles: string[],
-	repoRoot: string,
-): Promise<{ success: boolean; remainingConflicts: string[] }> {
-	const remainingConflicts: string[] = [];
-
-	for (const file of conflictFiles) {
-		const filePath = `${repoRoot}/${file}`;
-
-		try {
-			const content = await readFile(filePath);
-			const resolved = resolveConflictsKeepIncoming(content);
-
-			if (resolved === null) {
-				// No conflict markers found (shouldn't happen but be defensive)
-				remainingConflicts.push(file);
-				continue;
-			}
-
-			await writeFile(filePath, resolved);
-			const { exitCode } = await runGit(repoRoot, ["add", file]);
-			if (exitCode !== 0) {
-				remainingConflicts.push(file);
-			}
-		} catch {
-			remainingConflicts.push(file);
-		}
-	}
-
-	if (remainingConflicts.length > 0) {
-		return { success: false, remainingConflicts };
-	}
-
-	// All files resolved — commit
-	const { exitCode } = await runGit(repoRoot, ["commit", "--no-edit"]);
-	return { success: exitCode === 0, remainingConflicts };
+	await fsWriteFile(filePath, content, "utf-8");
 }
 
 /**
@@ -188,162 +96,6 @@ export function looksLikeProse(text: string): boolean {
 	}
 
 	return false;
-}
-
-/**
- * Tier 3: AI-assisted conflict resolution using Claude.
- * Spawns `claude --print` for each conflicted file with the conflict content.
- * Validates that output looks like code, not conversational prose.
- */
-async function tryAiResolve(
-	conflictFiles: string[],
-	repoRoot: string,
-	pastResolutions?: string[],
-): Promise<{ success: boolean; remainingConflicts: string[] }> {
-	const remainingConflicts: string[] = [];
-
-	for (const file of conflictFiles) {
-		const filePath = `${repoRoot}/${file}`;
-
-		try {
-			const content = await readFile(filePath);
-			const historyContext =
-				pastResolutions && pastResolutions.length > 0
-					? `\n\nHistorical context from past merges:\n${pastResolutions.join("\n")}\n`
-					: "";
-			const prompt = [
-				"You are a merge conflict resolver. Output ONLY the resolved file content.",
-				"Rules: NO explanation, NO markdown fencing, NO conversation, NO preamble.",
-				"Output the raw file content as it should appear on disk.",
-				"Choose the best combination of both sides of this conflict:",
-				historyContext,
-				"\n\n",
-				content,
-			].join(" ");
-
-			const proc = Bun.spawn(["claude", "--print", "-p", prompt], {
-				cwd: repoRoot,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-
-			const [resolved, , exitCode] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited,
-			]);
-
-			if (exitCode !== 0 || resolved.trim() === "") {
-				remainingConflicts.push(file);
-				continue;
-			}
-
-			// Validate output is code, not prose — fall back to next tier if not
-			if (looksLikeProse(resolved)) {
-				remainingConflicts.push(file);
-				continue;
-			}
-
-			await writeFile(filePath, resolved);
-			const { exitCode: addExitCode } = await runGit(repoRoot, ["add", file]);
-			if (addExitCode !== 0) {
-				remainingConflicts.push(file);
-			}
-		} catch {
-			remainingConflicts.push(file);
-		}
-	}
-
-	if (remainingConflicts.length > 0) {
-		return { success: false, remainingConflicts };
-	}
-
-	// All files resolved — commit
-	const { exitCode } = await runGit(repoRoot, ["commit", "--no-edit"]);
-	return { success: exitCode === 0, remainingConflicts };
-}
-
-/**
- * Tier 4: Re-imagine — abort the merge and reimplement changes from scratch.
- * Uses Claude to reimplement the agent's changes on top of the canonical version.
- */
-async function tryReimagine(
-	entry: MergeEntry,
-	canonicalBranch: string,
-	repoRoot: string,
-): Promise<{ success: boolean }> {
-	// Abort the current merge
-	await runGit(repoRoot, ["merge", "--abort"]);
-
-	for (const file of entry.filesModified) {
-		try {
-			// Get the canonical version
-			const { stdout: canonicalContent, exitCode: catCanonicalCode } = await runGit(repoRoot, [
-				"show",
-				`${canonicalBranch}:${file}`,
-			]);
-
-			// Get the branch version
-			const { stdout: branchContent, exitCode: catBranchCode } = await runGit(repoRoot, [
-				"show",
-				`${entry.branchName}:${file}`,
-			]);
-
-			if (catCanonicalCode !== 0 || catBranchCode !== 0) {
-				return { success: false };
-			}
-
-			const prompt = [
-				"You are a merge conflict resolver. Output ONLY the final file content.",
-				"Rules: NO explanation, NO markdown fencing, NO conversation, NO preamble.",
-				"Output the raw file content as it should appear on disk.",
-				"Reimplement the changes from the branch version onto the canonical version.",
-				`\n\n=== CANONICAL VERSION (${canonicalBranch}) ===\n`,
-				canonicalContent,
-				`\n\n=== BRANCH VERSION (${entry.branchName}) ===\n`,
-				branchContent,
-			].join("");
-
-			const proc = Bun.spawn(["claude", "--print", "-p", prompt], {
-				cwd: repoRoot,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-
-			const [reimagined, , exitCode] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited,
-			]);
-
-			if (exitCode !== 0 || reimagined.trim() === "") {
-				return { success: false };
-			}
-
-			// Validate output is code, not prose
-			if (looksLikeProse(reimagined)) {
-				return { success: false };
-			}
-
-			const filePath = `${repoRoot}/${file}`;
-			await writeFile(filePath, reimagined);
-			const { exitCode: addExitCode } = await runGit(repoRoot, ["add", file]);
-			if (addExitCode !== 0) {
-				return { success: false };
-			}
-		} catch {
-			return { success: false };
-		}
-	}
-
-	// Commit the reimagined changes
-	const { exitCode } = await runGit(repoRoot, [
-		"commit",
-		"-m",
-		`Reimagine merge: ${entry.branchName} onto ${canonicalBranch}`,
-	]);
-
-	return { success: exitCode === 0 };
 }
 
 /**
@@ -454,65 +206,329 @@ export function buildConflictHistory(
 }
 
 /**
- * Query mulch for historical conflict patterns related to the merge entry.
- * Returns empty history if mulch is unavailable or search fails (fire-and-forget).
- */
-async function queryConflictHistory(
-	mulchClient: MulchClient,
-	entry: MergeEntry,
-): Promise<ConflictHistory> {
-	try {
-		const searchOutput = await mulchClient.search("merge-conflict");
-		const patterns = parseConflictPatterns(searchOutput);
-		return buildConflictHistory(patterns, entry.filesModified);
-	} catch {
-		return { skipTiers: [], pastResolutions: [], predictedConflictFiles: [] };
-	}
-}
-
-/**
- * Record a merge conflict pattern to mulch for future learning.
- * Uses fire-and-forget (try/catch swallowing errors) so recording
- * never blocks or fails the merge itself.
- */
-function recordConflictPattern(
-	mulchClient: MulchClient,
-	entry: MergeEntry,
-	tier: ResolutionTier,
-	conflictFiles: string[],
-	success: boolean,
-): void {
-	const outcome = success ? "resolved" : "failed";
-	const description = [
-		`Merge conflict ${outcome} at tier ${tier}.`,
-		`Branch: ${entry.branchName}.`,
-		`Agent: ${entry.agentName}.`,
-		`Conflicting files: ${conflictFiles.join(", ")}.`,
-	].join(" ");
-
-	// Fire-and-forget per convention mx-09e10f
-	mulchClient
-		.record("architecture", {
-			type: "pattern",
-			description,
-			tags: ["merge-conflict"],
-			evidenceBead: entry.beadId,
-		})
-		.catch(() => {});
-}
-
-/**
  * Create a MergeResolver with configurable tier enablement.
  *
  * @param options.aiResolveEnabled - Enable tier 3 (AI-assisted resolution)
  * @param options.reimagineEnabled - Enable tier 4 (full reimagine)
  * @param options.mulchClient - Optional MulchClient for conflict pattern recording
+ * @param options._spawn - Injectable spawn function for testing (defaults to cp.spawn)
  */
 export function createMergeResolver(options: {
 	aiResolveEnabled: boolean;
 	reimagineEnabled: boolean;
 	mulchClient?: MulchClient;
+	_spawn?: (cmd: string, args: string[], opts: cp.SpawnOptions) => ChildProcess;
 }): MergeResolver {
+	// Bind spawn so tests can inject a replacement without ESM namespace limitations
+	const spawnFn = options._spawn ?? cp.spawn.bind(cp);
+
+	/**
+	 * Run a command as a subprocess. Returns stdout, stderr, and exit code.
+	 * Closes over spawnFn so tests can inject a mock spawn.
+	 */
+	function runCommand(
+		cmd: string[],
+		cwd?: string,
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		const [command, ...args] = cmd;
+		if (!command) return Promise.reject(new Error("Empty command"));
+		return new Promise((resolve, reject) => {
+			const proc = spawnFn(command, args, {
+				cwd,
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+
+			if (proc.stdout === null || proc.stderr === null) {
+				reject(new Error("spawn failed to create stdio pipes"));
+				return;
+			}
+
+			const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
+			proc.stdout.on("data", (data: Buffer) => chunks.stdout.push(data));
+			proc.stderr.on("data", (data: Buffer) => chunks.stderr.push(data));
+			proc.on("error", reject);
+			proc.on("close", (code) => {
+				resolve({
+					stdout: Buffer.concat(chunks.stdout).toString(),
+					stderr: Buffer.concat(chunks.stderr).toString(),
+					exitCode: code ?? 1,
+				});
+			});
+		});
+	}
+
+	/**
+	 * Run a git command in the given repo root. Returns stdout, stderr, and exit code.
+	 */
+	function runGit(
+		repoRoot: string,
+		args: string[],
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		return runCommand(["git", ...args], repoRoot);
+	}
+
+	/**
+	 * Get the list of conflicted files from `git diff --name-only --diff-filter=U`.
+	 */
+	async function getConflictedFiles(repoRoot: string): Promise<string[]> {
+		const { stdout } = await runGit(repoRoot, ["diff", "--name-only", "--diff-filter=U"]);
+		return stdout
+			.trim()
+			.split("\n")
+			.filter((line) => line.length > 0);
+	}
+
+	/**
+	 * Tier 1: Attempt a clean merge (git merge --no-edit).
+	 * Returns true if the merge succeeds with no conflicts.
+	 */
+	async function tryCleanMerge(
+		entry: MergeEntry,
+		repoRoot: string,
+	): Promise<{ success: boolean; conflictFiles: string[] }> {
+		const { exitCode } = await runGit(repoRoot, ["merge", "--no-edit", entry.branchName]);
+
+		if (exitCode === 0) {
+			return { success: true, conflictFiles: [] };
+		}
+
+		// Merge failed — get the list of conflicted files
+		const conflictFiles = await getConflictedFiles(repoRoot);
+		return { success: false, conflictFiles };
+	}
+
+	/**
+	 * Tier 2: Auto-resolve conflicts by keeping incoming (agent) changes.
+	 * Parses conflict markers and keeps the content between ======= and >>>>>>>.
+	 */
+	async function tryAutoResolve(
+		conflictFiles: string[],
+		repoRoot: string,
+	): Promise<{ success: boolean; remainingConflicts: string[] }> {
+		const remainingConflicts: string[] = [];
+
+		for (const file of conflictFiles) {
+			const filePath = `${repoRoot}/${file}`;
+
+			try {
+				const content = await readFile(filePath);
+				const resolved = resolveConflictsKeepIncoming(content);
+
+				if (resolved === null) {
+					// No conflict markers found (shouldn't happen but be defensive)
+					remainingConflicts.push(file);
+					continue;
+				}
+
+				await writeFile(filePath, resolved);
+				const { exitCode } = await runGit(repoRoot, ["add", file]);
+				if (exitCode !== 0) {
+					remainingConflicts.push(file);
+				}
+			} catch {
+				remainingConflicts.push(file);
+			}
+		}
+
+		if (remainingConflicts.length > 0) {
+			return { success: false, remainingConflicts };
+		}
+
+		// All files resolved — commit
+		const { exitCode } = await runGit(repoRoot, ["commit", "--no-edit"]);
+		return { success: exitCode === 0, remainingConflicts };
+	}
+
+	/**
+	 * Tier 3: AI-assisted conflict resolution using Claude.
+	 * Spawns `claude --print` for each conflicted file with the conflict content.
+	 * Validates that output looks like code, not conversational prose.
+	 */
+	async function tryAiResolve(
+		conflictFiles: string[],
+		repoRoot: string,
+		pastResolutions?: string[],
+	): Promise<{ success: boolean; remainingConflicts: string[] }> {
+		const remainingConflicts: string[] = [];
+
+		for (const file of conflictFiles) {
+			const filePath = `${repoRoot}/${file}`;
+
+			try {
+				const content = await readFile(filePath);
+				const historyContext =
+					pastResolutions && pastResolutions.length > 0
+						? `\n\nHistorical context from past merges:\n${pastResolutions.join("\n")}\n`
+						: "";
+				const prompt = [
+					"You are a merge conflict resolver. Output ONLY the resolved file content.",
+					"Rules: NO explanation, NO markdown fencing, NO conversation, NO preamble.",
+					"Output the raw file content as it should appear on disk.",
+					"Choose the best combination of both sides of this conflict:",
+					historyContext,
+					"\n\n",
+					content,
+				].join(" ");
+
+				const { stdout: resolved, exitCode } = await runCommand(
+					["claude", "--print", "-p", prompt],
+					repoRoot,
+				);
+
+				if (exitCode !== 0 || resolved.trim() === "") {
+					remainingConflicts.push(file);
+					continue;
+				}
+
+				// Validate output is code, not prose — fall back to next tier if not
+				if (looksLikeProse(resolved)) {
+					remainingConflicts.push(file);
+					continue;
+				}
+
+				await writeFile(filePath, resolved);
+				const { exitCode: addExitCode } = await runGit(repoRoot, ["add", file]);
+				if (addExitCode !== 0) {
+					remainingConflicts.push(file);
+				}
+			} catch {
+				remainingConflicts.push(file);
+			}
+		}
+
+		if (remainingConflicts.length > 0) {
+			return { success: false, remainingConflicts };
+		}
+
+		// All files resolved — commit
+		const { exitCode } = await runGit(repoRoot, ["commit", "--no-edit"]);
+		return { success: exitCode === 0, remainingConflicts };
+	}
+
+	/**
+	 * Tier 4: Re-imagine — abort the merge and reimplement changes from scratch.
+	 * Uses Claude to reimplement the agent's changes on top of the canonical version.
+	 */
+	async function tryReimagine(
+		entry: MergeEntry,
+		canonicalBranch: string,
+		repoRoot: string,
+	): Promise<{ success: boolean }> {
+		// Abort the current merge
+		await runGit(repoRoot, ["merge", "--abort"]);
+
+		for (const file of entry.filesModified) {
+			try {
+				// Get the canonical version
+				const { stdout: canonicalContent, exitCode: catCanonicalCode } = await runGit(repoRoot, [
+					"show",
+					`${canonicalBranch}:${file}`,
+				]);
+
+				// Get the branch version
+				const { stdout: branchContent, exitCode: catBranchCode } = await runGit(repoRoot, [
+					"show",
+					`${entry.branchName}:${file}`,
+				]);
+
+				if (catCanonicalCode !== 0 || catBranchCode !== 0) {
+					return { success: false };
+				}
+
+				const prompt = [
+					"You are a merge conflict resolver. Output ONLY the final file content.",
+					"Rules: NO explanation, NO markdown fencing, NO conversation, NO preamble.",
+					"Output the raw file content as it should appear on disk.",
+					"Reimplement the changes from the branch version onto the canonical version.",
+					`\n\n=== CANONICAL VERSION (${canonicalBranch}) ===\n`,
+					canonicalContent,
+					`\n\n=== BRANCH VERSION (${entry.branchName}) ===\n`,
+					branchContent,
+				].join("");
+
+				const { stdout: reimagined, exitCode } = await runCommand(
+					["claude", "--print", "-p", prompt],
+					repoRoot,
+				);
+
+				if (exitCode !== 0 || reimagined.trim() === "") {
+					return { success: false };
+				}
+
+				// Validate output is code, not prose
+				if (looksLikeProse(reimagined)) {
+					return { success: false };
+				}
+
+				const filePath = `${repoRoot}/${file}`;
+				await writeFile(filePath, reimagined);
+				const { exitCode: addExitCode } = await runGit(repoRoot, ["add", file]);
+				if (addExitCode !== 0) {
+					return { success: false };
+				}
+			} catch {
+				return { success: false };
+			}
+		}
+
+		// Commit the reimagined changes
+		const { exitCode } = await runGit(repoRoot, [
+			"commit",
+			"-m",
+			`Reimagine merge: ${entry.branchName} onto ${canonicalBranch}`,
+		]);
+
+		return { success: exitCode === 0 };
+	}
+
+	/**
+	 * Query mulch for historical conflict patterns related to the merge entry.
+	 * Returns empty history if mulch is unavailable or search fails (fire-and-forget).
+	 */
+	async function queryConflictHistory(
+		mulchClient: MulchClient,
+		entry: MergeEntry,
+	): Promise<ConflictHistory> {
+		try {
+			const searchOutput = await mulchClient.search("merge-conflict");
+			const patterns = parseConflictPatterns(searchOutput);
+			return buildConflictHistory(patterns, entry.filesModified);
+		} catch {
+			return { skipTiers: [], pastResolutions: [], predictedConflictFiles: [] };
+		}
+	}
+
+	/**
+	 * Record a merge conflict pattern to mulch for future learning.
+	 * Uses fire-and-forget (try/catch swallowing errors) so recording
+	 * never blocks or fails the merge itself.
+	 */
+	function recordConflictPattern(
+		mulchClient: MulchClient,
+		entry: MergeEntry,
+		tier: ResolutionTier,
+		conflictFiles: string[],
+		success: boolean,
+	): void {
+		const outcome = success ? "resolved" : "failed";
+		const description = [
+			`Merge conflict ${outcome} at tier ${tier}.`,
+			`Branch: ${entry.branchName}.`,
+			`Agent: ${entry.agentName}.`,
+			`Conflicting files: ${conflictFiles.join(", ")}.`,
+		].join(" ");
+
+		// Fire-and-forget per convention mx-09e10f
+		mulchClient
+			.record("architecture", {
+				type: "pattern",
+				description,
+				tags: ["merge-conflict"],
+				evidenceBead: entry.beadId,
+			})
+			.catch(() => {});
+	}
+
 	return {
 		async resolve(
 			entry: MergeEntry,

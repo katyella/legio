@@ -20,6 +20,7 @@
  * truth. See health.ts for the full ZFC documentation.
  */
 
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { nudgeAgent } from "../commands/nudge.ts";
 import { createEventStore } from "../events/store.ts";
@@ -76,16 +77,11 @@ async function recordFailure(
 
 /**
  * Read the current run ID from current-run.txt, or null if no active run.
- * Async because it uses Bun.file().
  */
 async function readCurrentRunId(legioDir: string): Promise<string | null> {
 	const path = join(legioDir, "current-run.txt");
-	const file = Bun.file(path);
-	if (!(await file.exists())) {
-		return null;
-	}
 	try {
-		const text = await file.text();
+		const text = await readFile(path, "utf-8");
 		const trimmed = text.trim();
 		return trimmed.length > 0 ? trimmed : null;
 	} catch {

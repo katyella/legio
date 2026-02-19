@@ -6,6 +6,8 @@
  * Falls back to "extend" if Claude is unavailable.
  */
 
+import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
@@ -80,14 +82,13 @@ async function readRecentLog(logsDir: string): Promise<string> {
 	}
 
 	const logPath = join(logsDir, mostRecent, "session.log");
-	const file = Bun.file(logPath);
-	const exists = await file.exists();
-
-	if (!exists) {
+	let content: string;
+	try {
+		content = await readFile(logPath, "utf-8");
+	} catch {
 		throw new AgentError(`No session.log found at ${logPath}`);
 	}
 
-	const content = await file.text();
 	const lines = content.split("\n");
 
 	// Take the last 50 non-empty lines
@@ -133,28 +134,42 @@ const DEFAULT_TRIAGE_TIMEOUT_MS = 30_000;
 async function spawnClaude(prompt: string, timeoutMs?: number): Promise<string> {
 	const timeout = timeoutMs ?? DEFAULT_TRIAGE_TIMEOUT_MS;
 
-	const proc = Bun.spawn(["claude", "--print", "-p", prompt], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
+	return new Promise((resolve, reject) => {
+		const proc = spawn("claude", ["--print", "-p", prompt], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
 
-	const timer = setTimeout(() => {
-		proc.kill();
-	}, timeout);
-
-	try {
-		const exitCode = await proc.exited;
-		const stdout = await new Response(proc.stdout).text();
-
-		if (exitCode !== 0) {
-			const stderr = await new Response(proc.stderr).text();
-			throw new AgentError(`Claude triage failed (exit ${exitCode}): ${stderr.trim()}`);
+		if (proc.stdout === null || proc.stderr === null) {
+			reject(new AgentError("spawn failed to create stdio pipes"));
+			return;
 		}
 
-		return stdout.trim();
-	} finally {
-		clearTimeout(timer);
-	}
+		const timer = globalThis.setTimeout(() => {
+			proc.kill();
+		}, timeout);
+
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+
+		proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+		proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
+
+		proc.on("close", (code) => {
+			clearTimeout(timer);
+			const stdout = Buffer.concat(stdoutChunks).toString().trim();
+			if (code !== 0) {
+				const stderr = Buffer.concat(stderrChunks).toString().trim();
+				reject(new AgentError(`Claude triage failed (exit ${code}): ${stderr}`));
+				return;
+			}
+			resolve(stdout);
+		});
+
+		proc.on("error", (err) => {
+			clearTimeout(timer);
+			reject(err);
+		});
+	});
 }
 
 /**
