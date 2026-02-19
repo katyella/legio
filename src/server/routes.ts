@@ -17,6 +17,7 @@ import { gatherStatus } from "../commands/status.ts";
 import { loadConfig } from "../config.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
+import { createAuditStore } from "./audit-store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
@@ -279,6 +280,57 @@ export async function handleApiRequest(
 		}
 		autopilot.stop();
 		return jsonResponse(autopilot.getState());
+	}
+
+	// -------------------------------------------------------------------------
+	// Audit — POST route (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/audit") {
+		let body: unknown;
+		try {
+			body = await request.json();
+		} catch {
+			return errorResponse("Invalid JSON body", 400);
+		}
+		if (typeof body !== "object" || body === null || Array.isArray(body)) {
+			return errorResponse("Request body must be a JSON object", 400);
+		}
+		const obj = body as Record<string, unknown>;
+
+		if (typeof obj.type !== "string" || !obj.type) {
+			return errorResponse("Missing required field: type", 400);
+		}
+		if (typeof obj.summary !== "string" || !obj.summary) {
+			return errorResponse("Missing required field: summary", 400);
+		}
+
+		const source = typeof obj.source === "string" ? obj.source : "web_ui";
+		const agent = typeof obj.agent === "string" ? obj.agent : null;
+		const detail = typeof obj.detail === "string" ? obj.detail : null;
+		const sessionId = typeof obj.sessionId === "string" ? obj.sessionId : null;
+
+		const auditDbPath = join(legioDir, "audit.db");
+		const store = createAuditStore(auditDbPath);
+		try {
+			const id = store.insert({
+				type: obj.type,
+				agent,
+				source,
+				summary: obj.summary,
+				detail,
+				sessionId,
+			});
+			// Fetch the inserted event back from the database to return the full record
+			const created = store.getAll().find((e) => e.id === id);
+			return jsonResponse(created ?? { id }, 201);
+		} catch (err) {
+			return errorResponse(
+				`Failed to record audit event: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		} finally {
+			store.close();
+		}
 	}
 
 	// Only handle GET requests for all other routes
@@ -783,6 +835,49 @@ export async function handleApiRequest(
 			return errorResponse("Autopilot not available", 404);
 		}
 		return jsonResponse(autopilot.getState());
+	}
+
+	// -------------------------------------------------------------------------
+	// Audit
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/audit/timeline") {
+		const auditDbPath = join(legioDir, "audit.db");
+		if (!(await fileExists(auditDbPath))) {
+			return jsonResponse([]);
+		}
+		const sinceParam = url.searchParams.get("since");
+		// Default since to 24h ago if not provided
+		const since = sinceParam ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+		const until = url.searchParams.get("until") ?? undefined;
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		const store = createAuditStore(auditDbPath);
+		try {
+			return jsonResponse(store.getTimeline({ since, until, limit }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/audit") {
+		const auditDbPath = join(legioDir, "audit.db");
+		if (!(await fileExists(auditDbPath))) {
+			return jsonResponse([]);
+		}
+		const since = url.searchParams.get("since") ?? undefined;
+		const until = url.searchParams.get("until") ?? undefined;
+		const agent = url.searchParams.get("agent") ?? undefined;
+		const type = url.searchParams.get("type") ?? undefined;
+		const source = url.searchParams.get("source") ?? undefined;
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		const store = createAuditStore(auditDbPath);
+		try {
+			return jsonResponse(store.getAll({ since, until, agent, type, source, limit }));
+		} finally {
+			store.close();
+		}
 	}
 
 	// -------------------------------------------------------------------------
