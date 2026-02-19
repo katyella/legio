@@ -5,10 +5,10 @@
  * Philosophy: "never mock what you can use for real" (mx-252b16).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
 import type { SessionMetrics } from "../types.ts";
 import { createMetricsStore, type MetricsStore } from "./store.ts";
@@ -318,7 +318,7 @@ describe("token fields", () => {
 		store.close();
 
 		// Create a DB with the old schema (no token columns)
-		const { Database } = require("bun:sqlite");
+		const Database = require("better-sqlite3");
 		const oldDb = new Database(dbPath);
 		oldDb.exec("DROP TABLE IF EXISTS sessions");
 		oldDb.exec(`

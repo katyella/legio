@@ -5,10 +5,10 @@
  * Philosophy: "never mock what you can use for real" (mx-252b16).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
 import { estimateCost, parseTranscriptUsage } from "./transcript.ts";
 
@@ -26,7 +26,7 @@ afterEach(async () => {
 async function writeJsonl(filename: string, lines: unknown[]): Promise<string> {
 	const path = join(tempDir, filename);
 	const content = `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`;
-	await Bun.write(path, content);
+	await writeFile(path, content, "utf8");
 	return path;
 }
 
@@ -126,7 +126,7 @@ describe("parseTranscriptUsage", () => {
 
 	test("returns zeros for empty file", async () => {
 		const path = join(tempDir, "empty.jsonl");
-		await Bun.write(path, "");
+		await writeFile(path, "", "utf8");
 
 		const usage = await parseTranscriptUsage(path);
 
@@ -158,7 +158,7 @@ describe("parseTranscriptUsage", () => {
 			"",
 			'{"type":"assistant","message":{"model":"claude-opus-4-6","usage":{"input_tokens":200,"output_tokens":75,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}',
 		].join("\n");
-		await Bun.write(path, content);
+		await writeFile(path, content, "utf8");
 
 		const usage = await parseTranscriptUsage(path);
 
@@ -246,7 +246,7 @@ describe("parseTranscriptUsage", () => {
 		const path = join(tempDir, "trailing.jsonl");
 		const content =
 			'{"type":"assistant","message":{"model":"claude-opus-4-6","usage":{"input_tokens":3,"output_tokens":9,"cache_read_input_tokens":19401,"cache_creation_input_tokens":9918}}}\n\n\n';
-		await Bun.write(path, content);
+		await writeFile(path, content, "utf8");
 
 		const usage = await parseTranscriptUsage(path);
 

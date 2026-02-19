@@ -2,11 +2,11 @@
  * SQLite-backed FIFO merge queue for agent branches.
  *
  * Backed by a SQLite database with WAL mode for concurrent access.
- * Uses bun:sqlite for zero-dependency, synchronous database access.
+ * Uses better-sqlite3 for zero-dependency, synchronous database access.
  * FIFO ordering guaranteed via autoincrement id.
  */
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { MergeError } from "../errors.ts";
 import type { MergeEntry, ResolutionTier } from "../types.ts";
 
@@ -102,49 +102,33 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 	db.exec(CREATE_INDEXES);
 
 	// Prepare statements for frequent operations
-	const insertStmt = db.prepare<
-		MergeQueueRow,
-		{
-			$branch_name: string;
-			$bead_id: string;
-			$agent_name: string;
-			$files_modified: string;
-			$enqueued_at: string;
-		}
-	>(`
+	const insertStmt = db.prepare(`
 		INSERT INTO merge_queue (branch_name, bead_id, agent_name, files_modified, enqueued_at)
 		VALUES ($branch_name, $bead_id, $agent_name, $files_modified, $enqueued_at)
 		RETURNING *
 	`);
 
-	const getFirstPendingStmt = db.prepare<MergeQueueRow, Record<string, never>>(`
+	const getFirstPendingStmt = db.prepare(`
 		SELECT * FROM merge_queue WHERE status = 'pending' ORDER BY id ASC LIMIT 1
 	`);
 
-	const deleteByIdStmt = db.prepare<void, { $id: number }>(`
+	const deleteByIdStmt = db.prepare(`
 		DELETE FROM merge_queue WHERE id = $id
 	`);
 
-	const listAllStmt = db.prepare<MergeQueueRow, Record<string, never>>(`
+	const listAllStmt = db.prepare(`
 		SELECT * FROM merge_queue ORDER BY id ASC
 	`);
 
-	const listByStatusStmt = db.prepare<MergeQueueRow, { $status: string }>(`
+	const listByStatusStmt = db.prepare(`
 		SELECT * FROM merge_queue WHERE status = $status ORDER BY id ASC
 	`);
 
-	const getByBranchStmt = db.prepare<MergeQueueRow, { $branch_name: string }>(`
+	const getByBranchStmt = db.prepare(`
 		SELECT * FROM merge_queue WHERE branch_name = $branch_name
 	`);
 
-	const updateStatusStmt = db.prepare<
-		void,
-		{
-			$branch_name: string;
-			$status: string;
-			$resolved_tier: string | null;
-		}
-	>(`
+	const updateStatusStmt = db.prepare(`
 		UPDATE merge_queue
 		SET status = $status, resolved_tier = $resolved_tier
 		WHERE branch_name = $branch_name
@@ -156,12 +140,12 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 			const enqueuedAt = new Date().toISOString();
 
 			const row = insertStmt.get({
-				$branch_name: input.branchName,
-				$bead_id: input.beadId,
-				$agent_name: input.agentName,
-				$files_modified: filesModifiedJson,
-				$enqueued_at: enqueuedAt,
-			});
+				branch_name: input.branchName,
+				bead_id: input.beadId,
+				agent_name: input.agentName,
+				files_modified: filesModifiedJson,
+				enqueued_at: enqueuedAt,
+			}) as MergeQueueRow | undefined;
 
 			if (row === null || row === undefined) {
 				throw new MergeError("Failed to insert entry into merge queue");
@@ -171,20 +155,20 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 		},
 
 		dequeue(): MergeEntry | null {
-			const row = getFirstPendingStmt.get({});
+			const row = getFirstPendingStmt.get() as MergeQueueRow | undefined;
 
 			if (row === null || row === undefined) {
 				return null;
 			}
 
 			// Delete the entry
-			deleteByIdStmt.run({ $id: row.id });
+			deleteByIdStmt.run({ id: row.id });
 
 			return rowToEntry(row);
 		},
 
 		peek(): MergeEntry | null {
-			const row = getFirstPendingStmt.get({});
+			const row = getFirstPendingStmt.get() as MergeQueueRow | undefined;
 
 			if (row === null || row === undefined) {
 				return null;
@@ -197,9 +181,9 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 			let rows: MergeQueueRow[];
 
 			if (status === undefined) {
-				rows = listAllStmt.all({});
+				rows = listAllStmt.all() as MergeQueueRow[];
 			} else {
-				rows = listByStatusStmt.all({ $status: status });
+				rows = listByStatusStmt.all({ status }) as MergeQueueRow[];
 			}
 
 			return rows.map(rowToEntry);
@@ -207,7 +191,9 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 
 		updateStatus(branchName, status, tier?): void {
 			// Check if entry exists
-			const existing = getByBranchStmt.get({ $branch_name: branchName });
+			const existing = getByBranchStmt.get({ branch_name: branchName }) as
+				| MergeQueueRow
+				| undefined;
 
 			if (existing === null || existing === undefined) {
 				throw new MergeError(`No queue entry found for branch: ${branchName}`, {
@@ -217,9 +203,9 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 
 			// Update the entry
 			updateStatusStmt.run({
-				$branch_name: branchName,
-				$status: status,
-				$resolved_tier: tier ?? null,
+				branch_name: branchName,
+				status: status,
+				resolved_tier: tier ?? null,
 			});
 		},
 
