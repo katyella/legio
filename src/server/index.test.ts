@@ -9,11 +9,51 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
+import type { AutopilotInstance } from "../autopilot/daemon.ts";
+import type { AutopilotState } from "../types.ts";
 import { createServer } from "./index.ts";
 
 let tempDir: string;
+
+function makeMockAutopilot(): AutopilotInstance & { startCalls: number; stopCalls: number } {
+	let startCalls = 0;
+	let stopCalls = 0;
+	const state: AutopilotState = {
+		running: false,
+		startedAt: null,
+		stoppedAt: null,
+		lastTick: null,
+		tickCount: 0,
+		actions: [],
+		config: {
+			intervalMs: 10_000,
+			autoMerge: true,
+			autoCleanWorktrees: false,
+			maxActionsLog: 100,
+		},
+	};
+	return {
+		get startCalls() {
+			return startCalls;
+		},
+		get stopCalls() {
+			return stopCalls;
+		},
+		start() {
+			startCalls++;
+			state.running = true;
+		},
+		stop() {
+			stopCalls++;
+			state.running = false;
+		},
+		getState() {
+			return { ...state, actions: [...state.actions], config: { ...state.config } };
+		},
+	};
+}
 
 beforeEach(async () => {
 	tempDir = await mkdtemp(join(tmpdir(), "server-test-"));
@@ -146,6 +186,106 @@ describe("createServer", () => {
 			expect(res.status).toBe(200);
 		} finally {
 			server.stop(true);
+		}
+	});
+});
+
+describe("autopilot auto-start", () => {
+	it("calls autopilot.start() by default", async () => {
+		const mockAutopilot = makeMockAutopilot();
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir },
+			{ _autopilot: mockAutopilot },
+		);
+		try {
+			expect(mockAutopilot.startCalls).toBe(1);
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("does NOT call autopilot.start() when noAutopilot: true", async () => {
+		const mockAutopilot = makeMockAutopilot();
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir, noAutopilot: true },
+			{ _autopilot: mockAutopilot },
+		);
+		try {
+			expect(mockAutopilot.startCalls).toBe(0);
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("calls autopilot.stop() when server is stopped", async () => {
+		const mockAutopilot = makeMockAutopilot();
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir },
+			{ _autopilot: mockAutopilot },
+		);
+		server.stop(true);
+		expect(mockAutopilot.stopCalls).toBe(1);
+	});
+});
+
+describe("coordinator auto-start", () => {
+	it("calls _tryStartCoordinator when autoStartCoordinator: true", async () => {
+		const coordinatorFn = vi.fn().mockResolvedValue(undefined);
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir, autoStartCoordinator: true },
+			{ _tryStartCoordinator: coordinatorFn },
+		);
+		// Give the fire-and-forget a tick to execute
+		await new Promise((r) => setTimeout(r, 10));
+		try {
+			expect(coordinatorFn).toHaveBeenCalledTimes(1);
+			expect(coordinatorFn).toHaveBeenCalledWith(tempDir);
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("does NOT call _tryStartCoordinator when autoStartCoordinator is false (default)", async () => {
+		const coordinatorFn = vi.fn().mockResolvedValue(undefined);
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir },
+			{ _tryStartCoordinator: coordinatorFn },
+		);
+		await new Promise((r) => setTimeout(r, 10));
+		try {
+			expect(coordinatorFn).not.toHaveBeenCalled();
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("does NOT call _tryStartCoordinator when autoStartCoordinator: false (explicit)", async () => {
+		const coordinatorFn = vi.fn().mockResolvedValue(undefined);
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir, autoStartCoordinator: false },
+			{ _tryStartCoordinator: coordinatorFn },
+		);
+		await new Promise((r) => setTimeout(r, 10));
+		try {
+			expect(coordinatorFn).not.toHaveBeenCalled();
+		} finally {
+			server.stop(true);
+		}
+	});
+
+	it("logs error but does not crash when coordinator start fails", async () => {
+		const coordinatorFn = vi.fn().mockRejectedValue(new Error("spawn failed"));
+		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+		const server = await createServer(
+			{ port: 0, host: "localhost", root: tempDir, autoStartCoordinator: true },
+			{ _tryStartCoordinator: coordinatorFn },
+		);
+		await new Promise((r) => setTimeout(r, 20));
+		try {
+			expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to start coordinator"));
+		} finally {
+			server.stop(true);
+			stderrSpy.mockRestore();
 		}
 	});
 });
