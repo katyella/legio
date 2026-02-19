@@ -5,7 +5,7 @@
  * via routes.test.ts — mocking fetch here would add complexity without value.
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { autopilotCommand } from "./autopilot.ts";
 
 // ---------------------------------------------------------------------------

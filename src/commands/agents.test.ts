@@ -2,7 +2,7 @@
  * Tests for the agents command.
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {mkdtemp, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -288,7 +288,7 @@ logging:
 		// Mock stdout.write
 		stdoutBuffer = "";
 		originalStdoutWrite = process.stdout.write;
-		process.stdout.write = mock((chunk: unknown) => {
+		process.stdout.write = vi.fn((chunk: unknown) => {
 			stdoutBuffer += String(chunk);
 			return true;
 		});

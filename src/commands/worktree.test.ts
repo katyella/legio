@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { existsSync, realpathSync } from "node:fs";
 import {access, mkdir, readFile, writeFile} from "node:fs/promises";
 import { join } from "node:path";
