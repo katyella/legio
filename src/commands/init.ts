@@ -9,9 +9,10 @@
  * - .gitignore entries for transient files
  */
 
-import { Database } from "bun:sqlite";
-import { mkdir, readdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import Database from "better-sqlite3";
 import { DEFAULT_CONFIG } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import type { AgentManifest, LegioConfig } from "../types.ts";
@@ -19,19 +20,58 @@ import type { AgentManifest, LegioConfig } from "../types.ts";
 const OVERSTORY_DIR = ".legio";
 
 /**
+ * Check if a file exists using access().
+ */
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Run an external command and collect stdout/stderr + exit code.
+ */
+async function runCommand(
+	cmd: string[],
+	opts?: { cwd?: string },
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const [command, ...args] = cmd;
+	if (!command) {
+		return Promise.resolve({ stdout: "", stderr: "", exitCode: 1 });
+	}
+	return new Promise((resolve) => {
+		const proc = spawn(command, args, {
+			cwd: opts?.cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+		proc.on("close", (code) => {
+			resolve({
+				stdout: Buffer.concat(stdoutChunks).toString(),
+				stderr: Buffer.concat(stderrChunks).toString(),
+				exitCode: code ?? 1,
+			});
+		});
+	});
+}
+
+/**
  * Detect the project name from git or fall back to directory name.
  */
 async function detectProjectName(root: string): Promise<string> {
 	// Try git remote origin
 	try {
-		const proc = Bun.spawn(["git", "remote", "get-url", "origin"], {
+		const { stdout, exitCode } = await runCommand(["git", "remote", "get-url", "origin"], {
 			cwd: root,
-			stdout: "pipe",
-			stderr: "pipe",
 		});
-		const exitCode = await proc.exited;
 		if (exitCode === 0) {
-			const url = (await new Response(proc.stdout).text()).trim();
+			const url = stdout.trim();
 			// Extract repo name from URL: git@host:user/repo.git or https://host/user/repo.git
 			const match = url.match(/\/([^/]+?)(?:\.git)?$/);
 			if (match?.[1]) {
@@ -50,14 +90,12 @@ async function detectProjectName(root: string): Promise<string> {
  */
 async function detectCanonicalBranch(root: string): Promise<string> {
 	try {
-		const proc = Bun.spawn(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], {
-			cwd: root,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const exitCode = await proc.exited;
+		const { stdout, exitCode } = await runCommand(
+			["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+			{ cwd: root },
+		);
 		if (exitCode === 0) {
-			const ref = (await new Response(proc.stdout).text()).trim();
+			const ref = stdout.trim();
 			// refs/remotes/origin/main -> main
 			const branch = ref.split("/").pop();
 			if (branch) {
@@ -70,14 +108,11 @@ async function detectCanonicalBranch(root: string): Promise<string> {
 
 	// Fall back to checking current branch
 	try {
-		const proc = Bun.spawn(["git", "branch", "--show-current"], {
+		const { stdout, exitCode } = await runCommand(["git", "branch", "--show-current"], {
 			cwd: root,
-			stdout: "pipe",
-			stderr: "pipe",
 		});
-		const exitCode = await proc.exited;
 		if (exitCode === 0) {
-			const branch = (await new Response(proc.stdout).text()).trim();
+			const branch = stdout.trim();
 			if (branch === "main" || branch === "master" || branch === "develop") {
 				return branch;
 			}
@@ -373,7 +408,7 @@ async function migrateExistingDatabases(legioPath: string): Promise<string[]> {
 
 	// Migrate mail.db
 	const mailDbPath = join(legioPath, "mail.db");
-	if (await Bun.file(mailDbPath).exists()) {
+	if (await fileExists(mailDbPath)) {
 		const db = new Database(mailDbPath);
 		db.exec("PRAGMA journal_mode = WAL");
 		db.exec("PRAGMA busy_timeout = 5000");
@@ -399,7 +434,7 @@ CREATE INDEX IF NOT EXISTS idx_thread ON messages(thread_id)`);
 
 	// Migrate metrics.db
 	const metricsDbPath = join(legioPath, "metrics.db");
-	if (await Bun.file(metricsDbPath).exists()) {
+	if (await fileExists(metricsDbPath)) {
 		const db = new Database(metricsDbPath);
 		db.exec("PRAGMA journal_mode = WAL");
 		db.exec("PRAGMA busy_timeout = 5000");
@@ -446,7 +481,7 @@ export const OVERSTORY_GITIGNORE = `# Wildcard+whitelist: ignore everything, whi
  */
 export async function writeLegioGitignore(legioPath: string): Promise<void> {
 	const gitignorePath = join(legioPath, ".gitignore");
-	await Bun.write(gitignorePath, OVERSTORY_GITIGNORE);
+	await writeFile(gitignorePath, OVERSTORY_GITIGNORE);
 }
 
 /**
@@ -482,12 +517,10 @@ export async function initCommand(args: string[]): Promise<void> {
 	const legioPath = join(projectRoot, OVERSTORY_DIR);
 
 	// 0. Verify we're inside a git repository
-	const gitCheck = Bun.spawn(["git", "rev-parse", "--is-inside-work-tree"], {
-		cwd: projectRoot,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const gitCheckExit = await gitCheck.exited;
+	const { exitCode: gitCheckExit } = await runCommand(
+		["git", "rev-parse", "--is-inside-work-tree"],
+		{ cwd: projectRoot },
+	);
 	if (gitCheckExit !== 0) {
 		throw new ValidationError("legio requires a git repository. Run 'git init' first.", {
 			field: "git",
@@ -495,8 +528,7 @@ export async function initCommand(args: string[]): Promise<void> {
 	}
 
 	// 1. Check if .legio/ already exists
-	const existingDir = Bun.file(join(legioPath, "config.yaml"));
-	if (await existingDir.exists()) {
+	if (await fileExists(join(legioPath, "config.yaml"))) {
 		if (!force) {
 			process.stdout.write(
 				"Warning: .legio/ already initialized in this project.\n" +
@@ -529,14 +561,13 @@ export async function initCommand(args: string[]): Promise<void> {
 	}
 
 	// 3b. Deploy agent definition .md files from legio install directory
-	const legioAgentsDir = join(import.meta.dir, "..", "..", "agents");
+	const legioAgentsDir = join(import.meta.dirname, "..", "..", "agents");
 	const agentDefsTarget = join(legioPath, "agent-defs");
 	const agentDefFiles = await readdir(legioAgentsDir);
 	for (const fileName of agentDefFiles) {
 		if (!fileName.endsWith(".md")) continue;
-		const source = Bun.file(join(legioAgentsDir, fileName));
-		const content = await source.text();
-		await Bun.write(join(agentDefsTarget, fileName), content);
+		const content = await readFile(join(legioAgentsDir, fileName), "utf-8");
+		await writeFile(join(agentDefsTarget, fileName), content);
 		printCreated(`${OVERSTORY_DIR}/agent-defs/${fileName}`);
 	}
 
@@ -548,19 +579,19 @@ export async function initCommand(args: string[]): Promise<void> {
 
 	const configYaml = serializeConfigToYaml(config);
 	const configPath = join(legioPath, "config.yaml");
-	await Bun.write(configPath, configYaml);
+	await writeFile(configPath, configYaml);
 	printCreated(`${OVERSTORY_DIR}/config.yaml`);
 
 	// 5. Write agent-manifest.json
 	const manifest = buildAgentManifest();
 	const manifestPath = join(legioPath, "agent-manifest.json");
-	await Bun.write(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
+	await writeFile(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
 	printCreated(`${OVERSTORY_DIR}/agent-manifest.json`);
 
 	// 6. Write hooks.json
 	const hooksContent = buildHooksJson();
 	const hooksPath = join(legioPath, "hooks.json");
-	await Bun.write(hooksPath, hooksContent);
+	await writeFile(hooksPath, hooksContent);
 	printCreated(`${OVERSTORY_DIR}/hooks.json`);
 
 	// 7. Write .legio/.gitignore for runtime state

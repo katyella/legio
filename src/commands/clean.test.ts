@@ -8,10 +8,10 @@
  * Philosophy: "never mock what you can use for real" (mx-252b16).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
@@ -35,7 +35,7 @@ beforeEach(async () => {
 	await mkdir(legioDir, { recursive: true });
 
 	// Write minimal config.yaml so loadConfig succeeds
-	await Bun.write(
+	await writeFile(
 		join(legioDir, "config.yaml"),
 		`project:\n  name: test-project\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 	);
@@ -114,12 +114,18 @@ describe("--all", () => {
 		store.close();
 
 		// Verify DB exists
-		expect(await Bun.file(mailDbPath).exists()).toBe(true);
+		const existsBefore = await access(mailDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsBefore).toBe(true);
 
 		await cleanCommand(["--all"]);
 
 		// DB should be gone
-		expect(await Bun.file(mailDbPath).exists()).toBe(false);
+		const existsAfter = await access(mailDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Wiped mail.db");
 	});
 
@@ -145,11 +151,17 @@ describe("--all", () => {
 		});
 		store.close();
 
-		expect(await Bun.file(metricsDbPath).exists()).toBe(true);
+		const existsBefore = await access(metricsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsBefore).toBe(true);
 
 		await cleanCommand(["--all"]);
 
-		expect(await Bun.file(metricsDbPath).exists()).toBe(false);
+		const existsAfter = await access(metricsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Wiped metrics.db");
 	});
 
@@ -177,11 +189,17 @@ describe("--all", () => {
 		store.close();
 
 		const sessionsDbPath = join(legioDir, "sessions.db");
-		expect(await Bun.file(sessionsDbPath).exists()).toBe(true);
+		const existsBefore = await access(sessionsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsBefore).toBe(true);
 
 		await cleanCommand(["--all"]);
 
-		expect(await Bun.file(sessionsDbPath).exists()).toBe(false);
+		const existsAfter = await access(sessionsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Wiped sessions.db");
 	});
 
@@ -199,7 +217,10 @@ describe("--all", () => {
 
 		await cleanCommand(["--all"]);
 
-		expect(await Bun.file(queuePath).exists()).toBe(false);
+		const existsAfter = await access(queuePath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Wiped merge-queue.db");
 	});
 
@@ -240,21 +261,27 @@ describe("--all", () => {
 
 	test("deletes nudge-state.json", async () => {
 		const nudgePath = join(legioDir, "nudge-state.json");
-		await Bun.write(nudgePath, "{}");
+		await writeFile(nudgePath, "{}");
 
 		await cleanCommand(["--all"]);
 
-		expect(await Bun.file(nudgePath).exists()).toBe(false);
+		const existsAfter = await access(nudgePath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Cleared nudge-state.json");
 	});
 
 	test("deletes current-run.txt", async () => {
 		const currentRunPath = join(legioDir, "current-run.txt");
-		await Bun.write(currentRunPath, "run-2026-02-13T10-00-00-000Z");
+		await writeFile(currentRunPath, "run-2026-02-13T10-00-00-000Z");
 
 		await cleanCommand(["--all"]);
 
-		expect(await Bun.file(currentRunPath).exists()).toBe(false);
+		const existsAfter = await access(currentRunPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(existsAfter).toBe(false);
 		expect(stdoutOutput).toContain("Cleared current-run.txt");
 	});
 
@@ -285,14 +312,17 @@ describe("individual flags", () => {
 		store.close();
 
 		const sessionsPath = join(legioDir, "sessions.json");
-		await Bun.write(sessionsPath, '[{"id":"s1"}]\n');
+		await writeFile(sessionsPath, '[{"id":"s1"}]\n');
 
 		await cleanCommand(["--mail"]);
 
 		// Mail gone
-		expect(await Bun.file(mailDbPath).exists()).toBe(false);
+		const mailExists = await access(mailDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(mailExists).toBe(false);
 		// Sessions untouched
-		const sessionsContent = await Bun.file(sessionsPath).text();
+		const sessionsContent = await readFile(sessionsPath, "utf-8");
 		expect(JSON.parse(sessionsContent)).toEqual([{ id: "s1" }]);
 	});
 
@@ -326,7 +356,10 @@ describe("individual flags", () => {
 		await cleanCommand(["--sessions"]);
 
 		// sessions.db should be gone
-		expect(await Bun.file(sessionsDbPath).exists()).toBe(false);
+		const sessionsDbExists = await access(sessionsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(sessionsDbExists).toBe(false);
 
 		// Specs untouched
 		const specEntries = await readdir(join(legioDir, "specs"));
@@ -408,7 +441,7 @@ describe("JSON output", () => {
 
 	test("--json includes currentRunCleared field", async () => {
 		const currentRunPath = join(legioDir, "current-run.txt");
-		await Bun.write(currentRunPath, "run-2026-02-13T10-00-00-000Z");
+		await writeFile(currentRunPath, "run-2026-02-13T10-00-00-000Z");
 
 		await cleanCommand(["--all", "--json"]);
 		const result = JSON.parse(stdoutOutput);
@@ -446,7 +479,7 @@ describe("synthetic session-end events", () => {
 		// Write sessions.json with an active agent
 		const sessionsPath = join(legioDir, "sessions.json");
 		const sessions = [makeSession({ agentName: "builder-a", state: "working" })];
-		await Bun.write(sessionsPath, JSON.stringify(sessions));
+		await writeFile(sessionsPath, JSON.stringify(sessions));
 
 		await cleanCommand(["--all"]);
 
@@ -475,7 +508,7 @@ describe("synthetic session-end events", () => {
 			makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }),
 			makeSession({ id: "s3", agentName: "builder-c", state: "stalled" }),
 		];
-		await Bun.write(sessionsPath, JSON.stringify(sessions));
+		await writeFile(sessionsPath, JSON.stringify(sessions));
 
 		await cleanCommand(["--all"]);
 
@@ -498,13 +531,16 @@ describe("synthetic session-end events", () => {
 			makeSession({ id: "s1", agentName: "completed-agent", state: "completed" }),
 			makeSession({ id: "s2", agentName: "zombie-agent", state: "zombie" }),
 		];
-		await Bun.write(sessionsPath, JSON.stringify(sessions));
+		await writeFile(sessionsPath, JSON.stringify(sessions));
 
 		await cleanCommand(["--all"]);
 
 		// events.db may not even be created if there are no events to log
 		const eventsDbPath = join(legioDir, "events.db");
-		if (await Bun.file(eventsDbPath).exists()) {
+		const eventsDbExists = await access(eventsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		if (eventsDbExists) {
 			const eventStore = createEventStore(eventsDbPath);
 			const events1 = eventStore.getByAgent("completed-agent");
 			const events2 = eventStore.getByAgent("zombie-agent");
@@ -517,7 +553,7 @@ describe("synthetic session-end events", () => {
 	test("--worktrees also logs session-end events (not just --all)", async () => {
 		const sessionsPath = join(legioDir, "sessions.json");
 		const sessions = [makeSession({ agentName: "wt-agent", state: "working" })];
-		await Bun.write(sessionsPath, JSON.stringify(sessions));
+		await writeFile(sessionsPath, JSON.stringify(sessions));
 
 		await cleanCommand(["--worktrees"]);
 
@@ -540,7 +576,7 @@ describe("synthetic session-end events", () => {
 				state: "working",
 			}),
 		];
-		await Bun.write(sessionsPath, JSON.stringify(sessions));
+		await writeFile(sessionsPath, JSON.stringify(sessions));
 
 		await cleanCommand(["--all"]);
 
@@ -662,7 +698,7 @@ describe("mulch health checks", () => {
 
 		await cleanCommand(["--all"]);
 
-		// Should show warning about domain near limit (if mulch status worked)
+		// Should show warning about domain near limit (if mulch CLI is available in the test environment)
 		// The exact output depends on whether mulch CLI is available in the test environment
 		expect(stdoutOutput).toBeDefined();
 	});

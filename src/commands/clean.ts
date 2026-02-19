@@ -19,8 +19,9 @@
  *   7. Delete nudge-state.json
  */
 
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, rm, unlink } from "node:fs/promises";
+import { access, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -33,6 +34,48 @@ import { killSession, listSessions } from "../worktree/tmux.ts";
 
 function hasFlag(args: string[], flag: string): boolean {
 	return args.includes(flag);
+}
+
+/**
+ * Check if a file exists using access().
+ */
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Run an external command and collect stdout/stderr + exit code.
+ */
+async function runCommand(
+	cmd: string[],
+	opts?: { cwd?: string },
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const [command, ...args] = cmd;
+	if (!command) {
+		return Promise.resolve({ stdout: "", stderr: "", exitCode: 1 });
+	}
+	return new Promise((resolve) => {
+		const proc = spawn(command, args, {
+			cwd: opts?.cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+		proc.on("close", (code) => {
+			resolve({
+				stdout: Buffer.concat(stdoutChunks).toString(),
+				stderr: Buffer.concat(stderrChunks).toString(),
+				exitCode: code ?? 1,
+			});
+		});
+	});
 }
 
 /**
@@ -226,12 +269,10 @@ async function cleanAllWorktrees(root: string): Promise<number> {
 async function deleteOrphanedBranches(root: string): Promise<number> {
 	let deleted = 0;
 	try {
-		const proc = Bun.spawn(
+		const { stdout } = await runCommand(
 			["git", "for-each-ref", "refs/heads/legio/", "--format=%(refname:short)"],
-			{ cwd: root, stdout: "pipe", stderr: "pipe" },
+			{ cwd: root },
 		);
-		const stdout = await new Response(proc.stdout).text();
-		await proc.exited;
 
 		const branches = stdout
 			.trim()
@@ -239,12 +280,7 @@ async function deleteOrphanedBranches(root: string): Promise<number> {
 			.filter((b) => b.length > 0);
 		for (const branch of branches) {
 			try {
-				const del = Bun.spawn(["git", "branch", "-D", branch], {
-					cwd: root,
-					stdout: "pipe",
-					stderr: "pipe",
-				});
-				const exitCode = await del.exited;
+				const { exitCode } = await runCommand(["git", "branch", "-D", branch], { cwd: root });
 				if (exitCode === 0) deleted++;
 			} catch {
 				// Best effort
@@ -277,9 +313,8 @@ async function wipeSqliteDb(dbPath: string): Promise<boolean> {
  * Reset a JSON file to an empty array.
  */
 async function resetJsonFile(path: string): Promise<boolean> {
-	const file = Bun.file(path);
-	if (await file.exists()) {
-		await Bun.write(path, "[]\n");
+	if (await fileExists(path)) {
+		await writeFile(path, "[]\n");
 		return true;
 	}
 	return false;

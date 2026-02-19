@@ -7,12 +7,26 @@
  * Storage: `.legio/groups.json` (array of TaskGroup objects).
  */
 
+import { spawn } from "node:child_process";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GroupError, ValidationError } from "../errors.ts";
 import type { TaskGroup, TaskGroupProgress } from "../types.ts";
 
 /** Boolean flags that do NOT consume the next arg. */
 const BOOLEAN_FLAGS = new Set(["--json", "--help", "-h"]);
+
+/**
+ * Check if a file exists using access().
+ */
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /**
  * Extract positional arguments, skipping flag-value pairs.
@@ -50,12 +64,11 @@ function groupsPath(projectRoot: string): string {
  */
 export async function loadGroups(projectRoot: string): Promise<TaskGroup[]> {
 	const path = groupsPath(projectRoot);
-	const file = Bun.file(path);
-	if (!(await file.exists())) {
+	if (!(await fileExists(path))) {
 		return [];
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(path, "utf-8");
 		return JSON.parse(text) as TaskGroup[];
 	} catch {
 		return [];
@@ -67,7 +80,7 @@ export async function loadGroups(projectRoot: string): Promise<TaskGroup[]> {
  */
 async function saveGroups(projectRoot: string, groups: TaskGroup[]): Promise<void> {
 	const path = groupsPath(projectRoot);
-	await Bun.write(path, `${JSON.stringify(groups, null, "\t")}\n`);
+	await writeFile(path, `${JSON.stringify(groups, null, "\t")}\n`);
 }
 
 /**
@@ -76,11 +89,21 @@ async function saveGroups(projectRoot: string, groups: TaskGroup[]): Promise<voi
  */
 async function getIssueStatus(id: string): Promise<string | null> {
 	try {
-		const proc = Bun.spawn(["bd", "show", id, "--json"], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const [stdout, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+		const { stdout, exitCode } = await new Promise<{ stdout: string; exitCode: number }>(
+			(resolve) => {
+				const proc = spawn("bd", ["show", id, "--json"], {
+					stdio: ["ignore", "pipe", "pipe"],
+				});
+				const stdoutChunks: Buffer[] = [];
+				proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+				proc.on("close", (code) => {
+					resolve({
+						stdout: Buffer.concat(stdoutChunks).toString(),
+						exitCode: code ?? 1,
+					});
+				});
+			},
+		);
 		if (exitCode !== 0) {
 			return null;
 		}
@@ -285,8 +308,7 @@ async function getGroupProgress(
 		// Notify coordinator via mail (best-effort)
 		try {
 			const mailDbPath = join(projectRoot, ".legio", "mail.db");
-			const mailDbFile = Bun.file(mailDbPath);
-			if (await mailDbFile.exists()) {
+			if (await fileExists(mailDbPath)) {
 				const { createMailStore } = await import("../mail/store.ts");
 				const mailStore = createMailStore(mailDbPath);
 				try {

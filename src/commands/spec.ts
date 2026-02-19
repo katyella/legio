@@ -8,7 +8,7 @@
  * Supports reading body content from --body flag or stdin.
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ValidationError } from "../errors.ts";
 
@@ -55,11 +55,14 @@ function getPositionalArgs(args: string[]): string[] {
  * (no piped input).
  */
 async function readStdin(): Promise<string> {
-	// Bun.stdin is a ReadableStream when piped, a TTY otherwise
 	if (process.stdin.isTTY) {
 		return "";
 	}
-	return await new Response(Bun.stdin.stream()).text();
+	const chunks: Buffer[] = [];
+	for await (const chunk of process.stdin) {
+		chunks.push(Buffer.from(chunk as Buffer));
+	}
+	return Buffer.concat(chunks).toString("utf-8");
 }
 
 const SPEC_HELP = `legio spec -- Manage task specifications
@@ -106,7 +109,7 @@ export async function writeSpec(
 	}
 
 	const specPath = join(specsDir, `${beadId}.md`);
-	await Bun.write(specPath, content);
+	await writeFile(specPath, content);
 
 	return specPath;
 }

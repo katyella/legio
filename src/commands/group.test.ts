@@ -7,9 +7,9 @@
  * bd is an external CLI not available in unit tests.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import type { TaskGroup } from "../types.ts";
 import { loadGroups } from "./group.ts";
@@ -33,14 +33,14 @@ afterEach(async () => {
  * Helper to write groups.json directly for test setup.
  */
 async function writeGroups(groups: TaskGroup[]): Promise<void> {
-	await Bun.write(groupsJsonPath, `${JSON.stringify(groups, null, "\t")}\n`);
+	await writeFile(groupsJsonPath, `${JSON.stringify(groups, null, "\t")}\n`);
 }
 
 /**
  * Helper to read groups.json directly for assertions.
  */
 async function readGroups(): Promise<TaskGroup[]> {
-	const text = await Bun.file(groupsJsonPath).text();
+	const text = await readFile(groupsJsonPath, "utf-8");
 	return JSON.parse(text) as TaskGroup[];
 }
 
@@ -63,7 +63,7 @@ describe("loadGroups", () => {
 	});
 
 	test("returns empty array when groups.json is malformed", async () => {
-		await Bun.write(groupsJsonPath, "not valid json");
+		await writeFile(groupsJsonPath, "not valid json");
 		const groups = await loadGroups(tempDir);
 		expect(groups).toEqual([]);
 	});
@@ -102,7 +102,7 @@ describe("group create (via JSON storage)", () => {
 
 	test("groups.json has trailing newline", async () => {
 		await writeGroups([makeGroup()]);
-		const raw = await Bun.file(groupsJsonPath).text();
+		const raw = await readFile(groupsJsonPath, "utf-8");
 		expect(raw.endsWith("\n")).toBe(true);
 	});
 });

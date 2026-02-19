@@ -6,9 +6,9 @@
  * and .claude/ scaffolding.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, realpath } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { hooksCommand } from "./hooks.ts";
@@ -57,7 +57,7 @@ beforeEach(async () => {
 	// Create minimal .legio/ with config.yaml
 	const legioDir = join(tempDir, ".legio");
 	await mkdir(legioDir, { recursive: true });
-	await Bun.write(
+	await writeFile(
 		join(legioDir, "config.yaml"),
 		["project:", "  name: test-project", `  root: ${tempDir}`, "  canonicalBranch: main"].join(
 			"\n",
@@ -94,7 +94,7 @@ describe("hooksCommand help", () => {
 describe("hooks install", () => {
 	test("installs hooks from .legio/hooks.json to .claude/settings.local.json", async () => {
 		// Write source hooks
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
@@ -103,14 +103,14 @@ describe("hooks install", () => {
 
 		// Verify target file was created
 		const targetPath = join(tempDir, ".claude", "settings.local.json");
-		const content = await Bun.file(targetPath).text();
+		const content = await readFile(targetPath, "utf-8");
 		const parsed = JSON.parse(content) as Record<string, unknown>;
 		expect(parsed.hooks).toBeDefined();
 		expect(content).toContain("legio prime");
 	});
 
 	test("preserves existing non-hooks keys in settings.local.json", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
@@ -118,28 +118,28 @@ describe("hooks install", () => {
 		// Write existing settings.local.json with non-hooks content
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ env: { SOME_VAR: "1" } }, null, "\t")}\n`,
 		);
 
 		await captureStdout(() => hooksCommand(["install"]));
 
-		const content = await Bun.file(join(claudeDir, "settings.local.json")).text();
+		const content = await readFile(join(claudeDir, "settings.local.json"), "utf-8");
 		const parsed = JSON.parse(content) as Record<string, unknown>;
 		expect(parsed.hooks).toBeDefined();
 		expect(parsed.env).toEqual({ SOME_VAR: "1" });
 	});
 
 	test("warns when hooks already exist without --force", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
 
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ hooks: { old: "hooks" } }, null, "\t")}\n`,
 		);
@@ -149,26 +149,26 @@ describe("hooks install", () => {
 		expect(output).toContain("--force");
 
 		// Verify hooks were NOT overwritten
-		const content = await Bun.file(join(claudeDir, "settings.local.json")).text();
+		const content = await readFile(join(claudeDir, "settings.local.json"), "utf-8");
 		expect(content).toContain("old");
 	});
 
 	test("--force overwrites existing hooks", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
 
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ hooks: { old: "hooks" } }, null, "\t")}\n`,
 		);
 
 		await captureStdout(() => hooksCommand(["install", "--force"]));
 
-		const content = await Bun.file(join(claudeDir, "settings.local.json")).text();
+		const content = await readFile(join(claudeDir, "settings.local.json"), "utf-8");
 		expect(content).not.toContain("old");
 		expect(content).toContain("legio prime");
 	});
@@ -178,14 +178,14 @@ describe("hooks install", () => {
 	});
 
 	test("writes JSON with trailing newline", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
 
 		await captureStdout(() => hooksCommand(["install"]));
 
-		const content = await Bun.file(join(tempDir, ".claude", "settings.local.json")).text();
+		const content = await readFile(join(tempDir, ".claude", "settings.local.json"), "utf-8");
 		expect(content.endsWith("\n")).toBe(true);
 	});
 });
@@ -194,7 +194,7 @@ describe("hooks uninstall", () => {
 	test("removes hooks-only settings.local.json file entirely", async () => {
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ hooks: { some: "hooks" } }, null, "\t")}\n`,
 		);
@@ -202,14 +202,16 @@ describe("hooks uninstall", () => {
 		const output = await captureStdout(() => hooksCommand(["uninstall"]));
 		expect(output).toContain("Removed");
 
-		const exists = await Bun.file(join(claudeDir, "settings.local.json")).exists();
+		const exists = await access(join(claudeDir, "settings.local.json"))
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(false);
 	});
 
 	test("preserves non-hooks keys when uninstalling", async () => {
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ hooks: { some: "hooks" }, env: { KEY: "val" } }, null, "\t")}\n`,
 		);
@@ -217,7 +219,7 @@ describe("hooks uninstall", () => {
 		const output = await captureStdout(() => hooksCommand(["uninstall"]));
 		expect(output).toContain("preserved other settings");
 
-		const content = await Bun.file(join(claudeDir, "settings.local.json")).text();
+		const content = await readFile(join(claudeDir, "settings.local.json"), "utf-8");
 		const parsed = JSON.parse(content) as Record<string, unknown>;
 		expect(parsed.hooks).toBeUndefined();
 		expect(parsed.env).toEqual({ KEY: "val" });
@@ -231,7 +233,7 @@ describe("hooks uninstall", () => {
 	test("handles settings.local.json with no hooks key", async () => {
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ env: { KEY: "val" } }, null, "\t")}\n`,
 		);
@@ -248,7 +250,7 @@ describe("hooks status", () => {
 	});
 
 	test("reports installed:false when no hooks in .claude/", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
@@ -260,14 +262,14 @@ describe("hooks status", () => {
 	});
 
 	test("reports installed:true when hooks present in .claude/", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
 
 		const claudeDir = join(tempDir, ".claude");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(claudeDir, "settings.local.json"),
 			`${JSON.stringify({ hooks: {} }, null, "\t")}\n`,
 		);
@@ -277,7 +279,7 @@ describe("hooks status", () => {
 	});
 
 	test("--json outputs correct fields", async () => {
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "hooks.json"),
 			`${JSON.stringify(SAMPLE_HOOKS, null, "\t")}\n`,
 		);
