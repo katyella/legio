@@ -1,11 +1,8 @@
 // Legio Web UI — MessageBubble component
 // Preact+HTM component for rendering a single mail message as a styled bubble.
-// No npm dependencies — uses CDN imports. Served as a static ES module.
+// No npm dependencies — uses shared preact-setup.js for version consistency.
 
-import { h } from "https://esm.sh/preact@latest";
-import htm from "https://esm.sh/htm@latest";
-
-const html = htm.bind(h);
+import { html } from "../lib/preact-setup.js";
 
 // Type badge color mapping (Tailwind utility classes, Spiegel dark theme)
 const TYPE_COLORS = {
@@ -45,8 +42,9 @@ function timeAgo(isoString) {
  * @param {boolean} props.isReply     - Whether this is a thread reply (indented)
  * @param {string|null} props.selectedAgent - Currently selected agent name (or null)
  * @param {object|null} props.selectedPair  - { agent1, agent2 } or null
+ * @param {boolean} [props.showHeader=true] - Show sender/type/priority header; false for grouped messages
  */
-export function MessageBubble({ msg, isReply, selectedAgent, selectedPair }) {
+export function MessageBubble({ msg, isReply, selectedAgent, selectedPair, showHeader = true }) {
 	// Determine bubble alignment
 	const isRight = selectedPair
 		? msg.from === selectedPair.agent1
@@ -66,9 +64,28 @@ export function MessageBubble({ msg, isReply, selectedAgent, selectedPair }) {
 			? "text-xs px-1.5 py-0.5 rounded bg-red-900/50 text-red-400"
 			: "text-xs px-1.5 py-0.5 rounded bg-orange-900/50 text-orange-400";
 
+	// Left border priority: urgent > high > unread > reply > none
+	const leftBorder =
+		msg.priority === "urgent"
+			? "border-l-2 border-red-500"
+			: msg.priority === "high"
+				? "border-l-2 border-orange-500"
+				: !msg.read
+					? "border-l-2 border-[#E64415]"
+					: isReply
+						? "border-l-2 border-[#2a2a2a]"
+						: "";
+
+	// Background tint for high-priority messages
+	const bgTint =
+		msg.priority === "urgent" ? "bg-red-950/20" : msg.priority === "high" ? "bg-orange-950/10" : "";
+
 	const bubbleClasses = [
-		"bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm p-3 mb-2",
-		isReply ? "ml-6 border-l-2 border-[#2a2a2a]" : "",
+		"border border-[#2a2a2a] rounded-sm",
+		bgTint || "bg-[#1a1a1a]",
+		showHeader ? "p-3 mb-2" : "py-1 px-3 mb-0.5",
+		leftBorder,
+		isReply ? "ml-6" : "",
 		isRight ? "ml-8" : "",
 	]
 		.filter(Boolean)
@@ -76,19 +93,25 @@ export function MessageBubble({ msg, isReply, selectedAgent, selectedPair }) {
 
 	return html`
 		<div class=${bubbleClasses}>
-			<div class="flex items-center gap-2 mb-1 flex-wrap">
+			${
+				showHeader &&
+				html`<div class="flex items-center gap-2 mb-1 flex-wrap">
 				<span class="font-bold text-[#e5e5e5]">${msg.from || ""}</span>
-				${showMention &&
-				html`<span class="text-xs bg-[#E64415]/20 text-[#E64415] px-1 rounded"
+				${
+					showMention &&
+					html`<span class="text-xs bg-[#E64415]/20 text-[#E64415] px-1 rounded"
 					>@${msg.to || ""}</span
-				>`}
+				>`
+				}
 				<span class=${typeBadgeClass}>${msg.type || ""}</span>
-				${hasPriority &&
-				html`<span class=${priorityBadgeClass}>${msg.priority}</span>`}
-			</div>
+				${hasPriority && html`<span class=${priorityBadgeClass}>${msg.priority}</span>`}
+			</div>`
+			}
 			<div class="font-semibold text-[#e5e5e5] text-sm">${msg.subject || ""}</div>
 			<div class="text-sm text-[#999] mt-1 whitespace-pre-wrap">${msg.body || ""}</div>
-			<div class="text-xs text-[#666] mt-1">${timeAgo(msg.createdAt)}</div>
+			<span class="text-xs text-[#666] mt-1 cursor-default" title=${msg.createdAt || ""}>
+				${timeAgo(msg.createdAt)}
+			</span>
 		</div>
 	`;
 }
