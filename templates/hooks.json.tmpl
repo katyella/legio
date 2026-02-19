@@ -1,0 +1,87 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}}"
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}}"
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log tool-start --agent {{AGENT_NAME}} --stdin"
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log tool-end --agent {{AGENT_NAME}} --stdin"
+					},
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 500"
+					}
+				]
+			},
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 30000"
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log session-end --agent {{AGENT_NAME}} --stdin"
+					},
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; mulch learn"
+					}
+				]
+			}
+		],
+		"PreCompact": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}} --compact"
+					}
+				]
+			}
+		]
+	}
+}

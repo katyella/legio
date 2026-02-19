@@ -1,0 +1,276 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AgentSession } from "../types.ts";
+import { printStatus, type StatusData, statusCommand, type VerboseAgentDetail } from "./status.ts";
+
+/**
+ * Tests for the --verbose flag in legio status.
+ *
+ * printStatus is tested by capturing process.stdout.write output.
+ * We spy on stdout.write because printStatus uses it directly.
+ */
+
+function makeAgent(overrides: Partial<AgentSession> = {}): AgentSession {
+	return {
+		id: "sess-001",
+		agentName: "test-builder",
+		capability: "builder",
+		worktreePath: "/tmp/worktrees/test-builder",
+		branchName: "legio/test-builder/task-1",
+		beadId: "task-1",
+		tmuxSession: "legio-test-builder",
+		state: "working",
+		pid: 12345,
+		parentAgent: null,
+		depth: 0,
+		runId: null,
+		startedAt: new Date(Date.now() - 60_000).toISOString(),
+		lastActivity: new Date().toISOString(),
+		escalationLevel: 0,
+		stalledSince: null,
+		...overrides,
+	};
+}
+
+function makeStatusData(overrides: Partial<StatusData> = {}): StatusData {
+	return {
+		agents: [makeAgent()],
+		worktrees: [],
+		tmuxSessions: [{ name: "legio-test-builder", pid: 12345 }],
+		unreadMailCount: 0,
+		mergeQueueCount: 0,
+		recentMetricsCount: 0,
+		...overrides,
+	};
+}
+
+describe("printStatus", () => {
+	let chunks: string[];
+	let originalWrite: typeof process.stdout.write;
+
+	beforeEach(() => {
+		chunks = [];
+		originalWrite = process.stdout.write;
+		process.stdout.write = ((chunk: string) => {
+			chunks.push(chunk);
+			return true;
+		}) as typeof process.stdout.write;
+	});
+
+	afterEach(() => {
+		process.stdout.write = originalWrite;
+	});
+
+	function output(): string {
+		return chunks.join("");
+	}
+
+	test("non-verbose: does not show worktree path or logs dir", () => {
+		const data = makeStatusData();
+		printStatus(data);
+		const out = output();
+
+		expect(out).toContain("test-builder");
+		expect(out).toContain("[builder]");
+		expect(out).not.toContain("Worktree:");
+		expect(out).not.toContain("Logs:");
+		expect(out).not.toContain("Mail sent:");
+	});
+
+	test("verbose: shows worktree path, logs dir, and mail timestamps", () => {
+		const detail: VerboseAgentDetail = {
+			worktreePath: "/tmp/worktrees/test-builder",
+			logsDir: "/tmp/.legio/logs/test-builder",
+			lastMailSent: "2025-01-15T10:00:00.000Z",
+			lastMailReceived: "2025-01-15T10:05:00.000Z",
+			capability: "builder",
+		};
+
+		const data = makeStatusData({
+			verboseDetails: { "test-builder": detail },
+		});
+		printStatus(data);
+		const out = output();
+
+		expect(out).toContain("Worktree: /tmp/worktrees/test-builder");
+		expect(out).toContain("Logs:     /tmp/.legio/logs/test-builder");
+		expect(out).toContain("Mail sent: 2025-01-15T10:00:00.000Z");
+		expect(out).toContain("received: 2025-01-15T10:05:00.000Z");
+	});
+
+	test("verbose: shows 'none' for null mail timestamps", () => {
+		const detail: VerboseAgentDetail = {
+			worktreePath: "/tmp/worktrees/test-builder",
+			logsDir: "/tmp/.legio/logs/test-builder",
+			lastMailSent: null,
+			lastMailReceived: null,
+			capability: "builder",
+		};
+
+		const data = makeStatusData({
+			verboseDetails: { "test-builder": detail },
+		});
+		printStatus(data);
+		const out = output();
+
+		expect(out).toContain("Mail sent: none");
+		expect(out).toContain("received: none");
+	});
+
+	test("verbose: zombie agents do not get verbose detail", () => {
+		const agent = makeAgent({ state: "zombie", agentName: "zombie-agent" });
+		const detail: VerboseAgentDetail = {
+			worktreePath: "/tmp/worktrees/zombie-agent",
+			logsDir: "/tmp/.legio/logs/zombie-agent",
+			lastMailSent: null,
+			lastMailReceived: null,
+			capability: "builder",
+		};
+
+		const data = makeStatusData({
+			agents: [agent],
+			verboseDetails: { "zombie-agent": detail },
+		});
+		printStatus(data);
+		const out = output();
+
+		// Zombie agents are filtered from the active list
+		expect(out).toContain("0 active");
+		expect(out).not.toContain("Worktree:");
+	});
+
+	test("verbose with multiple agents: each gets its own detail", () => {
+		const agent1 = makeAgent({ agentName: "builder-1", tmuxSession: "legio-builder-1" });
+		const agent2 = makeAgent({
+			agentName: "scout-1",
+			capability: "scout",
+			tmuxSession: "legio-scout-1",
+		});
+
+		const data = makeStatusData({
+			agents: [agent1, agent2],
+			tmuxSessions: [
+				{ name: "legio-builder-1", pid: 100 },
+				{ name: "legio-scout-1", pid: 200 },
+			],
+			verboseDetails: {
+				"builder-1": {
+					worktreePath: "/tmp/wt/builder-1",
+					logsDir: "/tmp/logs/builder-1",
+					lastMailSent: "2025-01-15T10:00:00.000Z",
+					lastMailReceived: null,
+					capability: "builder",
+				},
+				"scout-1": {
+					worktreePath: "/tmp/wt/scout-1",
+					logsDir: "/tmp/logs/scout-1",
+					lastMailSent: null,
+					lastMailReceived: "2025-01-15T11:00:00.000Z",
+					capability: "scout",
+				},
+			},
+		});
+		printStatus(data);
+		const out = output();
+
+		expect(out).toContain("Worktree: /tmp/wt/builder-1");
+		expect(out).toContain("Worktree: /tmp/wt/scout-1");
+		expect(out).toContain("Logs:     /tmp/logs/builder-1");
+		expect(out).toContain("Logs:     /tmp/logs/scout-1");
+	});
+});
+
+describe("--verbose --json", () => {
+	test("verboseDetails is included in StatusData when present", () => {
+		const detail: VerboseAgentDetail = {
+			worktreePath: "/tmp/wt/agent",
+			logsDir: "/tmp/logs/agent",
+			lastMailSent: "2025-01-15T10:00:00.000Z",
+			lastMailReceived: null,
+			capability: "builder",
+		};
+
+		const data: StatusData = {
+			agents: [],
+			worktrees: [],
+			tmuxSessions: [],
+			unreadMailCount: 0,
+			mergeQueueCount: 0,
+			recentMetricsCount: 0,
+			verboseDetails: { agent: detail },
+		};
+
+		const json = JSON.parse(JSON.stringify(data)) as StatusData;
+		expect(json.verboseDetails).toBeDefined();
+		expect(json.verboseDetails?.agent?.worktreePath).toBe("/tmp/wt/agent");
+		expect(json.verboseDetails?.agent?.lastMailSent).toBe("2025-01-15T10:00:00.000Z");
+		expect(json.verboseDetails?.agent?.lastMailReceived).toBeNull();
+	});
+
+	test("verboseDetails is omitted from JSON when undefined", () => {
+		const data: StatusData = {
+			agents: [],
+			worktrees: [],
+			tmuxSessions: [],
+			unreadMailCount: 0,
+			mergeQueueCount: 0,
+			recentMetricsCount: 0,
+		};
+
+		const json = JSON.stringify(data);
+		expect(json).not.toContain("verboseDetails");
+	});
+});
+
+describe("--watch deprecation", () => {
+	test("help text marks --watch as deprecated", async () => {
+		const chunks: string[] = [];
+		const originalWrite = process.stdout.write;
+		process.stdout.write = ((chunk: string) => {
+			chunks.push(chunk);
+			return true;
+		}) as typeof process.stdout.write;
+
+		try {
+			await statusCommand(["--help"]);
+		} finally {
+			process.stdout.write = originalWrite;
+		}
+
+		const out = chunks.join("");
+		expect(out).toContain("deprecated");
+		expect(out).toContain("legio dashboard");
+	});
+
+	test("--watch writes deprecation notice to stderr", async () => {
+		const stderrChunks: string[] = [];
+		const originalStderr = process.stderr.write;
+		process.stderr.write = ((chunk: string) => {
+			stderrChunks.push(chunk);
+			return true;
+		}) as typeof process.stderr.write;
+
+		// statusCommand with --watch will fail at loadConfig (no .legio/)
+		// but the deprecation notice is written before that. We just verify
+		// the notice was emitted.
+		const tmpDir = await mkdtemp(join(tmpdir(), "status-deprecation-"));
+		const originalCwd = process.cwd();
+		process.chdir(tmpDir);
+
+		try {
+			await statusCommand(["--watch"]);
+		} catch {
+			// Expected: loadConfig fails without .legio/
+		} finally {
+			process.stderr.write = originalStderr;
+			process.chdir(originalCwd);
+			await rm(tmpDir, { recursive: true, force: true });
+		}
+
+		const err = stderrChunks.join("");
+		expect(err).toContain("--watch is deprecated");
+		expect(err).toContain("legio dashboard");
+	});
+});

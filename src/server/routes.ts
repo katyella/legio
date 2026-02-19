@@ -1,0 +1,773 @@
+/**
+ * REST API route handlers for the legio web UI server.
+ *
+ * Single exported function `handleApiRequest` dispatches all /api/* routes
+ * to the appropriate store. Each handler opens and closes its store within
+ * the request — per-request store lifecycle with no shared state.
+ */
+
+import { join } from "node:path";
+import type { AutopilotInstance } from "../autopilot/daemon.ts";
+import { createBeadsClient } from "../beads/client.ts";
+import { gatherInspectData } from "../commands/inspect.ts";
+import { gatherStatus } from "../commands/status.ts";
+import { loadConfig } from "../config.ts";
+import { createEventStore } from "../events/store.ts";
+import { createMailStore } from "../mail/store.ts";
+import { createMergeQueue } from "../merge/queue.ts";
+import { createMetricsStore } from "../metrics/store.ts";
+import { openSessionStore } from "../sessions/compat.ts";
+import { createRunStore, createSessionStore } from "../sessions/store.ts";
+import type { EventLevel, MailMessage, MergeEntry, RunStatus } from "../types.ts";
+import { MAIL_MESSAGE_TYPES } from "../types.ts";
+import { sendKeys } from "../worktree/tmux.ts";
+
+// ---------------------------------------------------------------------------
+// Route helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Match a URL path against a pattern with named params (e.g. `/api/agents/:name`).
+ * Returns a Record of captured param values, or null if not matched.
+ */
+function matchRoute(path: string, pattern: string): Record<string, string> | null {
+	const regexStr = pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)");
+	const match = new RegExp(`^${regexStr}$`).exec(path);
+	return match?.groups ?? null;
+}
+
+function jsonResponse(data: unknown, status = 200): Response {
+	return new Response(JSON.stringify(data), {
+		status,
+		headers: { "Content-Type": "application/json" },
+	});
+}
+
+function errorResponse(message: string, status = 500): Response {
+	return jsonResponse({ error: message }, status);
+}
+
+// ---------------------------------------------------------------------------
+// Terminal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Load the orchestrator's registered tmux session name from orchestrator-tmux.json.
+ * Written by `legio prime` at SessionStart when running inside tmux.
+ */
+async function loadOrchestratorTmuxSession(projectRoot: string): Promise<string | null> {
+	const regPath = join(projectRoot, ".legio", "orchestrator-tmux.json");
+	const file = Bun.file(regPath);
+	if (!(await file.exists())) {
+		return null;
+	}
+	try {
+		const text = await file.text();
+		const reg = JSON.parse(text) as { tmuxSession?: string };
+		return reg.tmuxSession ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Resolve the tmux session name for an agent.
+ *
+ * For regular agents, looks up the SessionStore.
+ * For "coordinator" or "orchestrator", falls back to orchestrator-tmux.json.
+ */
+async function resolveTerminalSession(
+	legioDir: string,
+	projectRoot: string,
+	agentName: string,
+): Promise<string | null> {
+	const dbPath = join(legioDir, "sessions.db");
+	if (await Bun.file(dbPath).exists()) {
+		const { store } = openSessionStore(legioDir);
+		try {
+			const session = store.getByName(agentName);
+			if (session && session.state !== "zombie" && session.state !== "completed") {
+				return session.tmuxSession;
+			}
+		} finally {
+			store.close();
+		}
+	}
+
+	// Fallback for coordinator/orchestrator: check orchestrator-tmux.json
+	if (agentName === "coordinator" || agentName === "orchestrator") {
+		return await loadOrchestratorTmuxSession(projectRoot);
+	}
+
+	return null;
+}
+
+/**
+ * Capture the output of a tmux pane.
+ *
+ * @param sessionName - Tmux session name
+ * @param lines - Number of history lines to capture
+ * @returns Captured pane output, or null if capture failed
+ */
+async function captureTmuxPane(sessionName: string, lines: number): Promise<string | null> {
+	const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", `-${lines}`], {
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) return null;
+	return (await new Response(proc.stdout).text()).trim();
+}
+
+// ---------------------------------------------------------------------------
+// Main dispatcher
+// ---------------------------------------------------------------------------
+
+export async function handleApiRequest(
+	request: Request,
+	legioDir: string,
+	projectRoot: string,
+	autopilot?: AutopilotInstance | null,
+): Promise<Response> {
+	const url = new URL(request.url);
+	const path = url.pathname;
+
+	// -------------------------------------------------------------------------
+	// POST /api/mail/send
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/mail/send") {
+		let body: unknown;
+		try {
+			body = await request.json();
+		} catch {
+			return errorResponse("Invalid JSON body", 400);
+		}
+		if (typeof body !== "object" || body === null || Array.isArray(body)) {
+			return errorResponse("Request body must be a JSON object", 400);
+		}
+		const obj = body as Record<string, unknown>;
+
+		if (typeof obj.from !== "string" || !obj.from) {
+			return errorResponse("Missing required field: from", 400);
+		}
+		if (typeof obj.to !== "string" || !obj.to) {
+			return errorResponse("Missing required field: to", 400);
+		}
+		if (typeof obj.subject !== "string" || !obj.subject) {
+			return errorResponse("Missing required field: subject", 400);
+		}
+		if (typeof obj.body !== "string") {
+			return errorResponse("Missing required field: body", 400);
+		}
+
+		const typeRaw = typeof obj.type === "string" ? obj.type : "status";
+		const mailType: MailMessage["type"] = (MAIL_MESSAGE_TYPES as readonly string[]).includes(
+			typeRaw,
+		)
+			? (typeRaw as MailMessage["type"])
+			: "status";
+
+		const priorityRaw = typeof obj.priority === "string" ? obj.priority : "normal";
+		const validPriorities: readonly string[] = ["low", "normal", "high", "urgent"];
+		const priority: MailMessage["priority"] = validPriorities.includes(priorityRaw)
+			? (priorityRaw as MailMessage["priority"])
+			: "normal";
+
+		const threadId = typeof obj.threadId === "string" ? obj.threadId : null;
+
+		const dbPath = join(legioDir, "mail.db");
+		const store = createMailStore(dbPath);
+		try {
+			const message = store.insert({
+				id: "",
+				from: obj.from,
+				to: obj.to,
+				subject: obj.subject,
+				body: obj.body,
+				type: mailType,
+				priority,
+				threadId,
+			});
+			return jsonResponse(message, 201);
+		} catch (err) {
+			return errorResponse(
+				`Failed to send message: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		} finally {
+			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// POST /api/terminal/send
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/terminal/send") {
+		let body: unknown;
+		try {
+			body = await request.json();
+		} catch {
+			return errorResponse("Invalid JSON body", 400);
+		}
+		if (typeof body !== "object" || body === null || Array.isArray(body)) {
+			return errorResponse("Request body must be a JSON object", 400);
+		}
+		const obj = body as Record<string, unknown>;
+
+		if (typeof obj.text !== "string" || obj.text.trim().length === 0) {
+			return errorResponse("Missing or empty required field: text", 400);
+		}
+
+		const agentName = typeof obj.agent === "string" && obj.agent ? obj.agent : "coordinator";
+
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
+		if (!tmuxSession) {
+			return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+		}
+
+		try {
+			await sendKeys(tmuxSession, obj.text);
+			// Follow-up Enter after a short delay to ensure Claude Code's TUI submits.
+			// Same pattern as nudge.ts line 168-169.
+			await Bun.sleep(500);
+			await sendKeys(tmuxSession, "");
+		} catch (err) {
+			return errorResponse(
+				`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		return jsonResponse({ ok: true });
+	}
+
+	// -------------------------------------------------------------------------
+	// Autopilot — POST routes (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/autopilot/start" && request.method === "POST") {
+		if (!autopilot) {
+			return errorResponse("Autopilot not available", 404);
+		}
+		autopilot.start();
+		return jsonResponse(autopilot.getState());
+	}
+
+	if (path === "/api/autopilot/stop" && request.method === "POST") {
+		if (!autopilot) {
+			return errorResponse("Autopilot not available", 404);
+		}
+		autopilot.stop();
+		return jsonResponse(autopilot.getState());
+	}
+
+	// Only handle GET requests for all other routes
+	if (request.method !== "GET") {
+		return errorResponse("Method not allowed", 405);
+	}
+
+	// -------------------------------------------------------------------------
+	// Core
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/health") {
+		return jsonResponse({ ok: true, timestamp: new Date().toISOString() });
+	}
+
+	if (path === "/api/status") {
+		try {
+			const data = await gatherStatus(projectRoot, "orchestrator", true);
+			return jsonResponse(data);
+		} catch (err) {
+			return errorResponse(
+				`Failed to gather status: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+	}
+
+	if (path === "/api/config") {
+		try {
+			const config = await loadConfig(projectRoot);
+			return jsonResponse(config);
+		} catch (err) {
+			return errorResponse(
+				`Failed to load config: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Agents — specific routes before parameterized
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/agents") {
+		const dbPath = join(legioDir, "sessions.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const { store } = openSessionStore(legioDir);
+		try {
+			return jsonResponse(store.getAll());
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/agents/active") {
+		const dbPath = join(legioDir, "sessions.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const { store } = openSessionStore(legioDir);
+		try {
+			return jsonResponse(store.getActive());
+		} finally {
+			store.close();
+		}
+	}
+
+	// /api/agents/:name/inspect
+	{
+		const params = matchRoute(path, "/api/agents/:name/inspect");
+		if (params) {
+			const { name } = params;
+			if (!name) return errorResponse("Missing agent name", 400);
+			try {
+				const data = await gatherInspectData(projectRoot, name, { noTmux: true });
+				return jsonResponse(data);
+			} catch {
+				return errorResponse(`Agent not found: ${name}`, 404);
+			}
+		}
+	}
+
+	// /api/agents/:name/events
+	{
+		const params = matchRoute(path, "/api/agents/:name/events");
+		if (params) {
+			const { name } = params;
+			if (!name) return errorResponse("Missing agent name", 400);
+			const dbPath = join(legioDir, "events.db");
+			if (!(await Bun.file(dbPath).exists())) {
+				return jsonResponse([]);
+			}
+			const since = url.searchParams.get("since") ?? undefined;
+			const until = url.searchParams.get("until") ?? undefined;
+			const limitStr = url.searchParams.get("limit");
+			const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+			const levelParam = url.searchParams.get("level");
+			const level = levelParam ? (levelParam as EventLevel) : undefined;
+			const store = createEventStore(dbPath);
+			try {
+				return jsonResponse(store.getByAgent(name, { since, until, limit, level }));
+			} finally {
+				store.close();
+			}
+		}
+	}
+
+	// /api/agents/:name
+	{
+		const params = matchRoute(path, "/api/agents/:name");
+		if (params) {
+			const { name } = params;
+			if (!name) return errorResponse("Missing agent name", 400);
+			const dbPath = join(legioDir, "sessions.db");
+			if (!(await Bun.file(dbPath).exists())) {
+				return errorResponse(`Agent not found: ${name}`, 404);
+			}
+			const { store } = openSessionStore(legioDir);
+			try {
+				const session = store.getByName(name);
+				if (!session) return errorResponse(`Agent not found: ${name}`, 404);
+				return jsonResponse(session);
+			} finally {
+				store.close();
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Mail — specific routes before parameterized
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/mail") {
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const from = url.searchParams.get("from") ?? undefined;
+		const to = url.searchParams.get("to") ?? undefined;
+		const unreadStr = url.searchParams.get("unread");
+		const unread = unreadStr !== null ? unreadStr === "true" : undefined;
+		const store = createMailStore(dbPath);
+		try {
+			return jsonResponse(store.getAll({ from, to, unread }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/mail/unread") {
+		const agent = url.searchParams.get("agent");
+		if (!agent) return errorResponse("Missing required query param: agent", 400);
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const store = createMailStore(dbPath);
+		try {
+			return jsonResponse(store.getUnread(agent));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/mail/conversations") {
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const agentFilter = url.searchParams.get("agent") ?? undefined;
+		const store = createMailStore(dbPath);
+		try {
+			const messages = store.getAll();
+
+			// Group messages by normalized agent pair (sorted alphabetically)
+			const groups = new Map<string, { participants: [string, string]; messages: MailMessage[] }>();
+			for (const msg of messages) {
+				const sorted = [msg.from, msg.to].sort();
+				const a = sorted[0];
+				const b = sorted[1];
+				if (!a || !b) continue;
+				const pair: [string, string] = [a, b];
+				const key = `${a}:${b}`;
+				let group = groups.get(key);
+				if (!group) {
+					group = { participants: pair, messages: [] };
+					groups.set(key, group);
+				}
+				group.messages.push(msg);
+			}
+
+			// Build conversation objects
+			const conversations: Array<{
+				participants: [string, string];
+				lastMessage: MailMessage;
+				messageCount: number;
+				unreadCount: number;
+			}> = [];
+			for (const { participants, messages: msgs } of groups.values()) {
+				if (agentFilter && !participants.includes(agentFilter)) {
+					continue;
+				}
+				const sorted = [...msgs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+				const lastMessage = sorted[0];
+				if (!lastMessage) continue;
+				conversations.push({
+					participants,
+					lastMessage,
+					messageCount: msgs.length,
+					unreadCount: msgs.filter((m) => !m.read).length,
+				});
+			}
+
+			// Sort conversations by most recent message first
+			conversations.sort((a, b) => b.lastMessage.createdAt.localeCompare(a.lastMessage.createdAt));
+			return jsonResponse(conversations);
+		} finally {
+			store.close();
+		}
+	}
+
+	// /api/mail/thread/:threadId — before /api/mail/:id
+	{
+		const params = matchRoute(path, "/api/mail/thread/:threadId");
+		if (params) {
+			const { threadId } = params;
+			if (!threadId) return errorResponse("Missing thread ID", 400);
+			const dbPath = join(legioDir, "mail.db");
+			if (!(await Bun.file(dbPath).exists())) {
+				return jsonResponse([]);
+			}
+			const store = createMailStore(dbPath);
+			try {
+				return jsonResponse(store.getByThread(threadId));
+			} finally {
+				store.close();
+			}
+		}
+	}
+
+	// /api/mail/:id
+	{
+		const params = matchRoute(path, "/api/mail/:id");
+		if (params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing message ID", 400);
+			const dbPath = join(legioDir, "mail.db");
+			if (!(await Bun.file(dbPath).exists())) {
+				return errorResponse(`Message not found: ${id}`, 404);
+			}
+			const store = createMailStore(dbPath);
+			try {
+				const message = store.getById(id);
+				if (!message) return errorResponse(`Message not found: ${id}`, 404);
+				return jsonResponse(message);
+			} finally {
+				store.close();
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Events — specific routes before parameterized
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/events") {
+		const since = url.searchParams.get("since");
+		if (!since) return errorResponse("Missing required query param: since", 400);
+		const dbPath = join(legioDir, "events.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const until = url.searchParams.get("until") ?? undefined;
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		const levelParam = url.searchParams.get("level");
+		const level = levelParam ? (levelParam as EventLevel) : undefined;
+		const store = createEventStore(dbPath);
+		try {
+			return jsonResponse(store.getTimeline({ since, until, limit, level }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/events/errors") {
+		const dbPath = join(legioDir, "events.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const since = url.searchParams.get("since") ?? undefined;
+		const until = url.searchParams.get("until") ?? undefined;
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		const store = createEventStore(dbPath);
+		try {
+			return jsonResponse(store.getErrors({ since, until, limit }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/events/tools") {
+		const dbPath = join(legioDir, "events.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const agentName = url.searchParams.get("agent") ?? undefined;
+		const since = url.searchParams.get("since") ?? undefined;
+		const store = createEventStore(dbPath);
+		try {
+			return jsonResponse(store.getToolStats({ agentName, since }));
+		} finally {
+			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Metrics — specific routes before parameterized
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/metrics") {
+		const dbPath = join(legioDir, "metrics.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : 100;
+		const store = createMetricsStore(dbPath);
+		try {
+			return jsonResponse(store.getRecentSessions(limit));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/metrics/snapshots") {
+		const dbPath = join(legioDir, "metrics.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const store = createMetricsStore(dbPath);
+		try {
+			return jsonResponse(store.getLatestSnapshots());
+		} finally {
+			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Runs — specific routes before parameterized
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/runs") {
+		const dbPath = join(legioDir, "sessions.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		const statusParam = url.searchParams.get("status");
+		const status = statusParam as RunStatus | undefined;
+		const store = createRunStore(dbPath);
+		try {
+			return jsonResponse(store.listRuns({ limit, status: status ?? undefined }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/runs/active") {
+		const dbPath = join(legioDir, "sessions.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse(null);
+		}
+		const store = createRunStore(dbPath);
+		try {
+			return jsonResponse(store.getActiveRun());
+		} finally {
+			store.close();
+		}
+	}
+
+	// /api/runs/:id
+	{
+		const params = matchRoute(path, "/api/runs/:id");
+		if (params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing run ID", 400);
+			const dbPath = join(legioDir, "sessions.db");
+			if (!(await Bun.file(dbPath).exists())) {
+				return errorResponse(`Run not found: ${id}`, 404);
+			}
+			const runStore = createRunStore(dbPath);
+			const sessionStore = createSessionStore(dbPath);
+			try {
+				const run = runStore.getRun(id);
+				if (!run) return errorResponse(`Run not found: ${id}`, 404);
+				const agents = sessionStore.getByRun(id);
+				return jsonResponse({ run, agents });
+			} finally {
+				runStore.close();
+				sessionStore.close();
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Merge Queue
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/merge-queue") {
+		const dbPath = join(legioDir, "merge-queue.db");
+		if (!(await Bun.file(dbPath).exists())) {
+			return jsonResponse([]);
+		}
+		const statusParam = url.searchParams.get("status");
+		const queue = createMergeQueue(dbPath);
+		try {
+			const status = statusParam ? (statusParam as MergeEntry["status"]) : undefined;
+			return jsonResponse(queue.list(status));
+		} finally {
+			queue.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Issues (beads)
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/issues") {
+		const statusParam = url.searchParams.get("status") ?? undefined;
+		const limitStr = url.searchParams.get("limit");
+		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+		try {
+			const client = createBeadsClient(projectRoot);
+			const issues = await client.list({ status: statusParam, limit });
+			return jsonResponse(issues);
+		} catch {
+			return jsonResponse([]);
+		}
+	}
+
+	if (path === "/api/issues/ready") {
+		try {
+			const client = createBeadsClient(projectRoot);
+			const issues = await client.ready();
+			return jsonResponse(issues);
+		} catch {
+			return jsonResponse([]);
+		}
+	}
+
+	// /api/issues/:id
+	{
+		const params = matchRoute(path, "/api/issues/:id");
+		if (params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing issue ID", 400);
+			try {
+				const client = createBeadsClient(projectRoot);
+				const issue = await client.show(id);
+				return jsonResponse(issue);
+			} catch {
+				return errorResponse(`Issue not found: ${id}`, 404);
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Terminal
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/terminal/capture") {
+		const agentName = url.searchParams.get("agent") ?? "coordinator";
+		const linesStr = url.searchParams.get("lines");
+		const lines = linesStr ? Math.max(1, Number.parseInt(linesStr, 10)) : 100;
+
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
+		if (!tmuxSession) {
+			return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+		}
+
+		const output = await captureTmuxPane(tmuxSession, lines);
+		if (output === null) {
+			return errorResponse(`Failed to capture tmux pane for session "${tmuxSession}"`);
+		}
+
+		return jsonResponse({
+			output,
+			agent: agentName,
+			timestamp: new Date().toISOString(),
+		});
+	}
+
+	// -------------------------------------------------------------------------
+	// Autopilot — GET route
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/autopilot/status") {
+		if (!autopilot) {
+			return errorResponse("Autopilot not available", 404);
+		}
+		return jsonResponse(autopilot.getState());
+	}
+
+	// -------------------------------------------------------------------------
+	// Catch-all for unmatched /api/* paths
+	// -------------------------------------------------------------------------
+
+	return errorResponse("Not found", 404);
+}

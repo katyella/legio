@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Overstory runtime state (in target projects)
+.overstory/worktrees/
+.overstory/logs/
+.overstory/mail.db
+.overstory/mail.db-wal
+.overstory/mail.db-shm
+.overstory/metrics.db
+.overstory/metrics.db-wal
+.overstory/metrics.db-shm
+.overstory/sessions.json
+.overstory/merge-queue.json
+
+# Test artifacts
+coverage/
