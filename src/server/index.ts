@@ -4,7 +4,7 @@ import * as http from "node:http";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
-import { createAutopilot } from "../autopilot/daemon.ts";
+import { createAutopilot, type AutopilotInstance } from "../autopilot/daemon.ts";
 import { createWebSocketManager, type WebSocketData } from "./websocket.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -14,6 +14,16 @@ export interface ServerOptions {
 	host: string;
 	root: string; // Project root directory
 	shouldOpen?: boolean; // Auto-open browser
+	autoStartCoordinator?: boolean; // Auto-start coordinator with --watchdog on server start
+	noAutopilot?: boolean; // Opt-out of autopilot auto-start
+}
+
+/** Dependency injection for testing. */
+export interface ServerDeps {
+	/** Inject a custom autopilot instance (for testing). */
+	_autopilot?: AutopilotInstance;
+	/** Inject a custom coordinator start function (for testing). */
+	_tryStartCoordinator?: (root: string) => Promise<void>;
 }
 
 export interface ServerInstance {
@@ -58,15 +68,61 @@ async function sendWebResponse(webRes: Response, res: http.ServerResponse): Prom
 }
 
 /**
+ * Check if coordinator is running and start it if not.
+ * Fire-and-forget: caller does not await.
+ */
+async function tryStartCoordinator(root: string): Promise<void> {
+	// Check if coordinator is already running
+	const statusProc = spawn("legio", ["coordinator", "status", "--json"], {
+		cwd: root,
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+
+	const chunks: Buffer[] = [];
+	statusProc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
+
+	const statusCode = await new Promise<number>((resolve) => {
+		statusProc.on("close", (code) => resolve(code ?? 1));
+	});
+
+	if (statusCode === 0) {
+		const output = Buffer.concat(chunks).toString();
+		try {
+			const status = JSON.parse(output) as { running?: boolean };
+			if (status.running) {
+				process.stdout.write("[legio] Coordinator already running\n");
+				return;
+			}
+		} catch {
+			// Cannot parse status — fall through to start
+		}
+	}
+
+	// Start coordinator detached so the server doesn't wait on it
+	const startProc = spawn("legio", ["coordinator", "start", "--watchdog", "--no-attach"], {
+		cwd: root,
+		detached: true,
+		stdio: "ignore",
+	});
+	startProc.unref();
+	process.stdout.write("[legio] Coordinator started\n");
+}
+
+/**
  * Create and return a server instance without blocking.
  * Exported for testing; production code should use startServer().
  */
-export async function createServer(options: ServerOptions): Promise<ServerInstance> {
+export async function createServer(options: ServerOptions, deps?: ServerDeps): Promise<ServerInstance> {
 	const { port, host, root } = options;
 	const legioDir = join(root, ".legio");
 	const publicDir = join(__dirname, "public");
 
-	const autopilot = createAutopilot(root);
+	const autopilot = deps?._autopilot ?? createAutopilot(root);
+
+	if (!options.noAutopilot) {
+		autopilot.start();
+	}
+
 	const wsManager = createWebSocketManager(legioDir, () => autopilot.getState());
 
 	const httpServer = http.createServer(async (req, res) => {
@@ -192,9 +248,20 @@ export async function createServer(options: ServerOptions): Promise<ServerInstan
 	const address = httpServer.address();
 	const actualPort = typeof address === "object" && address !== null ? address.port : port;
 
+	// Fire-and-forget coordinator auto-start (after server is listening)
+	if (options.autoStartCoordinator) {
+		const coordinatorFn = deps?._tryStartCoordinator ?? tryStartCoordinator;
+		coordinatorFn(root).catch((err) => {
+			process.stderr.write(
+				`[legio] Failed to start coordinator: ${err instanceof Error ? err.message : String(err)}\n`,
+			);
+		});
+	}
+
 	return {
 		port: actualPort,
 		stop(_force?: boolean) {
+			autopilot.stop();
 			wsManager.stopPolling();
 			wss.close();
 			httpServer.close();
