@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { MailError } from "../errors.ts";
 import type { MailMessage } from "../types.ts";
 import { createMailStore, type MailStore } from "./store.ts";
