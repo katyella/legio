@@ -41,3 +41,58 @@ export const activeAgents = computed(() =>
 
 // Computed: count of unread mail messages
 export const unreadMailCount = computed(() => appState.mail.value.filter((m) => !m.readAt).length);
+
+// Agent activity events detected from WebSocket snapshot diffs
+export const agentActivityLog = signal([]);
+
+/**
+ * Compare two agent arrays and append activity events to agentActivityLog.
+ * Detects: spawned (new agent), state_change, removed.
+ * Keeps a max of 200 entries (trims from front).
+ */
+export function recordAgentDiff(prevAgents, nextAgents) {
+	const prevMap = new Map((prevAgents ?? []).map((a) => [a.agentName ?? a.name, a]));
+	const nextMap = new Map((nextAgents ?? []).map((a) => [a.agentName ?? a.name, a]));
+	const events = [];
+	const timestamp = new Date().toISOString();
+
+	for (const [name, next] of nextMap) {
+		const prev = prevMap.get(name);
+		if (!prev) {
+			events.push({
+				type: "spawned",
+				agent: name,
+				capability: next.capability ?? null,
+				beadId: next.beadId ?? next.taskId ?? null,
+				timestamp,
+			});
+		} else if (prev.state !== next.state) {
+			events.push({
+				type: "state_change",
+				agent: name,
+				capability: next.capability ?? null,
+				from: prev.state,
+				to: next.state,
+				beadId: next.beadId ?? next.taskId ?? null,
+				timestamp,
+			});
+		}
+	}
+
+	for (const [name, prev] of prevMap) {
+		if (!nextMap.has(name)) {
+			events.push({
+				type: "removed",
+				agent: name,
+				capability: prev.capability ?? null,
+				beadId: prev.beadId ?? prev.taskId ?? null,
+				timestamp,
+			});
+		}
+	}
+
+	if (events.length === 0) return;
+
+	const combined = [...agentActivityLog.value, ...events];
+	agentActivityLog.value = combined.length > 200 ? combined.slice(combined.length - 200) : combined;
+}
