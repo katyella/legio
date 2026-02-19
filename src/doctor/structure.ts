@@ -1,4 +1,4 @@
-import { access, constants } from "node:fs/promises";
+import { access, constants, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentManifest } from "../types.ts";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
@@ -102,7 +102,7 @@ export const checkStructure: DoctorCheckFn = async (
 	];
 
 	try {
-		const gitignoreContent = await Bun.file(gitignorePath).text();
+		const gitignoreContent = await readFile(gitignorePath, "utf-8");
 		const missingEntries = expectedEntries.filter((entry) => !gitignoreContent.includes(entry));
 
 		checks.push({
@@ -131,7 +131,7 @@ export const checkStructure: DoctorCheckFn = async (
 	// Check 5: agent-defs/ contains .md files referenced by agent-manifest.json
 	try {
 		const manifestPath = join(legioDir, "agent-manifest.json");
-		const manifestContent = await Bun.file(manifestPath).text();
+		const manifestContent = await readFile(manifestPath, "utf-8");
 		const manifest = JSON.parse(manifestContent) as AgentManifest;
 
 		const referencedFiles = new Set<string>();
@@ -178,7 +178,7 @@ export const checkStructure: DoctorCheckFn = async (
 	// Check 6: No leftover files from failed init attempts
 	// Common temp files: .tmp, .bak, config.yaml~, etc.
 	try {
-		const entries = await Array.fromAsync(new Bun.Glob("*.{tmp,bak}").scan({ cwd: legioDir }));
+		const entries = await readdir(legioDir);
 		const tempFiles = entries.filter((name) => name.endsWith(".tmp") || name.endsWith(".bak"));
 
 		checks.push({

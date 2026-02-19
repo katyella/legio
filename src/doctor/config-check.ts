@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { loadConfig } from "../config.ts";
 import { ConfigError, ValidationError } from "../errors.ts";
@@ -146,13 +147,15 @@ async function checkCanonicalBranchExists(config: LegioConfig): Promise<DoctorCh
 	const branchName = config.project.canonicalBranch;
 
 	try {
-		const proc = Bun.spawn(["git", "rev-parse", "--verify", `refs/heads/${branchName}`], {
-			cwd: config.project.root,
-			stdout: "pipe",
-			stderr: "pipe",
+		const exitCode = await new Promise<number>((resolve, reject) => {
+			const proc = spawn(
+				"git",
+				["rev-parse", "--verify", `refs/heads/${branchName}`],
+				{ cwd: config.project.root, stdio: ["ignore", "ignore", "ignore"] },
+			);
+			proc.on("close", (code) => resolve(code ?? 1));
+			proc.on("error", reject);
 		});
-
-		const exitCode = await proc.exited;
 
 		if (exitCode === 0) {
 			return {

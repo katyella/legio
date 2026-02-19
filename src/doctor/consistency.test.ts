@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, vi, test } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,8 +12,8 @@ import { checkConsistency } from "./consistency.ts";
  * Mock tmux functions using dependency injection instead of mock.module().
  * This avoids test isolation issues from module-level mocking.
  */
-const mockListSessions = mock(() => Promise.resolve([] as Array<{ name: string; pid: number }>));
-const mockIsProcessAlive = mock((_pid: number) => true);
+const mockListSessions = vi.fn(() => Promise.resolve([] as Array<{ name: string; pid: number }>));
+const mockIsProcessAlive = vi.fn((_pid: number) => true);
 
 /**
  * Create a minimal temp git repo for worktree tests.
@@ -20,9 +21,9 @@ const mockIsProcessAlive = mock((_pid: number) => true);
 function createTempGitRepo(): string {
 	const dir = mkdtempSync(join(tmpdir(), "legio-test-"));
 	const git = (args: string[]) => {
-		const proc = Bun.spawnSync(["git", ...args], { cwd: dir, stdout: "ignore", stderr: "pipe" });
-		if (proc.exitCode !== 0) {
-			throw new Error(`git ${args.join(" ")} failed: ${proc.stderr.toString()}`);
+		const result = spawnSync("git", args, { cwd: dir, stdio: ["ignore", "ignore", "pipe"] });
+		if (result.status !== 0) {
+			throw new Error(`git ${args.join(" ")} failed: ${result.stderr?.toString() ?? ""}`);
 		}
 	};
 
@@ -41,13 +42,12 @@ function createTempGitRepo(): string {
  * Create a git worktree at the given path.
  */
 function createWorktree(repoRoot: string, worktreePath: string, branchName: string): void {
-	const proc = Bun.spawnSync(["git", "worktree", "add", "-b", branchName, worktreePath, "HEAD"], {
+	const result = spawnSync("git", ["worktree", "add", "-b", branchName, worktreePath, "HEAD"], {
 		cwd: repoRoot,
-		stdout: "ignore",
-		stderr: "pipe",
+		stdio: ["ignore", "ignore", "pipe"],
 	});
-	if (proc.exitCode !== 0) {
-		throw new Error(`Failed to create worktree: ${proc.stderr.toString()}`);
+	if (result.status !== 0) {
+		throw new Error(`Failed to create worktree: ${result.stderr?.toString() ?? ""}`);
 	}
 }
 

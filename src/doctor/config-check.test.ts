@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,7 +79,7 @@ describe("checkConfig", () => {
 		const legioDir = createTempLegioDir(validConfigYaml);
 		const checks = await checkConfig(mockConfig, legioDir);
 
-		expect(checks).toBeArray();
+		expect(Array.isArray(checks)).toBe(true);
 		expect(checks.length).toBeGreaterThan(0);
 
 		for (const check of checks) {
@@ -175,7 +175,7 @@ describe("checkConfig", () => {
 			expect(["pass", "warn", "fail"]).toContain(check.status);
 
 			if (check.details !== undefined) {
-				expect(check.details).toBeArray();
+				expect(Array.isArray(check.details)).toBe(true);
 			}
 
 			if (check.fixable !== undefined) {

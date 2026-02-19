@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, vi, test, type MockInstance } from "vitest";
 import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -55,7 +55,7 @@ describe("createLogger", () => {
 			logger.info("test.event");
 
 			// Give time for async mkdir + append to complete
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const files = await readdir(logDir);
 			expect(files.length).toBeGreaterThan(0);
@@ -70,7 +70,7 @@ describe("createLogger", () => {
 
 			logger.info("test.event", { key: "value" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("INFO test.event");
@@ -90,7 +90,7 @@ describe("createLogger", () => {
 
 			logger.info("happy.path");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const exists = await fileExists(join(logDir, "errors.log"));
 			expect(exists).toBe(false);
@@ -103,7 +103,7 @@ describe("createLogger", () => {
 
 			logger.info("simple.event");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("INFO simple.event");
@@ -121,7 +121,7 @@ describe("createLogger", () => {
 
 			logger.warn("rate.limit", { remaining: 10 });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("WARN rate.limit");
@@ -139,7 +139,7 @@ describe("createLogger", () => {
 
 			logger.warn("just.a.warning");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const exists = await fileExists(join(logDir, "errors.log"));
 			expect(exists).toBe(false);
@@ -155,7 +155,7 @@ describe("createLogger", () => {
 			const error = new Error("Something went wrong");
 			logger.error("request.failed", error, { statusCode: 500 });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("ERROR request.failed");
@@ -182,7 +182,7 @@ describe("createLogger", () => {
 			const error = new Error("Wrapper error", { cause });
 			logger.error("nested.error", error);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const errorsLog = await readLogFile("errors.log");
 			expect(errorsLog).toContain("Caused by: Error: Root cause");
@@ -197,7 +197,7 @@ describe("createLogger", () => {
 
 			logger.debug("config.detail", { verbose: true });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("DEBUG config.detail");
@@ -213,7 +213,7 @@ describe("createLogger", () => {
 
 			logger.debug("trace.detail");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const exists = await fileExists(join(logDir, "errors.log"));
 			expect(exists).toBe(false);
@@ -229,7 +229,7 @@ describe("createLogger", () => {
 			logger.toolStart("Read", { path: "/path/to/file" });
 			logger.toolEnd("Read", 150, "file contents");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("tool.start");
@@ -262,7 +262,7 @@ describe("createLogger", () => {
 
 			logger.toolStart("Bash", { command: "ls -la", cwd: "/tmp" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			const startEvent = tools.find((t) => t.event === "tool.start");
@@ -276,7 +276,7 @@ describe("createLogger", () => {
 
 			logger.toolEnd("Write", 50);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			expect(tools[0]?.data.result).toBeUndefined();
@@ -290,7 +290,7 @@ describe("createLogger", () => {
 			logger.toolStart("Bash", { command: "echo test" });
 			logger.toolEnd("Bash", 10);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const exists = await fileExists(join(logDir, "errors.log"));
 			expect(exists).toBe(false);
@@ -305,7 +305,7 @@ describe("createLogger", () => {
 
 			logger.info("api.call", { apiKey: "sk-ant-secret123" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events[0]?.data.apiKey).toBe("[REDACTED]");
@@ -318,7 +318,7 @@ describe("createLogger", () => {
 
 			logger.info("api.call", { token: "ghp_abc123xyz" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("[REDACTED]");
@@ -333,7 +333,7 @@ describe("createLogger", () => {
 			const error = new Error("Failed with key sk-ant-secret123");
 			logger.error("error.occurred", error);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events[0]?.data.errorMessage).toBe("Failed with key [REDACTED]");
@@ -346,7 +346,7 @@ describe("createLogger", () => {
 
 			logger.toolEnd("Bash", 100, "export ANTHROPIC_API_KEY=sk-ant-secret");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			expect(tools[0]?.data.result).toBe("export [REDACTED]");
@@ -363,7 +363,7 @@ describe("createLogger", () => {
 
 			logger.info("api.call", { apiKey: "sk-ant-secret123" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events[0]?.data.apiKey).toBe("sk-ant-secret123");
@@ -381,7 +381,7 @@ describe("createLogger", () => {
 			const error = new Error("Key is sk-ant-secret123");
 			logger.error("err", error);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events[0]?.data.errorMessage).toBe("Key is sk-ant-secret123");
@@ -398,7 +398,7 @@ describe("createLogger", () => {
 
 			logger.toolEnd("Bash", 10, "Bearer my-token-value");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			expect(tools[0]?.data.result).toBe("Bearer my-token-value");
@@ -408,11 +408,10 @@ describe("createLogger", () => {
 	});
 
 	describe("verbose mode", () => {
-		let consoleLogSpy: ReturnType<typeof mock>;
+		let consoleLogSpy: MockInstance;
 
 		beforeEach(() => {
-			consoleLogSpy = mock(() => {});
-			console.log = consoleLogSpy;
+			consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 		});
 
 		afterEach(() => {
@@ -470,12 +469,12 @@ describe("createLogger", () => {
 			const logger = createLogger({ logDir, agentName: "test-agent" });
 
 			logger.info("before.close");
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			logger.close();
 
 			logger.info("after.close");
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			// Should only have the event before close
@@ -487,13 +486,13 @@ describe("createLogger", () => {
 			const logger = createLogger({ logDir, agentName: "test-agent" });
 
 			logger.toolStart("Read", { path: "/tmp/a" });
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			logger.close();
 
 			logger.toolStart("Read", { path: "/tmp/b" });
 			logger.toolEnd("Read", 100);
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			expect(tools).toHaveLength(1);
@@ -504,12 +503,12 @@ describe("createLogger", () => {
 			const logger = createLogger({ logDir, agentName: "test-agent" });
 
 			logger.error("first.error", new Error("before"));
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			logger.close();
 
 			logger.error("second.error", new Error("after"));
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events).toHaveLength(1);
@@ -523,7 +522,7 @@ describe("createLogger", () => {
 
 			logger.info("test.event");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events[0]?.agentName).toBe("scout-1");
@@ -536,7 +535,7 @@ describe("createLogger", () => {
 
 			logger.toolStart("Write", { path: "/tmp/out" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const tools = await readJsonLines("tools.ndjson");
 			expect(tools[0]?.agentName).toBe("builder-3");
@@ -549,7 +548,7 @@ describe("createLogger", () => {
 
 			logger.error("merge.failed", new Error("conflict"));
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const errorsLog = await readLogFile("errors.log");
 			expect(errorsLog).toContain("Agent:     merger-2");
@@ -581,7 +580,7 @@ describe("createLogger", () => {
 
 			logger.info("task.completed", { taskId: "task-123", duration: 5000 });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			// Format: [TIMESTAMP] LEVEL EVENT key=value key=value\n
@@ -598,7 +597,7 @@ describe("createLogger", () => {
 
 			logger.info("deploy.start", { env: "production west" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain('env="production west"');
@@ -611,7 +610,7 @@ describe("createLogger", () => {
 
 			logger.info("check.result", { passed: null, detail: undefined });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("passed=null");
@@ -625,7 +624,7 @@ describe("createLogger", () => {
 
 			logger.info("config.loaded", { options: { retries: 3, timeout: 1000 } });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain('options={"retries":3,"timeout":1000}');
@@ -638,7 +637,7 @@ describe("createLogger", () => {
 
 			logger.info("agent.started", { name: "scout-1" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("name=scout-1");
@@ -653,7 +652,7 @@ describe("createLogger", () => {
 
 			logger.info("feature.flag", { enabled: true, deprecated: false });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			expect(sessionLog).toContain("enabled=true");
@@ -667,7 +666,7 @@ describe("createLogger", () => {
 
 			logger.info("heartbeat");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const sessionLog = await readLogFile("session.log");
 			// Should end with just the event name and newline, no trailing space
@@ -683,7 +682,7 @@ describe("createLogger", () => {
 
 			logger.info("check.fields", { someKey: 42 });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			const event = events[0];
@@ -706,7 +705,7 @@ describe("createLogger", () => {
 			logger.info("event2");
 			logger.info("event3");
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const content = await readLogFile("events.ndjson");
 			const lines = content.trim().split("\n");
@@ -726,7 +725,7 @@ describe("createLogger", () => {
 
 			logger.toolStart("Bash", { command: "ls" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events).toHaveLength(1);
@@ -743,7 +742,7 @@ describe("createLogger", () => {
 			const error = new Error("Test error");
 			logger.error("test.error", error);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const errorsLog = await readLogFile("errors.log");
 
@@ -763,7 +762,7 @@ describe("createLogger", () => {
 
 			logger.error("db.error", new Error("connection refused"), { host: "localhost" });
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const errorsLog = await readLogFile("errors.log");
 			expect(errorsLog).toContain("Data:");
@@ -779,7 +778,7 @@ describe("createLogger", () => {
 			const mid = new Error("query failed", { cause: rootCause });
 			logger.error("deep.error", mid);
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const errorsLog = await readLogFile("errors.log");
 			expect(errorsLog).toContain("Caused by: TypeError: null reference");
@@ -796,7 +795,7 @@ describe("createLogger", () => {
 			logger.warn("event2");
 			logger.error("event3", new Error("test"));
 
-			await Bun.sleep(50);
+			await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 			const events = await readJsonLines("events.ndjson");
 			expect(events).toHaveLength(3);

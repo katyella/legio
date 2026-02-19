@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, vi, test, type MockInstance } from "vitest";
 import type { LogEvent } from "../types.ts";
+import { setQuiet } from "./color.ts";
 import { formatLogLine, printToConsole } from "./reporter.ts";
 
 // Helper to build a LogEvent with sensible defaults
@@ -134,8 +135,8 @@ describe("formatLogLine", () => {
 });
 
 describe("printToConsole", () => {
-	let logSpy: ReturnType<typeof spyOn>;
-	let errorSpy: ReturnType<typeof spyOn>;
+	let logSpy: MockInstance;
+	let errorSpy: MockInstance;
 
 	afterEach(() => {
 		logSpy?.mockRestore();
@@ -143,8 +144,8 @@ describe("printToConsole", () => {
 	});
 
 	test("sends info events to console.log", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		// Clear any calls captured during spy setup (bun's test reporter
 		// may flush output through console.log between spy creation and here)
 		logSpy.mockClear();
@@ -157,8 +158,8 @@ describe("printToConsole", () => {
 	});
 
 	test("sends warn events to console.log", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		logSpy.mockClear();
 		errorSpy.mockClear();
 
@@ -169,8 +170,8 @@ describe("printToConsole", () => {
 	});
 
 	test("sends error events to console.error", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		logSpy.mockClear();
 		errorSpy.mockClear();
 
@@ -181,8 +182,8 @@ describe("printToConsole", () => {
 	});
 
 	test("suppresses debug events when verbose is false", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		logSpy.mockClear();
 		errorSpy.mockClear();
 
@@ -193,8 +194,8 @@ describe("printToConsole", () => {
 	});
 
 	test("shows debug events when verbose is true", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		logSpy.mockClear();
 		errorSpy.mockClear();
 
@@ -205,8 +206,8 @@ describe("printToConsole", () => {
 	});
 
 	test("passes formatted line to console method", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const event = makeEvent({ level: "info", event: "my.custom.event" });
 		printToConsole(event, true);
@@ -217,8 +218,8 @@ describe("printToConsole", () => {
 	});
 
 	test("error event output contains the formatted line", () => {
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		const event = makeEvent({ level: "error", event: "fatal.crash" });
 		printToConsole(event, false);
@@ -229,10 +230,8 @@ describe("printToConsole", () => {
 	});
 
 	test("suppresses non-error output when quiet mode is enabled", () => {
-		const { setQuiet } = require("./color.ts") as { setQuiet: (enabled: boolean) => void };
-
-		logSpy = spyOn(console, "log").mockImplementation(() => {});
-		errorSpy = spyOn(console, "error").mockImplementation(() => {});
+		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		logSpy.mockClear();
 		errorSpy.mockClear();
 

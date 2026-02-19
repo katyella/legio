@@ -5,8 +5,8 @@
  * No mocks needed -- all operations are cheap and local.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LegioConfig } from "../types.ts";
@@ -81,7 +81,7 @@ describe("checkAgents", () => {
 	});
 
 	test("fails when manifest has invalid JSON", async () => {
-		await Bun.write(join(legioDir, "agent-manifest.json"), "invalid json{");
+		await writeFile(join(legioDir, "agent-manifest.json"), "invalid json{");
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -109,8 +109,8 @@ describe("checkAgents", () => {
 		};
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -136,7 +136,7 @@ describe("checkAgents", () => {
 			},
 		};
 
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -161,7 +161,7 @@ describe("checkAgents", () => {
 			capabilityIndex: {},
 		};
 
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -189,7 +189,7 @@ describe("checkAgents", () => {
 		};
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
 		// Don't create scout.md
 
 		const checks = await checkAgents(mockConfig, legioDir);
@@ -219,8 +219,8 @@ describe("checkAgents", () => {
 		};
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -248,8 +248,8 @@ describe("checkAgents", () => {
 		};
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -277,8 +277,8 @@ describe("checkAgents", () => {
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
 		await mkdir(join(legioDir, "agents", "scout"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const identity = `name: scout
 capability: explore
@@ -288,7 +288,7 @@ expertiseDomains: []
 recentTasks: []
 `;
 
-		await Bun.write(join(legioDir, "agents", "scout", "identity.yaml"), identity);
+		await writeFile(join(legioDir, "agents", "scout", "identity.yaml"), identity);
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -316,8 +316,8 @@ recentTasks: []
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
 		await mkdir(join(legioDir, "agents", "scout"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const identity = `name: scout
 capability: explore
@@ -325,7 +325,7 @@ created: "invalid-timestamp"
 sessionsCompleted: 5
 `;
 
-		await Bun.write(join(legioDir, "agents", "scout", "identity.yaml"), identity);
+		await writeFile(join(legioDir, "agents", "scout", "identity.yaml"), identity);
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -354,8 +354,8 @@ sessionsCompleted: 5
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
 		await mkdir(join(legioDir, "agents", "scout"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const identity = `name: scout
 capability: explore
@@ -363,7 +363,7 @@ created: "2024-01-01T00:00:00Z"
 sessionsCompleted: -5
 `;
 
-		await Bun.write(join(legioDir, "agents", "scout", "identity.yaml"), identity);
+		await writeFile(join(legioDir, "agents", "scout", "identity.yaml"), identity);
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -392,8 +392,8 @@ sessionsCompleted: -5
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
 		await mkdir(join(legioDir, "agents", "old-agent"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const staleIdentity = `name: old-agent
 capability: obsolete
@@ -401,7 +401,7 @@ created: "2024-01-01T00:00:00Z"
 sessionsCompleted: 5
 `;
 
-		await Bun.write(join(legioDir, "agents", "old-agent", "identity.yaml"), staleIdentity);
+		await writeFile(join(legioDir, "agents", "old-agent", "identity.yaml"), staleIdentity);
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
@@ -430,8 +430,8 @@ sessionsCompleted: 5
 
 		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
 		await mkdir(join(legioDir, "agents", "scout"), { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 
 		const identity = `name: "scout@invalid!"
 capability: explore
@@ -439,7 +439,7 @@ created: "2024-01-01T00:00:00Z"
 sessionsCompleted: 5
 `;
 
-		await Bun.write(join(legioDir, "agents", "scout", "identity.yaml"), identity);
+		await writeFile(join(legioDir, "agents", "scout", "identity.yaml"), identity);
 
 		const checks = await checkAgents(mockConfig, legioDir);
 
