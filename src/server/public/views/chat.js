@@ -597,6 +597,13 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						rows="2"
 						value=${bodyVal}
 						onInput=${(e) => setBodyVal(e.target.value)}
+						onKeyDown=${(e) => {
+							if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+								e.preventDefault();
+								if (!bodyVal.trim()) return;
+								handleSend();
+							}
+						}}
 						class=${`w-full ${inputClass} mb-2 resize-none`}
 					/>
 					<div class="flex items-center gap-2 flex-wrap">
