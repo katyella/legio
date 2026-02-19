@@ -1,24 +1,50 @@
 // Legio Web UI — CommandView component
 // Two-panel mission-control interface:
-//   - Left: Activity timeline (audit trail events, auto-refreshing every 5s)
-//   - Right: Coordinator chat input + recent coordinator messages
+//   - Left: Coordinator chat input + recent coordinator messages (~55%)
+//   - Right: Activity timeline (events + mail, auto-refreshing every 5s)
 
-import { html, useState, useEffect, useRef, useCallback } from "../lib/preact-setup.js";
 import { fetchJson, postJson } from "../lib/api.js";
+import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import { timeAgo } from "../lib/utils.js";
 
 // Type badge Tailwind classes
 const TYPE_COLORS = {
-	command: "bg-blue-900/50 text-blue-400",
-	response: "bg-green-900/50 text-green-400",
-	state_change: "bg-yellow-900/50 text-yellow-400",
-	merge: "bg-purple-900/50 text-purple-400",
+	session_start: "bg-green-900/50 text-green-400",
+	session_end: "bg-[#333] text-[#999]",
+	spawn: "bg-blue-900/50 text-blue-400",
+	mail_sent: "bg-purple-900/50 text-purple-400",
+	mail_received: "bg-purple-900/50 text-purple-400",
+	mail: "bg-purple-900/50 text-purple-400",
 	error: "bg-red-900/50 text-red-400",
 	system: "bg-[#333] text-[#999]",
 };
 
 function typeBadgeClass(type) {
 	return TYPE_COLORS[type] ?? TYPE_COLORS.system;
+}
+
+function buildEventSummary(e) {
+	switch (e.eventType) {
+		case "session_start":
+			return `${e.agentName} session started`;
+		case "session_end":
+			return `${e.agentName} session ended`;
+		case "spawn":
+			return `Spawned ${e.agentName}`;
+		case "mail_sent":
+			return `Mail sent by ${e.agentName}`;
+		case "mail_received":
+			return `Mail received by ${e.agentName}`;
+		case "error": {
+			try {
+				return `Error: ${JSON.parse(e.data || "{}").message || "unknown"}`;
+			} catch {
+				return "Error";
+			}
+		}
+		default:
+			return e.eventType;
+	}
 }
 
 // ===== Activity Timeline Panel =====
@@ -68,64 +94,72 @@ function ActivityTimeline({ events, loading, error }) {
 					onInput=${(e) => setAgentFilter(e.target.value)}
 					class=${`${inputClass} flex-1 min-w-0`}
 				/>
-				${loading
-					? html`<span class="text-xs text-[#555] shrink-0">Refreshing\u2026</span>`
-					: null}
+				${loading ? html`<span class="text-xs text-[#555] shrink-0">Refreshing\u2026</span>` : null}
 			</div>
 
 			<!-- Event list -->
 			<div class="flex-1 overflow-y-auto min-h-0 p-2">
-				${error
-					? html`<div class="text-red-400 text-sm px-2 py-3">${error}</div>`
-					: null}
-				${!error && filtered.length === 0
-					? html`
+				${error ? html`<div class="text-red-400 text-sm px-2 py-3">${error}</div>` : null}
+				${
+					!error && filtered.length === 0
+						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
-							No audit events recorded yet
+							No activity recorded yet
 						</div>
 					`
-					: filtered.map((ev) => {
-						const isExpanded = expandedIds.has(ev.id);
-						const hasDetail = ev.detail != null && ev.detail !== "";
-						const badgeClass = typeBadgeClass(ev.type);
-						const ts = ev.createdAt ?? ev.timestamp ?? null;
+						: filtered.map((ev) => {
+								const isExpanded = expandedIds.has(ev.id);
+								const hasDetail = ev.detail != null && ev.detail !== "";
+								const badgeClass = typeBadgeClass(ev.type);
+								const ts = ev.createdAt ?? ev.timestamp ?? null;
 
-						return html`
+								return html`
 							<div
 								key=${ev.id}
-								class=${"mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2" +
-									(hasDetail ? " cursor-pointer hover:border-[#3a3a3a]" : "")}
+								class=${
+									"mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2" +
+									(hasDetail ? " cursor-pointer hover:border-[#3a3a3a]" : "")
+								}
 								onClick=${hasDetail ? () => toggleExpand(ev.id) : undefined}
 							>
 								<div class="flex items-center gap-2 flex-wrap min-w-0">
-									<span class=${"text-xs px-1.5 py-0.5 rounded font-mono shrink-0 " + badgeClass}>
+									<span class=${`text-xs px-1.5 py-0.5 rounded font-mono shrink-0 ${badgeClass}`}>
 										${ev.type || "unknown"}
 									</span>
-									${ev.agent
-										? html`<span class="text-xs text-[#999] shrink-0">${ev.agent}</span>`
-										: null}
+									${
+										ev.agent
+											? html`<span class="text-xs text-[#999] shrink-0">${ev.agent}</span>`
+											: null
+									}
 									<span class="flex-1 text-sm text-[#e5e5e5] truncate min-w-0">
 										${ev.summary || ""}
 									</span>
 									<span class="text-xs text-[#555] shrink-0">${timeAgo(ts)}</span>
-									${hasDetail
-										? html`<span class="text-xs text-[#555] shrink-0">
+									${
+										hasDetail
+											? html`<span class="text-xs text-[#555] shrink-0">
 											${isExpanded ? "\u25B2" : "\u25BC"}
 										</span>`
-										: null}
+											: null
+									}
 								</div>
-								${isExpanded && hasDetail
-									? html`
+								${
+									isExpanded && hasDetail
+										? html`
 										<pre class="mt-2 text-xs text-[#999] whitespace-pre-wrap break-all border-t border-[#2a2a2a] pt-2 font-mono">
-											${typeof ev.detail === "string"
-												? ev.detail
-												: JSON.stringify(ev.detail, null, 2)}
+											${
+												typeof ev.detail === "string"
+													? ev.detail
+													: JSON.stringify(ev.detail, null, 2)
+											}
 										</pre>
 									`
-									: null}
+										: null
+								}
 							</div>
 						`;
-					})}
+							})
+				}
 			</div>
 		</div>
 	`;
@@ -218,22 +252,24 @@ function CoordinatorChat({ mail }) {
 				ref=${feedRef}
 				onScroll=${handleFeedScroll}
 			>
-				${coordMessages.length === 0
-					? html`
+				${
+					coordMessages.length === 0
+						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
 							No coordinator messages yet
 						</div>
 					`
-					: coordMessages.map((msg) => {
-						const isFromCoord =
-							msg.from === "orchestrator" || msg.from === "coordinator";
-						return html`
-							<div key=${msg.id} class=${"flex " + (isFromCoord ? "justify-start" : "justify-end")}>
+						: coordMessages.map((msg) => {
+								const isFromCoord = msg.from === "orchestrator" || msg.from === "coordinator";
+								return html`
+							<div key=${msg.id} class=${`flex ${isFromCoord ? "justify-start" : "justify-end"}`}>
 								<div
-									class=${"max-w-[85%] rounded px-3 py-2 text-sm " +
+									class=${
+										"max-w-[85%] rounded px-3 py-2 text-sm " +
 										(isFromCoord
 											? "bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]"
-											: "bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30")}
+											: "bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30")
+									}
 								>
 									<div class="flex items-center gap-1 mb-1 flex-wrap">
 										<span class="text-xs font-mono text-[#999]">${msg.from}</span>
@@ -243,16 +279,19 @@ function CoordinatorChat({ mail }) {
 											${timeAgo(msg.createdAt)}
 										</span>
 									</div>
-									${msg.subject
-										? html`<div class="text-xs text-[#999] mb-1 italic">${msg.subject}</div>`
-										: null}
+									${
+										msg.subject
+											? html`<div class="text-xs text-[#999] mb-1 italic">${msg.subject}</div>`
+											: null
+									}
 									<div class="text-[#e5e5e5] whitespace-pre-wrap break-words text-sm">
 										${msg.body || ""}
 									</div>
 								</div>
 							</div>
 						`;
-					})}
+							})
+				}
 			</div>
 
 			<!-- Input area -->
@@ -275,9 +314,7 @@ function CoordinatorChat({ mail }) {
 						${sending ? "\u2026" : "Send"}
 					</button>
 				</div>
-				${sendError
-					? html`<div class="text-xs text-red-400 mt-1">${sendError}</div>`
-					: null}
+				${sendError ? html`<div class="text-xs text-red-400 mt-1">${sendError}</div>` : null}
 			</div>
 		</div>
 	`;
@@ -285,33 +322,47 @@ function CoordinatorChat({ mail }) {
 
 // ===== CommandView =====
 
+const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
+
 export function CommandView() {
-	const [auditEvents, setAuditEvents] = useState([]);
-	const [auditLoading, setAuditLoading] = useState(false);
-	const [auditError, setAuditError] = useState("");
+	const [activityEvents, setActivityEvents] = useState([]);
+	const [activityLoading, setActivityLoading] = useState(false);
+	const [activityError, setActivityError] = useState("");
 	const [mail, setMail] = useState([]);
 
-	// Poll audit timeline every 5 seconds
+	// Poll event store every 5 seconds and merge with mail for the activity timeline
 	useEffect(() => {
 		let cancelled = false;
 
-		async function fetchAudit() {
-			setAuditLoading(true);
+		async function fetchActivity() {
+			setActivityLoading(true);
 			try {
-				const data = await fetchJson("/api/audit/timeline");
+				const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+				const data = await fetchJson(`/api/events?since=${encodeURIComponent(since)}&limit=200`);
 				if (!cancelled) {
-					setAuditEvents(Array.isArray(data) ? data : (data?.events ?? []));
-					setAuditError("");
+					const rawEvents = Array.isArray(data) ? data : (data?.events ?? []);
+					const filteredEvents = rawEvents
+						.filter((e) => !NOISE_EVENT_TYPES.has(e.eventType))
+						.map((e) => ({
+							id: `evt-${e.id}`,
+							type: e.eventType,
+							agent: e.agentName,
+							summary: buildEventSummary(e),
+							detail: e.data,
+							createdAt: e.createdAt,
+						}));
+					setActivityEvents(filteredEvents);
+					setActivityError("");
 				}
 			} catch (err) {
-				if (!cancelled) setAuditError(err.message || "Failed to load audit events");
+				if (!cancelled) setActivityError(err.message || "Failed to load activity");
 			} finally {
-				if (!cancelled) setAuditLoading(false);
+				if (!cancelled) setActivityLoading(false);
 			}
 		}
 
-		fetchAudit();
-		const interval = setInterval(fetchAudit, 5000);
+		fetchActivity();
+		const interval = setInterval(fetchActivity, 5000);
 		return () => {
 			cancelled = true;
 			clearInterval(interval);
@@ -341,26 +392,40 @@ export function CommandView() {
 		};
 	}, []);
 
+	// Merge events and mail into unified timeline (newest first)
+	const mailEvents = mail.map((m) => ({
+		id: `mail-${m.id}`,
+		type: "mail",
+		agent: m.from,
+		summary: `${m.from} \u2192 ${m.to}: ${m.subject}`,
+		detail: m.body,
+		createdAt: m.createdAt,
+	}));
+
+	const unifiedTimeline = [...activityEvents, ...mailEvents].sort(
+		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+	);
+
 	return html`
 		<div class="flex h-full bg-[#0f0f0f] min-h-0">
-			<!-- Activity Timeline (left, ~55%) -->
+			<!-- Coordinator Chat (left, ~55%) -->
 			<div
 				class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
 				style="flex: 55 1 0%"
 			>
+				<${CoordinatorChat} mail=${mail} />
+			</div>
+
+			<!-- Activity Timeline (right, ~45%) -->
+			<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 45 1 0%">
 				<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0">
 					<span class="text-sm font-medium text-[#e5e5e5]">Activity Timeline</span>
 				</div>
 				<${ActivityTimeline}
-					events=${auditEvents}
-					loading=${auditLoading}
-					error=${auditError}
+					events=${unifiedTimeline}
+					loading=${activityLoading}
+					error=${activityError}
 				/>
-			</div>
-
-			<!-- Coordinator Chat (right, ~45%) -->
-			<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 45 1 0%">
-				<${CoordinatorChat} mail=${mail} />
 			</div>
 		</div>
 	`;
