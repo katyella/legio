@@ -49,7 +49,6 @@ Coordinator (persistent orchestrator at project root)
 ## Requirements
 
 - [Node.js](https://nodejs.org) (v22+)
-- [Bun](https://bun.sh) (v1.0+, for running tests and the CLI)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - git
 - tmux
@@ -62,10 +61,10 @@ git clone https://github.com/katyella/legio.git
 cd legio
 
 # Install dependencies
-bun install
+npm install
 
 # Link the CLI globally
-bun link
+npm link
 ```
 
 ## Quick Start
@@ -367,39 +366,39 @@ When the server is running, a full REST API is available at `http://localhost:41
 
 ## Tech Stack
 
-- **Runtime**: Bun (TypeScript directly, no build step)
+- **Runtime**: Node/tsx (TypeScript directly, no build step)
 - **Node.js**: v22+ (required for `better-sqlite3`)
 - **Dependencies**: `better-sqlite3` (SQLite), `ws` (WebSocket server)
 - **Database**: SQLite via `better-sqlite3` (WAL mode for concurrent access)
 - **Web UI**: Preact + HTM + Tailwind CSS (zero build step, served from `src/server/public/`)
 - **Linting**: Biome (formatter + linter)
-- **Testing**: `bun test` (core) + `vitest` (server, stores) + `playwright` (e2e)
+- **Testing**: `vitest` (stores, server) + `playwright` (e2e)
 - **External CLIs**: `bd` (beads), `mulch`, `git`, `tmux` — invoked as subprocesses
 
 ## Development
 
 ```bash
 # Run core tests
-bun test
+npm test
 
 # Run store/server tests (vitest)
-bun run test:vitest
-bun run test:server
+npm run test:vitest
+npm run test:server
 
 # Run e2e tests (playwright)
-bun run test:e2e
+npm run test:e2e
 
-# Run a single test
-bun test src/config.test.ts
+# Run a single test file
+npx vitest run src/config.test.ts
 
 # Lint + format check
-biome check .
+npx biome check .
 
 # Type check
 tsc --noEmit
 
 # All quality gates
-bun test && biome check . && tsc --noEmit
+npm test && npx biome check . && tsc --noEmit
 ```
 
 ### Versioning
@@ -412,7 +411,7 @@ Version is maintained in two places that must stay in sync:
 Use the bump script to update both:
 
 ```bash
-bun run version:bump <major|minor|patch>
+npm run version:bump <major|minor|patch>
 ```
 
 Git tags are created automatically by GitHub Actions when a version bump is pushed to `main`.
