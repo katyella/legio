@@ -10,6 +10,7 @@
  * Follows the watchdog daemon pattern (src/watchdog/daemon.ts).
  */
 
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { createMailStore } from "../mail/store.ts";
 import type { AutopilotAction, AutopilotConfig, AutopilotState, MailMessage } from "../types.ts";
@@ -87,20 +88,51 @@ function createRealMailDeps(root: string): AutopilotMailDeps {
 }
 
 /**
+ * Run a subprocess and collect stdout + stderr.
+ */
+async function runSubprocess(
+	cmd: string[],
+	cwd: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+	const [command, ...args] = cmd;
+	if (!command) throw new Error("Empty command");
+	return new Promise((resolve, reject) => {
+		const proc = spawn(command, args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		if (proc.stdout === null || proc.stderr === null) {
+			reject(new Error("spawn failed to create stdio pipes"));
+			return;
+		}
+
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+		proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
+		proc.on("error", reject);
+		proc.on("close", (code) => {
+			resolve({
+				exitCode: code ?? 1,
+				stdout: Buffer.concat(stdoutChunks).toString(),
+				stderr: Buffer.concat(stderrChunks).toString(),
+			});
+		});
+	});
+}
+
+/**
  * Run `legio merge --branch <branch>` as a subprocess.
  */
 async function realMergeBranch(
 	root: string,
 	branch: string,
 ): Promise<{ success: boolean; output: string }> {
-	const proc = Bun.spawn(["legio", "merge", "--branch", branch], {
-		cwd: root,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const exitCode = await proc.exited;
-	const stdout = await new Response(proc.stdout).text();
-	const stderr = await new Response(proc.stderr).text();
+	const { exitCode, stdout, stderr } = await runSubprocess(
+		["legio", "merge", "--branch", branch],
+		root,
+	);
 	return {
 		success: exitCode === 0,
 		output: (stdout + stderr).trim(),
@@ -111,12 +143,7 @@ async function realMergeBranch(
  * Run `legio worktree clean --completed` as a subprocess.
  */
 async function realCleanCompleted(root: string): Promise<void> {
-	const proc = Bun.spawn(["legio", "worktree", "clean", "--completed"], {
-		cwd: root,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	await proc.exited;
+	await runSubprocess(["legio", "worktree", "clean", "--completed"], root);
 }
 
 /**

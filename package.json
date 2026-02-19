@@ -27,7 +27,7 @@
 		"legio": "./src/index.ts"
 	},
 	"scripts": {
-		"test": "bun test src/",
+		"test": "vitest run",
 		"test:e2e": "playwright test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
@@ -36,9 +36,10 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
-		"@types/bun": "latest",
+		"@biomejs/biome": "^2.3.15",
 		"@playwright/test": "^1.49.0",
+		"@types/bun": "latest",
 		"typescript": "^5.9.0",
-		"@biomejs/biome": "^2.3.15"
+		"vitest": "^4.0.18"
 	}
 }

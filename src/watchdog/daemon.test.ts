@@ -14,8 +14,8 @@
  * mx-56558b for background.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEventStore } from "../events/store.ts";
@@ -1032,7 +1032,7 @@ describe("daemon event recording", () => {
 
 		// Write a current-run.txt
 		const runId = "run-2026-02-13T10-00-00-000Z";
-		await Bun.write(join(tempRoot, ".legio", "current-run.txt"), runId);
+		await writeFile(join(tempRoot, ".legio", "current-run.txt"), runId, "utf-8");
 
 		const eventsDbPath = join(tempRoot, ".legio", "events.db");
 		const eventStore = createEventStore(eventsDbPath);

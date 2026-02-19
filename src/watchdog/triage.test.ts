@@ -6,8 +6,8 @@
  * spawnClaude is NOT mocked — we rely on it failing naturally in tests.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildTriagePrompt, classifyResponse, triageAgent } from "./triage.ts";
@@ -123,7 +123,8 @@ describe("triageAgent", () => {
 
 	test("returns 'extend' when logs directory has session dir but no session.log", async () => {
 		const logsDir = join(tempRoot, ".legio", "logs", "test-agent", "2026-02-13T10-00-00");
-		await Bun.write(join(logsDir, ".gitkeep"), "");
+		await mkdir(logsDir, { recursive: true });
+		await writeFile(join(logsDir, ".gitkeep"), "", "utf-8");
 
 		const result = await triageAgent({
 			agentName: "test-agent",
@@ -135,19 +136,16 @@ describe("triageAgent", () => {
 
 	test("returns 'extend' when session.log exists but claude binary fails", async () => {
 		const timestamp = "2026-02-13T10-00-00";
-		const sessionLogPath = join(
-			tempRoot,
-			".legio",
-			"logs",
-			"test-agent",
-			timestamp,
-			"session.log",
-		);
+		const sessionLogDir = join(tempRoot, ".legio", "logs", "test-agent", timestamp);
+		const sessionLogPath = join(sessionLogDir, "session.log");
+
+		await mkdir(sessionLogDir, { recursive: true });
 
 		// Create session.log with some content
-		await Bun.write(
+		await writeFile(
 			sessionLogPath,
 			"Agent started\nProcessing data\nError: something went wrong\n",
+			"utf-8",
 		);
 
 		// triageAgent will try to spawn claude which should fail or be killed by timeout.
