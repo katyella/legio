@@ -140,8 +140,8 @@ async function killAllTmuxSessions(legioDir: string, projectName: string): Promi
 	const projectPrefix = `legio-${projectName}-`;
 	try {
 		const tmuxSessions = await listSessions();
-		const overStorySessions = tmuxSessions.filter((s) => s.name.startsWith(projectPrefix));
-		if (overStorySessions.length === 0) {
+		const legioSessions = tmuxSessions.filter((s) => s.name.startsWith(projectPrefix));
+		if (legioSessions.length === 0) {
 			return 0;
 		}
 
@@ -152,8 +152,8 @@ async function killAllTmuxSessions(legioDir: string, projectName: string): Promi
 		// legio-{projectName}-* sessions.
 		const toKill =
 			registeredNames !== null
-				? overStorySessions.filter((s) => registeredNames.has(s.name))
-				: overStorySessions;
+				? legioSessions.filter((s) => registeredNames.has(s.name))
+				: legioSessions;
 
 		for (const session of toKill) {
 			try {

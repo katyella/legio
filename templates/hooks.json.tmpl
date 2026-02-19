@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}}"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}}"
 					}
 				]
 			}
@@ -17,7 +17,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}}"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}}"
 					}
 				]
 			}
@@ -28,7 +28,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log tool-start --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-start --agent {{AGENT_NAME}} --stdin"
 					}
 				]
 			}
@@ -39,11 +39,11 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log tool-end --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-end --agent {{AGENT_NAME}} --stdin"
 					},
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 500"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 500"
 					}
 				]
 			},
@@ -52,7 +52,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 30000"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 30000"
 					}
 				]
 			}
@@ -63,11 +63,11 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio log session-end --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log session-end --agent {{AGENT_NAME}} --stdin"
 					},
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; mulch learn"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; mulch learn"
 					}
 				]
 			}
@@ -78,7 +78,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$OVERSTORY_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}} --compact"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}} --compact"
 					}
 				]
 			}

@@ -13,9 +13,9 @@ Only the latest release on the current major version line receives security upda
 
 **Do not open a public issue for security vulnerabilities.**
 
-Please report vulnerabilities privately through [GitHub Security Advisories](https://github.com/jayminwest/legio/security/advisories).
+Please report vulnerabilities privately through [GitHub Security Advisories](https://github.com/katyella/legio/security/advisories).
 
-1. Go to the [Security Advisories page](https://github.com/jayminwest/legio/security/advisories)
+1. Go to the [Security Advisories page](https://github.com/katyella/legio/security/advisories)
 2. Click **"New draft security advisory"**
 3. Fill in a description of the vulnerability, including steps to reproduce if possible
 

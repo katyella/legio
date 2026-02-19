@@ -42,7 +42,7 @@ function monitorTmuxSession(projectName: string): string {
 export function buildMonitorBeacon(): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
-		`[OVERSTORY] ${MONITOR_NAME} (monitor/tier-2) ${timestamp}`,
+		`[LEGIO] ${MONITOR_NAME} (monitor/tier-2) ${timestamp}`,
 		"Depth: 0 | Parent: none | Role: continuous fleet patrol",
 		`Startup: run mulch prime, check fleet (legio status --json), check mail (legio mail check --agent ${MONITOR_NAME}), then begin patrol loop`,
 	];
@@ -139,7 +139,7 @@ async function startMonitor(args: string[]): Promise<void> {
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
 		}
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
-			OVERSTORY_AGENT_NAME: MONITOR_NAME,
+			LEGIO_AGENT_NAME: MONITOR_NAME,
 		});
 
 		// Record session BEFORE sending the beacon so that hook-triggered

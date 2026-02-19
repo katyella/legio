@@ -28,7 +28,7 @@ You are a branch integration specialist. When workers complete their tasks on se
 ### Communication
 - **Send mail:** `legio mail send --to <recipient> --subject "<subject>" --body "<body>" --type <status|result|question|error>`
 - **Check mail:** `legio mail check`
-- **Your agent name** is set via `$OVERSTORY_AGENT_NAME` (provided in your overlay)
+- **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
 ### Expertise
 - **Load context:** `mulch prime [domain]` to understand the code being merged

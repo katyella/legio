@@ -228,7 +228,7 @@ function createDefaultMonitor(projectRoot: string): NonNullable<CoordinatorDeps[
 export function buildCoordinatorBeacon(): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
-		`[OVERSTORY] ${COORDINATOR_NAME} (coordinator) ${timestamp}`,
+		`[LEGIO] ${COORDINATOR_NAME} (coordinator) ${timestamp}`,
 		"Depth: 0 | Parent: none | Role: persistent orchestrator",
 		"HIERARCHY: You ONLY spawn leads (legio sling --capability lead). Leads spawn scouts, builders, reviewers. NEVER spawn non-lead agents directly.",
 		"DELEGATION: For any exploration/scouting, spawn a lead who will spawn scouts. Do NOT explore the codebase yourself beyond initial planning.",
@@ -298,7 +298,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// Deploy hooks to the project root so the coordinator gets event logging,
 		// mail check --inject, and activity tracking via the standard hook pipeline.
 		// The ENV_GUARD prefix on all hooks (both template and generated guards)
-		// ensures they only activate when OVERSTORY_AGENT_NAME is set (i.e. for
+		// ensures they only activate when LEGIO_AGENT_NAME is set (i.e. for
 		// the coordinator's tmux session), so the user's own Claude Code session
 		// at the project root is unaffected.
 		await deployHooks(projectRoot, COORDINATOR_NAME, "coordinator");
@@ -340,7 +340,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
 		}
 		const pid = await tmux.createSession(tmuxSession, projectRoot, claudeCmd, {
-			OVERSTORY_AGENT_NAME: COORDINATOR_NAME,
+			LEGIO_AGENT_NAME: COORDINATOR_NAME,
 		});
 
 		// Record session BEFORE sending the beacon so that hook-triggered

@@ -135,17 +135,17 @@ function getTemplatePath(): string {
  * When hooks are deployed to the project root (e.g. for the coordinator),
  * they affect ALL Claude Code sessions in that directory. This prefix
  * ensures hooks only activate for legio-managed agent sessions
- * (which have OVERSTORY_AGENT_NAME set in their environment) and are
+ * (which have LEGIO_AGENT_NAME set in their environment) and are
  * no-ops for the user's own Claude Code session.
  */
-const ENV_GUARD = '[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;';
+const ENV_GUARD = '[ -z "$LEGIO_AGENT_NAME" ] && exit 0;';
 
 /**
  * Build a PreToolUse guard script that validates file paths are within
  * the agent's worktree boundary.
  *
  * Applied to Write, Edit, and NotebookEdit tools. Uses the
- * OVERSTORY_WORKTREE_PATH env var set during tmux session creation
+ * LEGIO_WORKTREE_PATH env var set during tmux session creation
  * to determine the allowed path boundary.
  *
  * @param filePathField - The JSON field name containing the file path
@@ -156,7 +156,7 @@ export function buildPathBoundaryGuardScript(filePathField: string): string {
 		// Only enforce for legio agent sessions
 		ENV_GUARD,
 		// Skip if worktree path is not set (e.g., orchestrator)
-		'[ -z "$OVERSTORY_WORKTREE_PATH" ] && exit 0;',
+		'[ -z "$LEGIO_WORKTREE_PATH" ] && exit 0;',
 		"read -r INPUT;",
 		// Extract file path from JSON (sed -n + p = empty if no match)
 		`FILE_PATH=$(echo "$INPUT" | sed -n 's/.*"${filePathField}": *"\\([^"]*\\)".*/\\1/p');`,
@@ -165,7 +165,7 @@ export function buildPathBoundaryGuardScript(filePathField: string): string {
 		// Resolve relative paths against cwd
 		'case "$FILE_PATH" in /*) ;; *) FILE_PATH="$(pwd)/$FILE_PATH" ;; esac;',
 		// Allow if path is inside the worktree (exact match or subpath)
-		'case "$FILE_PATH" in "$OVERSTORY_WORKTREE_PATH"/*) exit 0 ;; "$OVERSTORY_WORKTREE_PATH") exit 0 ;; esac;',
+		'case "$FILE_PATH" in "$LEGIO_WORKTREE_PATH"/*) exit 0 ;; "$LEGIO_WORKTREE_PATH") exit 0 ;; esac;',
 		// Block: path is outside the worktree boundary
 		'echo \'{"decision":"block","reason":"Path boundary violation: file is outside your assigned worktree. All writes must target files within your worktree."}\';',
 	].join(" ");
@@ -361,7 +361,7 @@ const FILE_MODIFYING_BASH_PATTERNS = [
  * - Cannot detect paths inside subshells or backtick evaluation
  * - Relative paths are assumed safe (tmux cwd IS the worktree)
  *
- * Uses OVERSTORY_WORKTREE_PATH env var set during tmux session creation.
+ * Uses LEGIO_WORKTREE_PATH env var set during tmux session creation.
  */
 export function buildBashPathBoundaryScript(): string {
 	const fileModifyPattern = FILE_MODIFYING_BASH_PATTERNS.join("|");
@@ -370,7 +370,7 @@ export function buildBashPathBoundaryScript(): string {
 		// Only enforce for legio agent sessions
 		ENV_GUARD,
 		// Skip if worktree path is not set (e.g., orchestrator)
-		'[ -z "$OVERSTORY_WORKTREE_PATH" ] && exit 0;',
+		'[ -z "$LEGIO_WORKTREE_PATH" ] && exit 0;',
 		"read -r INPUT;",
 		// Extract command value from JSON (with optional space after colon)
 		'CMD=$(echo "$INPUT" | sed \'s/.*"command": *"\\([^"]*\\)".*/\\1/\');',
@@ -384,8 +384,8 @@ export function buildBashPathBoundaryScript(): string {
 		// Check each absolute path against the worktree boundary
 		'echo "$PATHS" | while IFS= read -r P; do',
 		'  case "$P" in',
-		'    "$OVERSTORY_WORKTREE_PATH"/*) ;;',
-		'    "$OVERSTORY_WORKTREE_PATH") ;;',
+		'    "$LEGIO_WORKTREE_PATH"/*) ;;',
+		'    "$LEGIO_WORKTREE_PATH") ;;',
 		"    /dev/*) ;;",
 		"    /tmp/*) ;;",
 		'    *) echo \'{"decision":"block","reason":"Bash path boundary violation: command targets a path outside your worktree. All file modifications must stay within your assigned worktree."}\'; exit 0; ;;',

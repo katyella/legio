@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
-import { initCommand, OVERSTORY_GITIGNORE } from "./init.ts";
+import { initCommand, LEGIO_GITIGNORE } from "./init.ts";
 
 /**
  * Tests for `legio init` -- agent definition deployment.
@@ -142,7 +142,7 @@ describe("initCommand: .legio/.gitignore", () => {
 		expect(content).toContain("!agent-defs/\n");
 
 		// Verify it matches the exported constant
-		expect(content).toBe(OVERSTORY_GITIGNORE);
+		expect(content).toBe(LEGIO_GITIGNORE);
 	});
 
 	test("gitignore is always written when init completes", async () => {
@@ -153,7 +153,7 @@ describe("initCommand: .legio/.gitignore", () => {
 		const content = await Bun.file(gitignorePath).text();
 
 		// Verify gitignore was written with correct content
-		expect(content).toBe(OVERSTORY_GITIGNORE);
+		expect(content).toBe(LEGIO_GITIGNORE);
 
 		// Verify the file exists
 		const exists = await Bun.file(gitignorePath).exists();
@@ -179,7 +179,7 @@ describe("initCommand: .legio/.gitignore", () => {
 
 		// Verify the file was overwritten with the new wildcard+whitelist format
 		const restored = await Bun.file(gitignorePath).text();
-		expect(restored).toBe(OVERSTORY_GITIGNORE);
+		expect(restored).toBe(LEGIO_GITIGNORE);
 		expect(restored).toContain("*\n");
 		expect(restored).toContain("!.gitignore\n");
 	});

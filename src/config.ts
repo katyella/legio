@@ -57,7 +57,7 @@ export const DEFAULT_CONFIG: LegioConfig = {
 
 const CONFIG_FILENAME = "config.yaml";
 const CONFIG_LOCAL_FILENAME = "config.local.yaml";
-const OVERSTORY_DIR = ".legio";
+const LEGIO_DIR = ".legio";
 
 /**
  * Minimal YAML parser that handles the config structure.
@@ -446,7 +446,7 @@ async function mergeLocalConfig(
 	resolvedRoot: string,
 	config: LegioConfig,
 ): Promise<LegioConfig> {
-	const localPath = join(resolvedRoot, OVERSTORY_DIR, CONFIG_LOCAL_FILENAME);
+	const localPath = join(resolvedRoot, LEGIO_DIR, CONFIG_LOCAL_FILENAME);
 	const localFile = Bun.file(localPath);
 
 	if (!(await localFile.exists())) {
@@ -513,7 +513,7 @@ export async function resolveProjectRoot(startDir: string): Promise<string> {
 			// Main repo root is the parent of the .git directory
 			const mainRoot = dirname(absGitCommon);
 			// If mainRoot differs from startDir, we're in a worktree — resolve to canonical root
-			if (mainRoot !== startDir && existsSync(join(mainRoot, OVERSTORY_DIR, CONFIG_FILENAME))) {
+			if (mainRoot !== startDir && existsSync(join(mainRoot, LEGIO_DIR, CONFIG_FILENAME))) {
 				return mainRoot;
 			}
 		}
@@ -523,7 +523,7 @@ export async function resolveProjectRoot(startDir: string): Promise<string> {
 
 	// Not inside a worktree (or git not available).
 	// Check if .legio/config.yaml exists at startDir.
-	if (existsSync(join(startDir, OVERSTORY_DIR, CONFIG_FILENAME))) {
+	if (existsSync(join(startDir, LEGIO_DIR, CONFIG_FILENAME))) {
 		return startDir;
 	}
 
@@ -548,7 +548,7 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 	// Resolve the actual project root (handles git worktrees)
 	const resolvedRoot = await resolveProjectRoot(projectRoot);
 
-	const configPath = join(resolvedRoot, OVERSTORY_DIR, CONFIG_FILENAME);
+	const configPath = join(resolvedRoot, LEGIO_DIR, CONFIG_FILENAME);
 
 	// Start with defaults, setting the project root
 	const defaults = structuredClone(DEFAULT_CONFIG);

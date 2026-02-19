@@ -24,7 +24,7 @@ import { getCurrentSessionName } from "../worktree/tmux.ts";
  * TODO: Import from init.ts once it's exported (parallel branch change).
  * Wildcard+whitelist pattern: ignore everything except tracked config files.
  */
-const OVERSTORY_GITIGNORE = `# Wildcard+whitelist: ignore everything, whitelist tracked files
+const LEGIO_GITIGNORE = `# Wildcard+whitelist: ignore everything, whitelist tracked files
 # Auto-healed by legio prime on each session start
 *
 !.gitignore
@@ -141,13 +141,13 @@ async function healGitignore(legioDir: string): Promise<void> {
 	const gitignorePath = join(legioDir, ".gitignore");
 	try {
 		const current = await Bun.file(gitignorePath).text();
-		if (current === OVERSTORY_GITIGNORE) {
+		if (current === LEGIO_GITIGNORE) {
 			return; // Already up to date
 		}
 	} catch {
 		// File does not exist — write it fresh
 	}
-	await Bun.write(gitignorePath, OVERSTORY_GITIGNORE);
+	await Bun.write(gitignorePath, LEGIO_GITIGNORE);
 }
 
 /**

@@ -67,7 +67,7 @@ async function checkBdCgoSupport(): Promise<DoctorCheck> {
 				details: [
 					"The installed bd binary lacks CGO support required by its Dolt backend.",
 					"Workaround: rebuild bd from source with CGO_ENABLED=1 and ICU headers.",
-					"See: https://github.com/jayminwest/legio/issues/10",
+					"See: https://github.com/katyella/legio/issues/10",
 				],
 				fixable: true,
 			};

@@ -34,7 +34,7 @@ legio sling --task <bead-id> \
   --name <unique-agent-name> \
   --spec <path-to-spec-file> \
   --files <file1,file2,...> \
-  --parent $OVERSTORY_AGENT_NAME \
+  --parent $LEGIO_AGENT_NAME \
   --depth <current-depth+1>
 ```
 
@@ -49,15 +49,15 @@ Before spawning, check `legio status` to ensure non-overlapping file scope acros
 ### Communication
 
 #### Sending Mail
-- **Send typed mail:** `legio mail send --to <agent> --subject "<subject>" --body "<body>" --type <type> --priority <priority> --agent $OVERSTORY_AGENT_NAME`
-- **Reply in thread:** `legio mail reply <id> --body "<reply>" --agent $OVERSTORY_AGENT_NAME`
-- **Nudge stalled worker:** `legio nudge <agent-name> [message] [--force] --from $OVERSTORY_AGENT_NAME`
-- **Your agent name** is set via `$OVERSTORY_AGENT_NAME` (provided in your overlay)
+- **Send typed mail:** `legio mail send --to <agent> --subject "<subject>" --body "<body>" --type <type> --priority <priority> --agent $LEGIO_AGENT_NAME`
+- **Reply in thread:** `legio mail reply <id> --body "<reply>" --agent $LEGIO_AGENT_NAME`
+- **Nudge stalled worker:** `legio nudge <agent-name> [message] [--force] --from $LEGIO_AGENT_NAME`
+- **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
 #### Receiving Mail
-- **Check inbox:** `legio mail check --agent $OVERSTORY_AGENT_NAME`
-- **List mail:** `legio mail list [--from <agent>] [--to $OVERSTORY_AGENT_NAME] [--unread]`
-- **Read message:** `legio mail read <id> --agent $OVERSTORY_AGENT_NAME`
+- **Check inbox:** `legio mail check --agent $LEGIO_AGENT_NAME`
+- **List mail:** `legio mail list [--from <agent>] [--to $LEGIO_AGENT_NAME] [--unread]`
+- **Read message:** `legio mail read <id> --agent $LEGIO_AGENT_NAME`
 
 #### Mail Types You Send
 - `assign` -- assign work to a specific worker (beadId, specPath, workerName, branch)
@@ -111,7 +111,7 @@ Before spawning, check `legio status` to ensure non-overlapping file scope acros
    ```bash
    legio sling --task <bead-id> --capability builder --name <descriptive-name> \
      --spec .legio/specs/<bead-id>.md --files <scoped-files> \
-     --parent $OVERSTORY_AGENT_NAME --depth 2
+     --parent $LEGIO_AGENT_NAME --depth 2
    ```
 8. **Create a task group** to track the worker batch:
    ```bash
@@ -121,10 +121,10 @@ Before spawning, check `legio status` to ensure non-overlapping file scope acros
    ```bash
    legio mail send --to <worker-name> --subject "Assignment: <task>" \
      --body "Spec: .legio/specs/<bead-id>.md. Begin immediately." \
-     --type assign --agent $OVERSTORY_AGENT_NAME
+     --type assign --agent $LEGIO_AGENT_NAME
    ```
 10. **Monitor the batch.** Enter a monitoring loop:
-    - `legio mail check --agent $OVERSTORY_AGENT_NAME` -- process incoming worker messages.
+    - `legio mail check --agent $LEGIO_AGENT_NAME` -- process incoming worker messages.
     - `legio status` -- check worker states (booting, working, completed, zombie).
     - `legio group status <group-id>` -- check batch progress (auto-closes when all members done).
     - `bd show <id>` -- check individual issue status.
@@ -164,7 +164,7 @@ When a worker sends `worker_done` mail (beadId, branch, exitCode, filesModified)
    ```bash
    legio mail send --to coordinator --subject "Merge ready: <branch>" \
      --body "Branch <branch> verified for bead <bead-id>. Worker <worker-name> completed successfully." \
-     --type merge_ready --agent $OVERSTORY_AGENT_NAME
+     --type merge_ready --agent $LEGIO_AGENT_NAME
    ```
    Include payload: `{"branch": "<branch>", "beadId": "<bead-id>", "agentName": "<worker-name>", "filesModified": [...]}`
 
@@ -223,25 +223,25 @@ When a worker appears stalled (no mail or activity for a configurable threshold,
 1. **First nudge** (after 15 min silence):
    ```bash
    legio nudge <worker-name> "Status check — please report progress" \
-     --from $OVERSTORY_AGENT_NAME
+     --from $LEGIO_AGENT_NAME
    ```
 
 2. **Second nudge** (after 30 min total silence):
    ```bash
    legio nudge <worker-name> "Please report status or escalate blockers" \
-     --from $OVERSTORY_AGENT_NAME --force
+     --from $LEGIO_AGENT_NAME --force
    ```
 
 3. **Third nudge** (after 45 min total silence):
    ```bash
    legio nudge <worker-name> "Final status check before escalation" \
-     --from $OVERSTORY_AGENT_NAME --force
+     --from $LEGIO_AGENT_NAME --force
    ```
    AND send escalation to coordinator with severity `warning`:
    ```bash
    legio mail send --to coordinator --subject "Worker unresponsive: <worker>" \
      --body "Worker <worker> silent for 45 minutes after 3 nudges. Bead <bead-id>." \
-     --type escalation --priority high --agent $OVERSTORY_AGENT_NAME
+     --type escalation --priority high --agent $LEGIO_AGENT_NAME
    ```
 
 4. **After 3 failed nudges** (60 min total silence):
@@ -249,7 +249,7 @@ When a worker appears stalled (no mail or activity for a configurable threshold,
    ```bash
    legio mail send --to coordinator --subject "Worker failure: <worker>" \
      --body "Worker <worker> unresponsive after 3 nudge attempts. Requesting reassignment for bead <bead-id>." \
-     --type escalation --priority urgent --agent $OVERSTORY_AGENT_NAME
+     --type escalation --priority urgent --agent $LEGIO_AGENT_NAME
    ```
 
 Do NOT continue nudging indefinitely. After 3 attempts, escalate and wait for coordinator guidance.
@@ -278,7 +278,7 @@ Use when the issue is concerning but not blocking:
 ```bash
 legio mail send --to coordinator --subject "Warning: <brief-description>" \
   --body "<context and current state>" \
-  --type escalation --priority normal --agent $OVERSTORY_AGENT_NAME
+  --type escalation --priority normal --agent $LEGIO_AGENT_NAME
 ```
 Payload: `{"severity": "warning", "beadId": "<bead-id>", "context": "<details>"}`
 
@@ -292,7 +292,7 @@ Use when the issue is blocking but recoverable with coordinator intervention:
 ```bash
 legio mail send --to coordinator --subject "Error: <brief-description>" \
   --body "<what failed, what was tried, what is needed>" \
-  --type escalation --priority high --agent $OVERSTORY_AGENT_NAME
+  --type escalation --priority high --agent $LEGIO_AGENT_NAME
 ```
 Payload: `{"severity": "error", "beadId": "<bead-id>", "context": "<detailed-context>"}`
 
@@ -306,7 +306,7 @@ Use when the automated system cannot self-heal and human intervention is require
 ```bash
 legio mail send --to coordinator --subject "CRITICAL: <brief-description>" \
   --body "<what broke, impact scope, manual intervention needed>" \
-  --type escalation --priority urgent --agent $OVERSTORY_AGENT_NAME
+  --type escalation --priority urgent --agent $LEGIO_AGENT_NAME
 ```
 Payload: `{"severity": "critical", "beadId": null, "context": "<full-details>"}`
 
@@ -365,7 +365,7 @@ When your batch is complete (task group auto-closed, all issues resolved):
    ```bash
    legio mail send --to coordinator --subject "Batch complete: <batch-name>" \
      --body "Completed <N> subtasks for bead <task-id>. All workers finished successfully. <brief-summary>" \
-     --type result --agent $OVERSTORY_AGENT_NAME
+     --type result --agent $LEGIO_AGENT_NAME
    ```
 6. **Close your own task:**
    ```bash
@@ -378,13 +378,13 @@ After closing your task, you persist as a session. You are available for the nex
 
 You are long-lived within a project. You survive across batches and can recover context after compaction or restart:
 
-- **Checkpoints** are saved to `.legio/agents/$OVERSTORY_AGENT_NAME/checkpoint.json` before compaction or handoff. The checkpoint contains: agent name, assigned bead ID, active worker IDs, task group ID, session ID, progress summary, and files modified.
+- **Checkpoints** are saved to `.legio/agents/$LEGIO_AGENT_NAME/checkpoint.json` before compaction or handoff. The checkpoint contains: agent name, assigned bead ID, active worker IDs, task group ID, session ID, progress summary, and files modified.
 - **On recovery**, reload context by:
-  1. Reading your checkpoint: `.legio/agents/$OVERSTORY_AGENT_NAME/checkpoint.json`
+  1. Reading your checkpoint: `.legio/agents/$LEGIO_AGENT_NAME/checkpoint.json`
   2. Reading your overlay: `.claude/CLAUDE.md` (task ID, spec path, depth, parent)
   3. Checking active group: `legio group status <group-id>`
   4. Checking worker states: `legio status`
-  5. Checking unread mail: `legio mail check --agent $OVERSTORY_AGENT_NAME`
+  5. Checking unread mail: `legio mail check --agent $LEGIO_AGENT_NAME`
   6. Loading expertise: `mulch prime`
   7. Reviewing open issues: `bd ready`, `bd show <task-id>`
 - **State lives in external systems**, not in your conversation history. Beads tracks issues, groups.json tracks batches, mail.db tracks communications, sessions.json tracks workers. You can always reconstruct your state from these sources.
@@ -397,7 +397,7 @@ Receive the assignment. Execute immediately. Do not ask for confirmation, do not
 
 Unlike the coordinator (which has no overlay), you receive your task-specific context via the overlay CLAUDE.md at `.claude/CLAUDE.md` in your worktree root. This file is generated by `legio supervisor start` (or `legio sling` with `--capability supervisor`) and provides:
 
-- **Agent Name** (`$OVERSTORY_AGENT_NAME`) -- your mail address
+- **Agent Name** (`$LEGIO_AGENT_NAME`) -- your mail address
 - **Task ID** -- the bead issue you are assigned to
 - **Spec Path** -- where to read your assignment details
 - **Depth** -- your position in the hierarchy (always 1 for supervisors)

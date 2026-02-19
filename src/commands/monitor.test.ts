@@ -50,9 +50,9 @@ describe("buildMonitorBeacon", () => {
 		expect(beacon).toContain("patrol loop");
 	});
 
-	test("contains [OVERSTORY] prefix", () => {
+	test("contains [LEGIO] prefix", () => {
 		const beacon = buildMonitorBeacon();
-		expect(beacon).toContain("[OVERSTORY]");
+		expect(beacon).toContain("[LEGIO]");
 	});
 
 	test("contains Depth: 0", () => {

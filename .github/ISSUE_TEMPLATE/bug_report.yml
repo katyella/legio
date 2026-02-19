@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in overstory
+description: Report a bug in legio
 labels: ["bug"]
 body:
   - type: textarea
@@ -8,7 +8,7 @@ body:
       label: Steps to reproduce
       description: What did you do?
       placeholder: |
-        1. Run `overstory sling ...`
+        1. Run `legio sling ...`
         2. ...
     validations:
       required: true
@@ -30,10 +30,10 @@ body:
       required: true
 
   - type: input
-    id: overstory-version
+    id: legio-version
     attributes:
-      label: overstory version
-      description: Output of `overstory --version`
+      label: legio version
+      description: Output of `legio --version`
       placeholder: "0.2.0"
     validations:
       required: true

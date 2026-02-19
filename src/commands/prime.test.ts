@@ -443,7 +443,7 @@ sessions.db
 		});
 
 		test("does not overwrite .legio/.gitignore if already correct", async () => {
-			// Write the correct OVERSTORY_GITIGNORE content
+			// Write the correct LEGIO_GITIGNORE content
 			const gitignorePath = join(tempDir, ".legio", ".gitignore");
 			await Bun.write(gitignorePath, expectedGitignore);
 

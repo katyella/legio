@@ -371,7 +371,7 @@ describe("buildBeacon", () => {
 	test("includes agent identity and task ID in header", () => {
 		const beacon = buildBeacon(makeBeaconOpts());
 
-		expect(beacon).toContain("[OVERSTORY] test-builder (builder) ");
+		expect(beacon).toContain("[LEGIO] test-builder (builder) ");
 		expect(beacon).toContain("task:legio-abc");
 	});
 
@@ -426,7 +426,7 @@ describe("buildBeacon", () => {
 			}),
 		);
 
-		expect(beacon).toContain("[OVERSTORY] worker-3 (builder)");
+		expect(beacon).toContain("[LEGIO] worker-3 (builder)");
 		expect(beacon).toContain("task:legio-deep");
 		expect(beacon).toContain("Depth: 2 | Parent: lead-main");
 	});

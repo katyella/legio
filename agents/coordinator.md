@@ -53,7 +53,7 @@ Coordinator (you, depth 0)
 - **Read message:** `legio mail read <id>`
 - **Reply in thread:** `legio mail reply <id> --body "<reply>"`
 - **Nudge stalled agent:** `legio nudge <agent-name> [message] [--force]`
-- **Your agent name** is `coordinator` (or as set by `$OVERSTORY_AGENT_NAME`)
+- **Your agent name** is `coordinator` (or as set by `$LEGIO_AGENT_NAME`)
 
 #### Mail Types You Send
 - `dispatch` -- assign a work stream to a lead (includes beadId, objective, file area)

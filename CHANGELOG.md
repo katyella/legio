@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Gitignore Wildcard+Whitelist Model
 - `.legio/.gitignore` flipped from explicit blocklist to wildcard `*` + whitelist pattern — ignore everything, whitelist only tracked files (`config.yaml`, `agent-manifest.json`, `hooks.json`, `groups.json`, `agent-defs/`)
 - `legio prime` auto-heals `.legio/.gitignore` on each session start — ensures existing projects get the updated gitignore
-- `OVERSTORY_GITIGNORE` constant and `writeLegioGitignore()` exported from init.ts for reuse
+- `LEGIO_GITIGNORE` constant and `writeLegioGitignore()` exported from init.ts for reuse
 
 #### Testing
 - Test suite grew from 1812 to 1848 tests across 73 files (4726 expect() calls)
@@ -331,14 +331,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Biome configuration for formatting and linting
 - TypeScript strict mode with `noUncheckedIndexedAccess`
 
-[Unreleased]: https://github.com/jayminwest/legio/compare/v0.5.4...HEAD
-[0.5.4]: https://github.com/jayminwest/legio/compare/v0.5.3...v0.5.4
-[0.5.3]: https://github.com/jayminwest/legio/compare/v0.5.2...v0.5.3
-[0.5.2]: https://github.com/jayminwest/legio/compare/v0.5.1...v0.5.2
-[0.5.1]: https://github.com/jayminwest/legio/compare/v0.5.0...v0.5.1
-[0.5.0]: https://github.com/jayminwest/legio/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/jayminwest/legio/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/jayminwest/legio/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/jayminwest/legio/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/jayminwest/legio/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/jayminwest/legio/releases/tag/v0.1.0
+[Unreleased]: https://github.com/katyella/legio/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/katyella/legio/compare/v0.5.3...v0.5.4
+[0.5.3]: https://github.com/katyella/legio/compare/v0.5.2...v0.5.3
+[0.5.2]: https://github.com/katyella/legio/compare/v0.5.1...v0.5.2
+[0.5.1]: https://github.com/katyella/legio/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/katyella/legio/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/katyella/legio/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/katyella/legio/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/katyella/legio/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/katyella/legio/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/katyella/legio/releases/tag/v0.1.0

@@ -40,7 +40,7 @@ export function buildSupervisorBeacon(opts: {
 }): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
-		`[OVERSTORY] ${opts.name} (supervisor) ${timestamp} task:${opts.beadId}`,
+		`[LEGIO] ${opts.name} (supervisor) ${timestamp} task:${opts.beadId}`,
 		`Depth: ${opts.depth} | Parent: ${opts.parent} | Role: per-project supervisor`,
 		`Startup: run mulch prime, check mail (legio mail check --agent ${opts.name}), read task (bd show ${opts.beadId}), then begin supervising`,
 	];
@@ -203,7 +203,7 @@ async function startSupervisor(args: string[]): Promise<void> {
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
 		}
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
-			OVERSTORY_AGENT_NAME: flags.name,
+			LEGIO_AGENT_NAME: flags.name,
 		});
 
 		// Send beacon after TUI initialization delay

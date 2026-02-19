@@ -94,7 +94,7 @@ export interface BeaconOptions {
  * protocol so the agent knows exactly what to do on boot.
  *
  * Format:
- *   [OVERSTORY] <agent-name> (<capability>) <ISO timestamp> task:<bead-id>
+ *   [LEGIO] <agent-name> (<capability>) <ISO timestamp> task:<bead-id>
  *   Depth: <n> | Parent: <parent-name|none>
  *   Startup protocol:
  *   1. Read your assignment in .claude/CLAUDE.md
@@ -106,7 +106,7 @@ export function buildBeacon(opts: BeaconOptions): string {
 	const timestamp = new Date().toISOString();
 	const parent = opts.parentAgent ?? "none";
 	const parts = [
-		`[OVERSTORY] ${opts.agentName} (${opts.capability}) ${timestamp} task:${opts.taskId}`,
+		`[LEGIO] ${opts.agentName} (${opts.capability}) ${timestamp} task:${opts.taskId}`,
 		`Depth: ${opts.depth} | Parent: ${parent}`,
 		`Startup: read .claude/CLAUDE.md, run mulch prime, check mail (legio mail check --agent ${opts.agentName}), then begin task ${opts.taskId}`,
 	];
@@ -448,8 +448,8 @@ export async function slingCommand(args: string[]): Promise<void> {
 		const tmuxSessionName = `legio-${config.project.name}-${name}`;
 		const claudeCmd = `claude --model ${agentDef.model} --dangerously-skip-permissions`;
 		const pid = await createSession(tmuxSessionName, worktreePath, claudeCmd, {
-			OVERSTORY_AGENT_NAME: name,
-			OVERSTORY_WORKTREE_PATH: worktreePath,
+			LEGIO_AGENT_NAME: name,
+			LEGIO_WORKTREE_PATH: worktreePath,
 		});
 
 		// 13. Record session BEFORE sending the beacon so that hook-triggered

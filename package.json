@@ -7,9 +7,9 @@
 	"type": "module",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jayminwest/legio.git"
+		"url": "https://github.com/katyella/legio.git"
 	},
-	"homepage": "https://github.com/jayminwest/legio",
+	"homepage": "https://github.com/katyella/legio",
 	"keywords": [
 		"ai",
 		"agents",

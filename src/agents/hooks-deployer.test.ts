@@ -150,7 +150,7 @@ describe("deployHooks", () => {
 		expect(postToolUse[1].hooks[0].command).toContain("legio mail check --inject");
 		expect(postToolUse[1].hooks[0].command).toContain("mail-check-agent");
 		expect(postToolUse[1].hooks[0].command).toContain("--debounce 30000");
-		expect(postToolUse[1].hooks[0].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(postToolUse[1].hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("output contains PreCompact hook", async () => {
@@ -194,7 +194,7 @@ describe("deployHooks", () => {
 		const sessionStart = parsed.hooks.SessionStart[0];
 		expect(sessionStart.hooks[0].type).toBe("command");
 		expect(sessionStart.hooks[0].command).toContain("legio prime --agent prime-agent");
-		expect(sessionStart.hooks[0].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(sessionStart.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("UserPromptSubmit hook runs mail check with agent name", async () => {
@@ -209,7 +209,7 @@ describe("deployHooks", () => {
 		expect(userPrompt.hooks[0].command).toContain(
 			"legio mail check --inject --agent mail-agent",
 		);
-		expect(userPrompt.hooks[0].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(userPrompt.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("PreCompact hook runs legio prime with --compact flag", async () => {
@@ -225,7 +225,7 @@ describe("deployHooks", () => {
 		expect(preCompact.hooks[0].command).toContain(
 			"legio prime --agent compact-agent --compact",
 		);
-		expect(preCompact.hooks[0].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(preCompact.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("PreToolUse hook pipes stdin to legio log with --stdin flag", async () => {
@@ -280,7 +280,7 @@ describe("deployHooks", () => {
 		expect(postToolUse.hooks[1].command).toContain("--inject");
 		expect(postToolUse.hooks[1].command).toContain("--agent mail-debounce-agent");
 		expect(postToolUse.hooks[1].command).toContain("--debounce 500");
-		expect(postToolUse.hooks[1].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(postToolUse.hooks[1].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("Stop hook pipes stdin to legio log with --stdin flag", async () => {
@@ -309,7 +309,7 @@ describe("deployHooks", () => {
 		const stop = parsed.hooks.Stop[0];
 		expect(stop.hooks.length).toBe(2);
 		expect(stop.hooks[1].command).toContain("mulch learn");
-		expect(stop.hooks[1].command).toContain("OVERSTORY_AGENT_NAME");
+		expect(stop.hooks[1].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("hook commands no longer use sed-based extraction", async () => {
@@ -514,7 +514,7 @@ describe("deployHooks", () => {
 			(h: { matcher: string; hooks: Array<{ command: string }> }) => h.matcher === "Write",
 		);
 		// Path boundary guard, not a full block
-		expect(writeGuards[0].hooks[0].command).toContain("OVERSTORY_WORKTREE_PATH");
+		expect(writeGuards[0].hooks[0].command).toContain("LEGIO_WORKTREE_PATH");
 		expect(writeGuards[0].hooks[0].command).not.toContain("cannot modify files");
 
 		// Builder should have 2 Bash guards: danger guard + path boundary guard
@@ -629,7 +629,7 @@ describe("getCapabilityGuards", () => {
 		const guards = getCapabilityGuards("builder");
 		const bashGuard = guards.find((g) => g.matcher === "Bash");
 		expect(bashGuard).toBeDefined();
-		expect(bashGuard?.hooks[0]?.command).toContain("OVERSTORY_WORKTREE_PATH");
+		expect(bashGuard?.hooks[0]?.command).toContain("LEGIO_WORKTREE_PATH");
 		expect(bashGuard?.hooks[0]?.command).toContain("Bash path boundary violation");
 	});
 
@@ -637,7 +637,7 @@ describe("getCapabilityGuards", () => {
 		const guards = getCapabilityGuards("merger");
 		const bashGuard = guards.find((g) => g.matcher === "Bash");
 		expect(bashGuard).toBeDefined();
-		expect(bashGuard?.hooks[0]?.command).toContain("OVERSTORY_WORKTREE_PATH");
+		expect(bashGuard?.hooks[0]?.command).toContain("LEGIO_WORKTREE_PATH");
 		expect(bashGuard?.hooks[0]?.command).toContain("Bash path boundary violation");
 	});
 
@@ -728,7 +728,7 @@ describe("getCapabilityGuards", () => {
 		for (const tool of ["Write", "Edit", "NotebookEdit"]) {
 			const guard = guards.find((g) => g.matcher === tool);
 			expect(guard).toBeDefined();
-			expect(guard?.hooks[0]?.command).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+			expect(guard?.hooks[0]?.command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 		}
 	});
 
@@ -736,7 +736,7 @@ describe("getCapabilityGuards", () => {
 		const guards = getCapabilityGuards("builder");
 		const taskGuard = guards.find((g) => g.matcher === "Task");
 		expect(taskGuard).toBeDefined();
-		expect(taskGuard?.hooks[0]?.command).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+		expect(taskGuard?.hooks[0]?.command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
 	test("coordinator gets 14 guards (10 team + 3 tool blocks + 1 bash file guard)", () => {
@@ -793,7 +793,7 @@ describe("getDangerGuards", () => {
 	test("guard command includes env var guard prefix", () => {
 		const guards = getDangerGuards("test-agent");
 		const command = guards[0]?.hooks[0]?.command ?? "";
-		expect(command).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+		expect(command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
 	test("all capabilities get Bash danger guards in deployed hooks", async () => {
@@ -840,7 +840,7 @@ describe("getDangerGuards", () => {
 			// Path boundary Write guard (first) should come before Bash danger guard
 			const pathBoundaryWriteIdx = preToolUse.findIndex(
 				(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-					h.matcher === "Write" && h.hooks[0]?.command?.includes("OVERSTORY_WORKTREE_PATH"),
+					h.matcher === "Write" && h.hooks[0]?.command?.includes("LEGIO_WORKTREE_PATH"),
 			);
 			const bashDangerIdx = preToolUse.findIndex((h: { matcher: string }) => h.matcher === "Bash");
 			// Capability block Write guard should come after Bash danger guard
@@ -955,7 +955,7 @@ describe("buildBashFileGuardScript", () => {
 
 	test("includes env var guard prefix", () => {
 		const script = buildBashFileGuardScript("scout");
-		expect(script).toMatch(/^\[ -z "\$OVERSTORY_AGENT_NAME" \] && exit 0;/);
+		expect(script).toMatch(/^\[ -z "\$LEGIO_AGENT_NAME" \] && exit 0;/);
 	});
 
 	test("accepts extra safe prefixes for coordinator", () => {
@@ -1192,7 +1192,7 @@ describe("structural enforcement integration", () => {
 			expect(hooks.length).toBeGreaterThan(0);
 			const baseHook = hooks.find((h) => h.matcher === "");
 			expect(baseHook).toBeDefined();
-			expect(baseHook?.hooks[0]?.command).toContain("OVERSTORY_AGENT_NAME");
+			expect(baseHook?.hooks[0]?.command).toContain("LEGIO_AGENT_NAME");
 		}
 
 		// PreToolUse base hook (matcher == "") should also have ENV_GUARD
@@ -1202,7 +1202,7 @@ describe("structural enforcement integration", () => {
 		}>;
 		const basePreToolUse = preToolUse.find((h) => h.matcher === "");
 		expect(basePreToolUse).toBeDefined();
-		expect(basePreToolUse?.hooks[0]?.command).toContain("OVERSTORY_AGENT_NAME");
+		expect(basePreToolUse?.hooks[0]?.command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("all deployed hook commands include env var guard for project root isolation", async () => {
@@ -1226,7 +1226,7 @@ describe("structural enforcement integration", () => {
 		for (const entry of guardEntries) {
 			for (const hook of entry.hooks) {
 				if (hook.type === "command") {
-					expect(hook.command).toContain("OVERSTORY_AGENT_NAME");
+					expect(hook.command).toContain("LEGIO_AGENT_NAME");
 				}
 			}
 		}
@@ -1277,18 +1277,18 @@ describe("structural enforcement integration", () => {
 			const preToolUse = parsed.hooks.PreToolUse;
 
 			// Path boundary guards should be present for Write, Edit, NotebookEdit
-			// They use OVERSTORY_WORKTREE_PATH env var
+			// They use LEGIO_WORKTREE_PATH env var
 			const writeGuards = preToolUse.filter(
 				(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-					h.matcher === "Write" && h.hooks[0]?.command?.includes("OVERSTORY_WORKTREE_PATH"),
+					h.matcher === "Write" && h.hooks[0]?.command?.includes("LEGIO_WORKTREE_PATH"),
 			);
 			const editGuards = preToolUse.filter(
 				(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-					h.matcher === "Edit" && h.hooks[0]?.command?.includes("OVERSTORY_WORKTREE_PATH"),
+					h.matcher === "Edit" && h.hooks[0]?.command?.includes("LEGIO_WORKTREE_PATH"),
 			);
 			const notebookGuards = preToolUse.filter(
 				(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-					h.matcher === "NotebookEdit" && h.hooks[0]?.command?.includes("OVERSTORY_WORKTREE_PATH"),
+					h.matcher === "NotebookEdit" && h.hooks[0]?.command?.includes("LEGIO_WORKTREE_PATH"),
 			);
 
 			expect(writeGuards.length).toBeGreaterThanOrEqual(1);
@@ -1310,7 +1310,7 @@ describe("structural enforcement integration", () => {
 		// Path boundary Write guard should come before Bash danger guard
 		const pathWriteIdx = preToolUse.findIndex(
 			(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-				h.matcher === "Write" && h.hooks[0]?.command?.includes("OVERSTORY_WORKTREE_PATH"),
+				h.matcher === "Write" && h.hooks[0]?.command?.includes("LEGIO_WORKTREE_PATH"),
 		);
 		const bashDangerIdx = preToolUse.findIndex(
 			(h: { matcher: string; hooks: Array<{ command: string }> }) =>
@@ -1326,12 +1326,12 @@ describe("structural enforcement integration", () => {
 describe("buildPathBoundaryGuardScript", () => {
 	test("returns a string containing env var guard", () => {
 		const script = buildPathBoundaryGuardScript("file_path");
-		expect(script).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+		expect(script).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
-	test("returns a string checking OVERSTORY_WORKTREE_PATH", () => {
+	test("returns a string checking LEGIO_WORKTREE_PATH", () => {
 		const script = buildPathBoundaryGuardScript("file_path");
-		expect(script).toContain('[ -z "$OVERSTORY_WORKTREE_PATH" ] && exit 0;');
+		expect(script).toContain('[ -z "$LEGIO_WORKTREE_PATH" ] && exit 0;');
 	});
 
 	test("reads stdin input", () => {
@@ -1354,7 +1354,7 @@ describe("buildPathBoundaryGuardScript", () => {
 
 	test("allows paths inside the worktree", () => {
 		const script = buildPathBoundaryGuardScript("file_path");
-		expect(script).toContain('"$OVERSTORY_WORKTREE_PATH"/*) exit 0');
+		expect(script).toContain('"$LEGIO_WORKTREE_PATH"/*) exit 0');
 	});
 
 	test("blocks paths outside the worktree with decision:block", () => {
@@ -1397,10 +1397,10 @@ describe("getPathBoundaryGuards", () => {
 		expect(notebookGuard?.hooks[0]?.command).toContain('"notebook_path"');
 	});
 
-	test("all guards include OVERSTORY_WORKTREE_PATH check", () => {
+	test("all guards include LEGIO_WORKTREE_PATH check", () => {
 		const guards = getPathBoundaryGuards();
 		for (const guard of guards) {
-			expect(guard.hooks[0]?.command).toContain("OVERSTORY_WORKTREE_PATH");
+			expect(guard.hooks[0]?.command).toContain("LEGIO_WORKTREE_PATH");
 		}
 	});
 
@@ -1415,12 +1415,12 @@ describe("getPathBoundaryGuards", () => {
 describe("buildBashPathBoundaryScript", () => {
 	test("returns a string containing env var guard", () => {
 		const script = buildBashPathBoundaryScript();
-		expect(script).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+		expect(script).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
-	test("checks OVERSTORY_WORKTREE_PATH env var", () => {
+	test("checks LEGIO_WORKTREE_PATH env var", () => {
 		const script = buildBashPathBoundaryScript();
-		expect(script).toContain('[ -z "$OVERSTORY_WORKTREE_PATH" ] && exit 0;');
+		expect(script).toContain('[ -z "$LEGIO_WORKTREE_PATH" ] && exit 0;');
 	});
 
 	test("reads stdin input", () => {
@@ -1486,8 +1486,8 @@ describe("buildBashPathBoundaryScript", () => {
 
 	test("validates paths against worktree boundary", () => {
 		const script = buildBashPathBoundaryScript();
-		expect(script).toContain('"$OVERSTORY_WORKTREE_PATH"/*');
-		expect(script).toContain('"$OVERSTORY_WORKTREE_PATH")');
+		expect(script).toContain('"$LEGIO_WORKTREE_PATH"/*');
+		expect(script).toContain('"$LEGIO_WORKTREE_PATH")');
 	});
 
 	test("allows /dev/* paths as safe exceptions", () => {
@@ -1532,16 +1532,16 @@ describe("getBashPathBoundaryGuards", () => {
 		expect(guards[0]?.hooks[0]?.type).toBe("command");
 	});
 
-	test("guard command checks OVERSTORY_WORKTREE_PATH", () => {
+	test("guard command checks LEGIO_WORKTREE_PATH", () => {
 		const guards = getBashPathBoundaryGuards();
 		const command = guards[0]?.hooks[0]?.command ?? "";
-		expect(command).toContain("OVERSTORY_WORKTREE_PATH");
+		expect(command).toContain("LEGIO_WORKTREE_PATH");
 	});
 
 	test("guard command includes env var guard prefix", () => {
 		const guards = getBashPathBoundaryGuards();
 		const command = guards[0]?.hooks[0]?.command ?? "";
-		expect(command).toContain('[ -z "$OVERSTORY_AGENT_NAME" ] && exit 0;');
+		expect(command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
 	test("guard blocks paths outside worktree", () => {
@@ -1581,7 +1581,7 @@ describe("bash path boundary integration", () => {
 			h.hooks[0]?.command?.includes("Bash path boundary violation"),
 		);
 		expect(pathGuard).toBeDefined();
-		expect(pathGuard.hooks[0].command).toContain("OVERSTORY_WORKTREE_PATH");
+		expect(pathGuard.hooks[0].command).toContain("LEGIO_WORKTREE_PATH");
 	});
 
 	test("merger gets Bash path boundary guard in deployed hooks", async () => {

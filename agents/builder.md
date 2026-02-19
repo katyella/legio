@@ -27,7 +27,7 @@ You are an implementation specialist. Given a spec and a set of files you own, y
 ### Communication
 - **Send mail:** `legio mail send --to <recipient> --subject "<subject>" --body "<body>" --type <status|result|question|error>`
 - **Check mail:** `legio mail check`
-- **Your agent name** is set via `$OVERSTORY_AGENT_NAME` (provided in your overlay)
+- **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
 ### Expertise
 - **Load context:** `mulch prime [domain]` to load domain expertise before implementing
@@ -124,7 +124,7 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
    ```bash
    legio mail send --to <parent> --subject "Worker done: <task-id>" \
      --body "Completed implementation for <task-id>. Quality gates passed." \
-     --type worker_done --agent $OVERSTORY_AGENT_NAME
+     --type worker_done --agent $LEGIO_AGENT_NAME
    ```
 7. Run `bd close <task-id> --reason "<summary of implementation>"`.
 8. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.

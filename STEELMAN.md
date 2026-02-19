@@ -153,7 +153,7 @@ If your problem fits these patterns **and** you understand the risks above, swar
 
 ## Further Reading
 
-- [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) — Comprehensive guide to working with AI agents in software engineering
+- [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) — Comprehensive guide to working with AI agents in software engineering (by Jaymin West)
 - [Agentic Engineering (Web)](https://jayminwest.com/agentic-engineering-book) — Online version with interactive examples
 
 Read these **before** deploying Legio in production. Understanding agentic workflows is a prerequisite, not a nice-to-have.

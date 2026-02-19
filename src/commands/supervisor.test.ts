@@ -22,7 +22,7 @@ describe("buildSupervisorBeacon", () => {
 		expect(beacon).toContain("task-abc123");
 	});
 
-	test("contains [OVERSTORY] prefix", () => {
+	test("contains [LEGIO] prefix", () => {
 		const beacon = buildSupervisorBeacon({
 			name: "supervisor-1",
 			beadId: "task-1",
@@ -30,7 +30,7 @@ describe("buildSupervisorBeacon", () => {
 			parent: "coordinator",
 		});
 
-		expect(beacon).toContain("[OVERSTORY]");
+		expect(beacon).toContain("[LEGIO]");
 	});
 
 	test("contains (supervisor) designation", () => {
@@ -84,7 +84,7 @@ describe("buildSupervisorBeacon", () => {
 		});
 		const after = new Date();
 
-		// Extract timestamp from beacon (format: [OVERSTORY] {name} (supervisor) {timestamp} task:{beadId})
+		// Extract timestamp from beacon (format: [LEGIO] {name} (supervisor) {timestamp} task:{beadId})
 		const timestampMatch = beacon.match(/\(supervisor\)\s+(\S+)\s+task:/);
 		expect(timestampMatch).toBeTruthy();
 

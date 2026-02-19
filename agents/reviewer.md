@@ -27,7 +27,7 @@ You are a validation specialist. Given code to review, you check it for correctn
 ### Communication
 - **Send mail:** `legio mail send --to <recipient> --subject "<subject>" --body "<body>" --type <status|result|question|error>`
 - **Check mail:** `legio mail check`
-- **Your agent name** is set via `$OVERSTORY_AGENT_NAME` (provided in your overlay)
+- **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
 ### Expertise
 - **Load conventions:** `mulch prime [domain]` to understand project standards

@@ -481,7 +481,7 @@ describe("startCoordinator", () => {
 		const content = await Bun.file(settingsPath).text();
 
 		// PreToolUse guards should include the ENV_GUARD prefix
-		expect(content).toContain("OVERSTORY_AGENT_NAME");
+		expect(content).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("injects agent definition via --append-system-prompt when agent-defs/coordinator.md exists", async () => {
@@ -889,7 +889,7 @@ describe("buildCoordinatorBeacon", () => {
 
 	test("includes coordinator identity in header", () => {
 		const beacon = buildCoordinatorBeacon();
-		expect(beacon).toContain("[OVERSTORY] coordinator (coordinator)");
+		expect(beacon).toContain("[LEGIO] coordinator (coordinator)");
 	});
 
 	test("includes ISO timestamp", () => {

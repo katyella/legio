@@ -1,9 +1,9 @@
 # Legio
 
-[![CI](https://img.shields.io/github/actions/workflow/status/jayminwest/legio/ci.yml?branch=main)](https://github.com/jayminwest/legio/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/katyella/legio/ci.yml?branch=main)](https://github.com/katyella/legio/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.0-orange)](https://bun.sh)
-[![GitHub release](https://img.shields.io/github/v/release/jayminwest/legio)](https://github.com/jayminwest/legio/releases)
+[![GitHub release](https://img.shields.io/github/v/release/katyella/legio)](https://github.com/katyella/legio/releases)
 
 Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a single Claude Code session into a multi-agent team by spawning worker agents in git worktrees via tmux, coordinating them through a custom SQLite mail system, and merging their work back with tiered conflict resolution.
 
@@ -55,7 +55,7 @@ Coordinator (persistent orchestrator at project root)
 
 ```bash
 # Clone the repository
-git clone https://github.com/jayminwest/legio.git
+git clone https://github.com/katyella/legio.git
 cd legio
 
 # Install dev dependencies

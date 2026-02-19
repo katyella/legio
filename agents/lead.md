@@ -34,7 +34,7 @@ legio sling <bead-id> \
   --name <unique-agent-name> \
   --spec <path-to-spec-file> \
   --files <file1,file2,...> \
-  --parent $OVERSTORY_AGENT_NAME \
+  --parent $LEGIO_AGENT_NAME \
   --depth <current-depth+1>
 ```
 
@@ -42,7 +42,7 @@ legio sling <bead-id> \
 - **Send mail:** `legio mail send --to <recipient> --subject "<subject>" --body "<body>" --type <status|result|question|error>`
 - **Check mail:** `legio mail check` (check for worker reports)
 - **List mail:** `legio mail list --from <worker-name>` (review worker messages)
-- **Your agent name** is set via `$OVERSTORY_AGENT_NAME` (provided in your overlay)
+- **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
 ### Expertise
 - **Search for patterns:** `mulch search <task keywords>` to find relevant patterns, failures, and decisions
@@ -69,7 +69,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    ```bash
    bd create --title="Scout: explore <area> for <objective>" --type=task --priority=2
    legio sling <scout-bead-id> --capability scout --name <scout-name> \
-     --parent $OVERSTORY_AGENT_NAME --depth <current+1>
+     --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio mail send --to <scout-name> --subject "Explore: <area>" \
      --body "Investigate <what to explore>. Report: file layout, existing patterns, types, dependencies." \
      --type dispatch
@@ -80,7 +80,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    # Scout 1: implementation files
    bd create --title="Scout: explore implementation for <objective>" --type=task --priority=2
    legio sling <scout1-bead-id> --capability scout --name <scout1-name> \
-     --parent $OVERSTORY_AGENT_NAME --depth <current+1>
+     --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio mail send --to <scout1-name> --subject "Explore: implementation" \
      --body "Investigate implementation files: <files>. Report: patterns, types, dependencies." \
      --type dispatch
@@ -88,7 +88,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    # Scout 2: tests and interfaces
    bd create --title="Scout: explore tests/types for <objective>" --type=task --priority=2
    legio sling <scout2-bead-id> --capability scout --name <scout2-name> \
-     --parent $OVERSTORY_AGENT_NAME --depth <current+1>
+     --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio mail send --to <scout2-name> --subject "Explore: tests and interfaces" \
      --body "Investigate test files and type definitions: <files>. Report: test patterns, type contracts." \
      --type dispatch
@@ -119,7 +119,7 @@ Write specs from scout findings and dispatch builders.
    ```bash
    legio sling <bead-id> --capability builder --name <builder-name> \
      --spec .legio/specs/<bead-id>.md --files <scoped-files> \
-     --parent $OVERSTORY_AGENT_NAME --depth <current+1>
+     --parent $LEGIO_AGENT_NAME --depth <current+1>
    ```
 9. **Send dispatch mail** to each builder:
    ```bash
@@ -143,7 +143,7 @@ Write specs from scout findings and dispatch builders.
     ```bash
     bd create --title="Review: <builder-task-summary>" --type=task --priority=P1
     legio sling <review-bead-id> --capability reviewer --name review-<builder-name> \
-      --spec .legio/specs/<builder-bead-id>.md --parent $OVERSTORY_AGENT_NAME \
+      --spec .legio/specs/<builder-bead-id>.md --parent $LEGIO_AGENT_NAME \
       --depth <current+1>
     legio mail send --to review-<builder-name> \
       --subject "Review: <builder-task>" \

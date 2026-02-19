@@ -16,7 +16,7 @@ import { DEFAULT_CONFIG } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import type { AgentManifest, LegioConfig } from "../types.ts";
 
-const OVERSTORY_DIR = ".legio";
+const LEGIO_DIR = ".legio";
 
 /**
  * Detect the project name from git or fall back to directory name.
@@ -429,7 +429,7 @@ CREATE TABLE IF NOT EXISTS sessions (
  * Auto-healed by legio prime on each session start.
  * Config files (config.yaml, agent-manifest.json, hooks.json) remain tracked.
  */
-export const OVERSTORY_GITIGNORE = `# Wildcard+whitelist: ignore everything, whitelist tracked files
+export const LEGIO_GITIGNORE = `# Wildcard+whitelist: ignore everything, whitelist tracked files
 # Auto-healed by legio prime on each session start
 *
 !.gitignore
@@ -446,7 +446,7 @@ export const OVERSTORY_GITIGNORE = `# Wildcard+whitelist: ignore everything, whi
  */
 export async function writeLegioGitignore(legioPath: string): Promise<void> {
 	const gitignorePath = join(legioPath, ".gitignore");
-	await Bun.write(gitignorePath, OVERSTORY_GITIGNORE);
+	await Bun.write(gitignorePath, LEGIO_GITIGNORE);
 }
 
 /**
@@ -479,7 +479,7 @@ export async function initCommand(args: string[]): Promise<void> {
 
 	const force = args.includes("--force");
 	const projectRoot = process.cwd();
-	const legioPath = join(projectRoot, OVERSTORY_DIR);
+	const legioPath = join(projectRoot, LEGIO_DIR);
 
 	// 0. Verify we're inside a git repository
 	const gitCheck = Bun.spawn(["git", "rev-parse", "--is-inside-work-tree"], {
@@ -515,12 +515,12 @@ export async function initCommand(args: string[]): Promise<void> {
 
 	// 3. Create directory structure
 	const dirs = [
-		OVERSTORY_DIR,
-		join(OVERSTORY_DIR, "agents"),
-		join(OVERSTORY_DIR, "agent-defs"),
-		join(OVERSTORY_DIR, "worktrees"),
-		join(OVERSTORY_DIR, "specs"),
-		join(OVERSTORY_DIR, "logs"),
+		LEGIO_DIR,
+		join(LEGIO_DIR, "agents"),
+		join(LEGIO_DIR, "agent-defs"),
+		join(LEGIO_DIR, "worktrees"),
+		join(LEGIO_DIR, "specs"),
+		join(LEGIO_DIR, "logs"),
 	];
 
 	for (const dir of dirs) {
@@ -537,7 +537,7 @@ export async function initCommand(args: string[]): Promise<void> {
 		const source = Bun.file(join(legioAgentsDir, fileName));
 		const content = await source.text();
 		await Bun.write(join(agentDefsTarget, fileName), content);
-		printCreated(`${OVERSTORY_DIR}/agent-defs/${fileName}`);
+		printCreated(`${LEGIO_DIR}/agent-defs/${fileName}`);
 	}
 
 	// 4. Write config.yaml
@@ -549,29 +549,29 @@ export async function initCommand(args: string[]): Promise<void> {
 	const configYaml = serializeConfigToYaml(config);
 	const configPath = join(legioPath, "config.yaml");
 	await Bun.write(configPath, configYaml);
-	printCreated(`${OVERSTORY_DIR}/config.yaml`);
+	printCreated(`${LEGIO_DIR}/config.yaml`);
 
 	// 5. Write agent-manifest.json
 	const manifest = buildAgentManifest();
 	const manifestPath = join(legioPath, "agent-manifest.json");
 	await Bun.write(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
-	printCreated(`${OVERSTORY_DIR}/agent-manifest.json`);
+	printCreated(`${LEGIO_DIR}/agent-manifest.json`);
 
 	// 6. Write hooks.json
 	const hooksContent = buildHooksJson();
 	const hooksPath = join(legioPath, "hooks.json");
 	await Bun.write(hooksPath, hooksContent);
-	printCreated(`${OVERSTORY_DIR}/hooks.json`);
+	printCreated(`${LEGIO_DIR}/hooks.json`);
 
 	// 7. Write .legio/.gitignore for runtime state
 	await writeLegioGitignore(legioPath);
-	printCreated(`${OVERSTORY_DIR}/.gitignore`);
+	printCreated(`${LEGIO_DIR}/.gitignore`);
 
 	// 8. Migrate existing SQLite databases on --force reinit
 	if (force) {
 		const migrated = await migrateExistingDatabases(legioPath);
 		for (const dbName of migrated) {
-			process.stdout.write(`  \u2713 Migrated ${OVERSTORY_DIR}/${dbName} (schema validated)\n`);
+			process.stdout.write(`  \u2713 Migrated ${LEGIO_DIR}/${dbName} (schema validated)\n`);
 		}
 	}
 

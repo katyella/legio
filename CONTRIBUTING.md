@@ -151,7 +151,7 @@ Prefix with `fix:`, `feat:`, or `docs:` when the category is clear. Plain descri
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/jayminwest/legio/issues) for bug reports and feature requests. For security vulnerabilities, see [SECURITY.md](SECURITY.md).
+Use [GitHub Issues](https://github.com/katyella/legio/issues) for bug reports and feature requests. For security vulnerabilities, see [SECURITY.md](SECURITY.md).
 
 ## License
 
