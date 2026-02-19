@@ -688,6 +688,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						onKeyDown=${(e) => {
 							if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
 								e.preventDefault();
+								if (!bodyVal.trim()) return;
 								handleSend();
 							}
 						}}
