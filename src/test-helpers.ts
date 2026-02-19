@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,7 +27,7 @@ async function getTemplateRepo(): Promise<string> {
 
 	const dir = await mkdtemp(join(tmpdir(), "legio-template-"));
 	await runGitInDir(dir, ["init", "-b", "main"]);
-	await Bun.write(join(dir, ".gitkeep"), "");
+	await writeFile(join(dir, ".gitkeep"), "");
 	await runGitInDir(dir, ["add", ".gitkeep"]);
 	await runGitInDir(dir, ["commit", "-m", "initial commit"]);
 
@@ -77,7 +78,7 @@ export async function commitFile(
 	const { mkdir } = await import("node:fs/promises");
 	await mkdir(parentDir, { recursive: true });
 
-	await Bun.write(fullPath, content);
+	await writeFile(fullPath, content);
 	await runGitInDir(repoDir, ["add", filePath]);
 	await runGitInDir(repoDir, ["commit", "-m", message ?? `add ${filePath}`]);
 }
@@ -104,23 +105,25 @@ export async function cleanupTempDir(dir: string): Promise<void> {
  * Run a git command in the given directory. Throws on non-zero exit.
  * Passes GIT_AUTHOR/COMMITTER env vars so repos don't need per-repo config.
  */
-export async function runGitInDir(cwd: string, args: string[]): Promise<string> {
-	const proc = Bun.spawn(["git", ...args], {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
-		env: { ...process.env, ...GIT_TEST_ENV },
+export function runGitInDir(cwd: string, args: string[]): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const proc = spawn("git", args, {
+			cwd,
+			env: { ...process.env, ...GIT_TEST_ENV },
+		});
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+		proc.on("close", (code) => {
+			const stdout = Buffer.concat(stdoutChunks).toString();
+			const stderr = Buffer.concat(stderrChunks).toString();
+			if (code !== 0) {
+				reject(new Error(`git ${args.join(" ")} failed (exit ${code}): ${stderr.trim()}`));
+			} else {
+				resolve(stdout);
+			}
+		});
+		proc.on("error", reject);
 	});
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	if (exitCode !== 0) {
-		throw new Error(`git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
-	}
-
-	return stdout;
 }

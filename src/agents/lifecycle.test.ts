@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cleanupTempDir } from "../test-helpers.ts";
@@ -45,9 +45,9 @@ describe("lifecycle", () => {
 		expect(checkpoint?.sessionId).toBe("session-100");
 
 		// Handoffs file was created
-		const handoffsFile = Bun.file(join(agentsDir, "builder-1", "handoffs.json"));
-		expect(await handoffsFile.exists()).toBe(true);
-		const handoffs = JSON.parse(await handoffsFile.text()) as SessionHandoff[];
+		const handoffsPath = join(agentsDir, "builder-1", "handoffs.json");
+		expect(await access(handoffsPath).then(() => true).catch(() => false)).toBe(true);
+		const handoffs = JSON.parse(await readFile(handoffsPath, "utf-8")) as SessionHandoff[];
 		expect(handoffs).toHaveLength(1);
 	});
 
@@ -102,8 +102,9 @@ describe("lifecycle", () => {
 		expect(checkpoint).toBeNull();
 
 		// Handoff should have toSessionId set
-		const handoffsFile = Bun.file(join(agentsDir, "builder-3", "handoffs.json"));
-		const handoffs = JSON.parse(await handoffsFile.text()) as SessionHandoff[];
+		const handoffs = JSON.parse(
+			await readFile(join(agentsDir, "builder-3", "handoffs.json"), "utf-8"),
+		) as SessionHandoff[];
 		expect(handoffs).toHaveLength(1);
 		const first = handoffs[0];
 		expect(first).toBeDefined();
@@ -146,8 +147,9 @@ describe("lifecycle", () => {
 			mulchDomains: [],
 		});
 
-		const handoffsFile = Bun.file(join(agentsDir, "builder-4", "handoffs.json"));
-		const handoffs = JSON.parse(await handoffsFile.text()) as SessionHandoff[];
+		const handoffs = JSON.parse(
+			await readFile(join(agentsDir, "builder-4", "handoffs.json"), "utf-8"),
+		) as SessionHandoff[];
 		expect(handoffs).toHaveLength(2);
 
 		const first = handoffs[0];

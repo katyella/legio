@@ -1,4 +1,4 @@
-import { mkdir, unlink } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LifecycleError } from "../errors.ts";
 import type { SessionCheckpoint } from "../types.ts";
@@ -29,7 +29,7 @@ export async function saveCheckpoint(
 	}
 
 	try {
-		await Bun.write(filePath, `${JSON.stringify(checkpoint, null, "\t")}\n`);
+		await writeFile(filePath, `${JSON.stringify(checkpoint, null, "\t")}\n`);
 	} catch (err) {
 		throw new LifecycleError(`Failed to write checkpoint: ${filePath}`, {
 			agentName: checkpoint.agentName,
@@ -50,8 +50,7 @@ export async function loadCheckpoint(
 	agentName: string,
 ): Promise<SessionCheckpoint | null> {
 	const filePath = join(agentsDir, agentName, CHECKPOINT_FILENAME);
-	const file = Bun.file(filePath);
-	const exists = await file.exists();
+	const exists = await access(filePath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		return null;
@@ -59,7 +58,7 @@ export async function loadCheckpoint(
 
 	let text: string;
 	try {
-		text = await file.text();
+		text = await readFile(filePath, "utf-8");
 	} catch (err) {
 		throw new LifecycleError(`Failed to read checkpoint: ${filePath}`, {
 			agentName,

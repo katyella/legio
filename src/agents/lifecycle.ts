@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LifecycleError } from "../errors.ts";
 import type { SessionCheckpoint, SessionHandoff } from "../types.ts";
@@ -12,15 +12,14 @@ const HANDOFFS_FILENAME = "handoffs.json";
  */
 async function loadHandoffs(agentsDir: string, agentName: string): Promise<SessionHandoff[]> {
 	const filePath = join(agentsDir, agentName, HANDOFFS_FILENAME);
-	const file = Bun.file(filePath);
-	const exists = await file.exists();
+	const exists = await access(filePath).then(() => true).catch(() => false);
 
 	if (!exists) {
 		return [];
 	}
 
 	try {
-		const text = await file.text();
+		const text = await readFile(filePath, "utf-8");
 		return JSON.parse(text) as SessionHandoff[];
 	} catch (err) {
 		throw new LifecycleError(`Failed to read handoffs: ${filePath}`, {
@@ -51,7 +50,7 @@ async function writeHandoffs(
 	}
 
 	try {
-		await Bun.write(filePath, `${JSON.stringify(handoffs, null, "\t")}\n`);
+		await writeFile(filePath, `${JSON.stringify(handoffs, null, "\t")}\n`);
 	} catch (err) {
 		throw new LifecycleError(`Failed to write handoffs: ${filePath}`, {
 			agentName,

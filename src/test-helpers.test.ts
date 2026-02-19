@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "vitest";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { cleanupTempDir, commitFile, createTempGitRepo } from "./test-helpers.ts";
+import { cleanupTempDir, commitFile, createTempGitRepo, runGitInDir } from "./test-helpers.ts";
 
 describe("createTempGitRepo", () => {
 	let repoDir: string | undefined;
@@ -23,28 +23,15 @@ describe("createTempGitRepo", () => {
 	test("repo has at least one commit (HEAD exists)", async () => {
 		repoDir = await createTempGitRepo();
 
-		const proc = Bun.spawn(["git", "rev-parse", "HEAD"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const exitCode = await proc.exited;
-
-		expect(exitCode).toBe(0);
+		// runGitInDir throws on non-zero exit, resolving means exit code was 0
+		await runGitInDir(repoDir, ["rev-parse", "HEAD"]);
+		expect(true).toBe(true);
 	});
 
 	test("repo is on a branch (not detached HEAD)", async () => {
 		repoDir = await createTempGitRepo();
 
-		const proc = Bun.spawn(["git", "symbolic-ref", "HEAD"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		const exitCode = await proc.exited;
-
-		expect(exitCode).toBe(0);
+		const stdout = await runGitInDir(repoDir, ["symbolic-ref", "HEAD"]);
 		expect(stdout.trim()).toMatch(/^refs\/heads\//);
 	});
 });
@@ -69,14 +56,7 @@ describe("commitFile", () => {
 		expect(content).toBe("world");
 
 		// Git log shows the commit
-		const proc = Bun.spawn(["git", "log", "--oneline"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		await proc.exited;
-
+		const stdout = await runGitInDir(repoDir, ["log", "--oneline"]);
 		expect(stdout).toContain("add hello.txt");
 	});
 
@@ -93,14 +73,7 @@ describe("commitFile", () => {
 
 		await commitFile(repoDir, "readme.md", "# Hi", "docs: add readme");
 
-		const proc = Bun.spawn(["git", "log", "--oneline", "-1"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		await proc.exited;
-
+		const stdout = await runGitInDir(repoDir, ["log", "--oneline", "-1"]);
 		expect(stdout).toContain("docs: add readme");
 	});
 });

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
@@ -31,7 +31,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "test-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const exists = await Bun.file(outputPath).exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -41,7 +41,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "my-builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		expect(content).toContain("my-builder");
 		expect(content).not.toContain("{{AGENT_NAME}}");
 	});
@@ -52,7 +52,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "scout-alpha");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 
 		// The template has {{AGENT_NAME}} in multiple hook commands
 		const occurrences = content.split("scout-alpha").length - 1;
@@ -66,7 +66,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "json-test-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed).toBeDefined();
 		expect(parsed.hooks).toBeDefined();
@@ -78,10 +78,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.SessionStart).toBeDefined();
-		expect(parsed.hooks.SessionStart).toBeArray();
+		expect(parsed.hooks.SessionStart).toBeInstanceOf(Array);
 		expect(parsed.hooks.SessionStart.length).toBeGreaterThan(0);
 	});
 
@@ -91,10 +91,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.UserPromptSubmit).toBeDefined();
-		expect(parsed.hooks.UserPromptSubmit).toBeArray();
+		expect(parsed.hooks.UserPromptSubmit).toBeInstanceOf(Array);
 	});
 
 	test("output contains PreToolUse hook", async () => {
@@ -103,10 +103,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.PreToolUse).toBeDefined();
-		expect(parsed.hooks.PreToolUse).toBeArray();
+		expect(parsed.hooks.PreToolUse).toBeInstanceOf(Array);
 	});
 
 	test("output contains PostToolUse hook", async () => {
@@ -115,10 +115,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.PostToolUse).toBeDefined();
-		expect(parsed.hooks.PostToolUse).toBeArray();
+		expect(parsed.hooks.PostToolUse).toBeInstanceOf(Array);
 	});
 
 	test("output contains Stop hook", async () => {
@@ -127,10 +127,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.Stop).toBeDefined();
-		expect(parsed.hooks.Stop).toBeArray();
+		expect(parsed.hooks.Stop).toBeInstanceOf(Array);
 	});
 
 	test("PostToolUse hook includes debounced mail check entry", async () => {
@@ -139,7 +139,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "mail-check-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const postToolUse = parsed.hooks.PostToolUse;
 		// PostToolUse should have 2 entries: logger and mail check
@@ -159,10 +159,10 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "hook-check");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		expect(parsed.hooks.PreCompact).toBeDefined();
-		expect(parsed.hooks.PreCompact).toBeArray();
+		expect(parsed.hooks.PreCompact).toBeInstanceOf(Array);
 	});
 
 	test("all six hook types are present", async () => {
@@ -171,7 +171,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "all-hooks");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const hookTypes = Object.keys(parsed.hooks);
 		expect(hookTypes).toContain("SessionStart");
@@ -189,7 +189,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "prime-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const sessionStart = parsed.hooks.SessionStart[0];
 		expect(sessionStart.hooks[0].type).toBe("command");
@@ -203,7 +203,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "mail-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const userPrompt = parsed.hooks.UserPromptSubmit[0];
 		expect(userPrompt.hooks[0].command).toContain(
@@ -218,7 +218,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "compact-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preCompact = parsed.hooks.PreCompact[0];
 		expect(preCompact.hooks[0].type).toBe("command");
@@ -234,7 +234,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "stdin-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 
 		// Find the base PreToolUse hook (matcher == "")
@@ -253,7 +253,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "stdin-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const postToolUse = parsed.hooks.PostToolUse[0];
 		expect(postToolUse.hooks[0].command).toContain("--stdin");
@@ -268,7 +268,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "mail-debounce-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const postToolUse = parsed.hooks.PostToolUse[0];
 
@@ -289,7 +289,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "stdin-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const stop = parsed.hooks.Stop[0];
 		expect(stop.hooks[0].command).toContain("--stdin");
@@ -304,7 +304,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "learn-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const stop = parsed.hooks.Stop[0];
 		expect(stop.hooks.length).toBe(2);
@@ -318,7 +318,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "no-sed-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 
 		// PreToolUse base hook should not contain sed or --tool-name
@@ -341,7 +341,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "test-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const exists = await Bun.file(outputPath).exists();
+		const exists = await access(outputPath).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -350,11 +350,11 @@ describe("deployHooks", () => {
 		const claudeDir = join(worktreePath, ".claude");
 		const { mkdir } = await import("node:fs/promises");
 		await mkdir(claudeDir, { recursive: true });
-		await Bun.write(join(claudeDir, "settings.local.json"), '{"old": true}');
+		await writeFile(join(claudeDir, "settings.local.json"), '{"old": true}');
 
 		await deployHooks(worktreePath, "new-agent");
 
-		const content = await Bun.file(join(claudeDir, "settings.local.json")).text();
+		const content = await readFile(join(claudeDir, "settings.local.json"), "utf-8");
 		expect(content).toContain("new-agent");
 		expect(content).not.toContain('"old"');
 	});
@@ -365,7 +365,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "agent-with-dashes-123");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		expect(content).toContain("agent-with-dashes-123");
 		// Should still be valid JSON
 		const parsed = JSON.parse(content);
@@ -382,7 +382,7 @@ describe("deployHooks", () => {
 
 		// Successful deployment proves the template exists
 		await deployHooks(worktreePath, "template-exists");
-		const exists = await Bun.file(join(worktreePath, ".claude", "settings.local.json")).exists();
+		const exists = await access(join(worktreePath, ".claude", "settings.local.json")).then(() => true).catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -418,7 +418,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "scout-agent", "scout");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -452,7 +452,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "reviewer-agent", "reviewer");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -472,7 +472,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "lead-agent", "lead");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -496,7 +496,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "builder-agent", "builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -539,7 +539,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "merger-agent", "merger");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -559,7 +559,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "default-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -579,7 +579,7 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "order-agent", "scout");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -798,9 +798,7 @@ describe("getDangerGuards", () => {
 
 	test("all capabilities get Bash danger guards in deployed hooks", async () => {
 		const capabilities = ["builder", "scout", "reviewer", "lead", "merger"];
-		const tempDir = await import("node:fs/promises").then((fs) =>
-			fs.mkdtemp(join(require("node:os").tmpdir(), "legio-danger-test-")),
-		);
+		const tempDir = await mkdtemp(join(tmpdir(), "legio-danger-test-"));
 
 		try {
 			for (const cap of capabilities) {
@@ -808,7 +806,7 @@ describe("getDangerGuards", () => {
 				await deployHooks(worktreePath, `${cap}-agent`, cap);
 
 				const outputPath = join(worktreePath, ".claude", "settings.local.json");
-				const content = await Bun.file(outputPath).text();
+				const content = await readFile(outputPath, "utf-8");
 				const parsed = JSON.parse(content);
 				const preToolUse = parsed.hooks.PreToolUse;
 
@@ -817,23 +815,19 @@ describe("getDangerGuards", () => {
 				expect(bashGuard.hooks[0].command).toContain(`legio/${cap}-agent/`);
 			}
 		} finally {
-			await import("node:fs/promises").then((fs) =>
-				fs.rm(tempDir, { recursive: true, force: true }),
-			);
+			await rm(tempDir, { recursive: true, force: true });
 		}
 	});
 
 	test("guard ordering: path boundary → danger → capability in scout", async () => {
-		const tempDir = await import("node:fs/promises").then((fs) =>
-			fs.mkdtemp(join(require("node:os").tmpdir(), "legio-order-test-")),
-		);
+		const tempDir = await mkdtemp(join(tmpdir(), "legio-order-test-"));
 
 		try {
 			const worktreePath = join(tempDir, "scout-order-wt");
 			await deployHooks(worktreePath, "scout-order", "scout");
 
 			const outputPath = join(worktreePath, ".claude", "settings.local.json");
-			const content = await Bun.file(outputPath).text();
+			const content = await readFile(outputPath, "utf-8");
 			const parsed = JSON.parse(content);
 			const preToolUse = parsed.hooks.PreToolUse;
 
@@ -852,9 +846,7 @@ describe("getDangerGuards", () => {
 			expect(pathBoundaryWriteIdx).toBeLessThan(bashDangerIdx);
 			expect(bashDangerIdx).toBeLessThan(writeBlockIdx);
 		} finally {
-			await import("node:fs/promises").then((fs) =>
-				fs.rm(tempDir, { recursive: true, force: true }),
-			);
+			await rm(tempDir, { recursive: true, force: true });
 		}
 	});
 });
@@ -1004,10 +996,11 @@ describe("structural enforcement integration", () => {
 		await deployHooks(scoutPath, "scout-1", "scout");
 		await deployHooks(builderPath, "builder-1", "builder");
 
-		const scoutContent = await Bun.file(join(scoutPath, ".claude", "settings.local.json")).text();
-		const builderContent = await Bun.file(
+		const scoutContent = await readFile(join(scoutPath, ".claude", "settings.local.json"), "utf-8");
+		const builderContent = await readFile(
 			join(builderPath, ".claude", "settings.local.json"),
-		).text();
+			"utf-8",
+		);
 
 		const scoutPreToolUse = JSON.parse(scoutContent).hooks.PreToolUse;
 		const builderPreToolUse = JSON.parse(builderContent).hooks.PreToolUse;
@@ -1023,10 +1016,11 @@ describe("structural enforcement integration", () => {
 		await deployHooks(scoutPath, "scout-1", "scout");
 		await deployHooks(reviewerPath, "reviewer-1", "reviewer");
 
-		const scoutContent = await Bun.file(join(scoutPath, ".claude", "settings.local.json")).text();
-		const reviewerContent = await Bun.file(
+		const scoutContent = await readFile(join(scoutPath, ".claude", "settings.local.json"), "utf-8");
+		const reviewerContent = await readFile(
 			join(reviewerPath, ".claude", "settings.local.json"),
-		).text();
+			"utf-8",
+		);
 
 		const scoutPreToolUse = JSON.parse(scoutContent).hooks.PreToolUse;
 		const reviewerPreToolUse = JSON.parse(reviewerContent).hooks.PreToolUse;
@@ -1047,8 +1041,8 @@ describe("structural enforcement integration", () => {
 		await deployHooks(leadPath, "lead-1", "lead");
 		await deployHooks(scoutPath, "scout-1", "scout");
 
-		const leadContent = await Bun.file(join(leadPath, ".claude", "settings.local.json")).text();
-		const scoutContent = await Bun.file(join(scoutPath, ".claude", "settings.local.json")).text();
+		const leadContent = await readFile(join(leadPath, ".claude", "settings.local.json"), "utf-8");
+		const scoutContent = await readFile(join(scoutPath, ".claude", "settings.local.json"), "utf-8");
 
 		const leadPreToolUse = JSON.parse(leadContent).hooks.PreToolUse;
 		const scoutPreToolUse = JSON.parse(scoutContent).hooks.PreToolUse;
@@ -1069,10 +1063,11 @@ describe("structural enforcement integration", () => {
 		await deployHooks(builderPath, "builder-1", "builder");
 		await deployHooks(mergerPath, "merger-1", "merger");
 
-		const builderContent = await Bun.file(
+		const builderContent = await readFile(
 			join(builderPath, ".claude", "settings.local.json"),
-		).text();
-		const mergerContent = await Bun.file(join(mergerPath, ".claude", "settings.local.json")).text();
+			"utf-8",
+		);
+		const mergerContent = await readFile(join(mergerPath, ".claude", "settings.local.json"), "utf-8");
 
 		const builderPreToolUse = JSON.parse(builderContent).hooks.PreToolUse;
 		const mergerPreToolUse = JSON.parse(mergerContent).hooks.PreToolUse;
@@ -1101,7 +1096,7 @@ describe("structural enforcement integration", () => {
 			const wt = join(tempDir, `${cap}-wt`);
 			await deployHooks(wt, `${cap}-agent`, cap);
 
-			const content = await Bun.file(join(wt, ".claude", "settings.local.json")).text();
+			const content = await readFile(join(wt, ".claude", "settings.local.json"), "utf-8");
 			expect(() => JSON.parse(content)).not.toThrow();
 		}
 	});
@@ -1112,7 +1107,7 @@ describe("structural enforcement integration", () => {
 		await deployHooks(worktreePath, "coordinator-agent", "coordinator");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1132,7 +1127,7 @@ describe("structural enforcement integration", () => {
 		await deployHooks(worktreePath, "scout-git", "scout");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1153,8 +1148,8 @@ describe("structural enforcement integration", () => {
 		await deployHooks(coordPath, "coord-1", "coordinator");
 		await deployHooks(supPath, "sup-1", "supervisor");
 
-		const coordContent = await Bun.file(join(coordPath, ".claude", "settings.local.json")).text();
-		const supContent = await Bun.file(join(supPath, ".claude", "settings.local.json")).text();
+		const coordContent = await readFile(join(coordPath, ".claude", "settings.local.json"), "utf-8");
+		const supContent = await readFile(join(supPath, ".claude", "settings.local.json"), "utf-8");
 
 		const coordPreToolUse = JSON.parse(coordContent).hooks.PreToolUse;
 		const supPreToolUse = JSON.parse(supContent).hooks.PreToolUse;
@@ -1174,7 +1169,7 @@ describe("structural enforcement integration", () => {
 		await deployHooks(worktreePath, "env-guard-agent", "builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 
 		// All hook types from the template should include ENV_GUARD
@@ -1211,7 +1206,7 @@ describe("structural enforcement integration", () => {
 		await deployHooks(worktreePath, "coordinator-env", "coordinator");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse as Array<{
 			matcher: string;
@@ -1247,7 +1242,7 @@ describe("structural enforcement integration", () => {
 			const wt = join(tempDir, `${cap}-task-wt`);
 			await deployHooks(wt, `${cap}-agent`, cap);
 
-			const content = await Bun.file(join(wt, ".claude", "settings.local.json")).text();
+			const content = await readFile(join(wt, ".claude", "settings.local.json"), "utf-8");
 			const parsed = JSON.parse(content);
 			const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1272,7 +1267,7 @@ describe("structural enforcement integration", () => {
 			const wt = join(tempDir, `${cap}-path-wt`);
 			await deployHooks(wt, `${cap}-agent`, cap);
 
-			const content = await Bun.file(join(wt, ".claude", "settings.local.json")).text();
+			const content = await readFile(join(wt, ".claude", "settings.local.json"), "utf-8");
 			const parsed = JSON.parse(content);
 			const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1303,7 +1298,7 @@ describe("structural enforcement integration", () => {
 		await deployHooks(worktreePath, "order-path-agent", "builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1568,7 +1563,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "builder-bp", "builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1590,7 +1585,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "merger-bp", "merger");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1609,7 +1604,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "scout-bp", "scout");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1629,7 +1624,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "reviewer-bp", "reviewer");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1646,7 +1641,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "lead-bp", "lead");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1663,7 +1658,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "builder-order", "builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
@@ -1692,7 +1687,7 @@ describe("bash path boundary integration", () => {
 		await deployHooks(worktreePath, "default-bp");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const content = await Bun.file(outputPath).text();
+		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 

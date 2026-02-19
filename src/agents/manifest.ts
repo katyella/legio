@@ -1,3 +1,4 @@
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AgentError } from "../errors.ts";
 import type { AgentDefinition, AgentManifest, LegioConfig } from "../types.ts";
@@ -120,8 +121,7 @@ export function createManifestLoader(manifestPath: string, agentBaseDir: string)
 
 	return {
 		async load(): Promise<AgentManifest> {
-			const file = Bun.file(manifestPath);
-			const exists = await file.exists();
+			const exists = await access(manifestPath).then(() => true).catch(() => false);
 
 			if (!exists) {
 				throw new AgentError(`Agent manifest not found: ${manifestPath}`);
@@ -129,7 +129,7 @@ export function createManifestLoader(manifestPath: string, agentBaseDir: string)
 
 			let text: string;
 			try {
-				text = await file.text();
+				text = await readFile(manifestPath, "utf-8");
 			} catch (err) {
 				throw new AgentError(`Failed to read agent manifest: ${manifestPath}`, {
 					cause: err instanceof Error ? err : undefined,
@@ -177,8 +177,7 @@ export function createManifestLoader(manifestPath: string, agentBaseDir: string)
 			// Verify that all referenced .md files exist
 			for (const [name, def] of Object.entries(agents)) {
 				const filePath = join(agentBaseDir, def.file);
-				const mdFile = Bun.file(filePath);
-				const mdExists = await mdFile.exists();
+				const mdExists = await access(filePath).then(() => true).catch(() => false);
 
 				if (!mdExists) {
 					throw new AgentError(
