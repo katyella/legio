@@ -17,6 +17,7 @@ import { connectWS } from './lib/ws.js';
 import { fetchJson } from './lib/api.js';
 import { timeAgo } from './lib/utils.js';
 import { AutopilotView } from './views/autopilot.js';
+import { SetupView } from './views/setup.js';
 
 // ===== Initial Data Fetch =====
 
@@ -134,6 +135,9 @@ function Layout({ view, param }) {
 
 function App() {
 	const [route, setRoute] = useState(() => parseHash(location.hash));
+	const [setupChecked, setSetupChecked] = useState(false);
+	const [isInitialized, setIsInitialized] = useState(true); // assume initialized until checked
+	const [setupStatus, setSetupStatus] = useState(null);
 
 	useEffect(() => {
 		const onHashChange = () => setRoute(parseHash(location.hash));
@@ -142,9 +146,25 @@ function App() {
 	}, []);
 
 	useEffect(() => {
-		initData();
 		connectWS();
+		fetchJson('/api/setup/status')
+			.then(data => {
+				setIsInitialized(data.initialized);
+				setSetupStatus(data);
+				setSetupChecked(true);
+				if (data.initialized) initData(); // Only load data if initialized
+			})
+			.catch(() => {
+				setSetupChecked(true);
+				initData(); // Fallback: try loading data anyway
+			});
 	}, []);
+
+	if (!setupChecked) return html`<div class="flex items-center justify-center h-screen bg-[#0f0f0f] text-[#555] text-sm">Loading...</div>`;
+	if (!isInitialized) return html`<${SetupView}
+		onInitialized=${() => { setIsInitialized(true); initData(); }}
+		projectRoot=${setupStatus?.projectRoot ?? null}
+	/>`;
 
 	return html`<${Layout} view=${route.view} param=${route.param} />`;
 }
