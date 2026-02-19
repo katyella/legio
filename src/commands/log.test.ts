@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Test helper: create a file accessor compatible with the Bun.file() API. */
-function bunFile(path: string) {
+/** Test helper: create a file accessor for checking existence and reading content. */
+function fileAccessor(path: string) {
 	return {
 		exists: () => access(path).then(() => true, () => false),
 		text: () => readFile(path, "utf-8"),
@@ -163,7 +163,7 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "test-scout");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = bunFile(markerPath);
+		const markerFile = fileAccessor(markerPath);
 
 		expect(await markerFile.exists()).toBe(true);
 
@@ -187,7 +187,7 @@ describe("logCommand", () => {
 		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
 
 		// Check for events.ndjson file
-		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
+		const eventsFile = fileAccessor(join(sessionDir, "events.ndjson"));
 		expect(await eventsFile.exists()).toBe(true);
 	});
 
@@ -216,7 +216,7 @@ describe("logCommand", () => {
 		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
 
 		// Events file should contain both tool-start and tool-end events
-		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
+		const eventsFile = fileAccessor(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		expect(eventsContent).toContain("tool.start");
@@ -267,14 +267,14 @@ describe("logCommand", () => {
 		const markerPath = join(logsDir, ".current-session");
 
 		// Verify marker exists before session-end
-		let markerFile = bunFile(markerPath);
+		let markerFile = fileAccessor(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		// Now end the session
 		await logCommand(["session-end", "--agent", "test-cleanup"]);
 
-		// Marker should be removed - need to create a new Bun.file reference
-		markerFile = bunFile(markerPath);
+		// Marker should be removed - need to create a new file accessor reference
+		markerFile = fileAccessor(markerPath);
 		expect(await markerFile.exists()).toBe(false);
 	});
 
@@ -530,7 +530,7 @@ describe("logCommand", () => {
 			expect(run?.completedAt).toBeNull();
 
 			// Verify: current-run.txt still exists
-			const currentRunFile = bunFile(join(tempDir, ".legio", "current-run.txt"));
+			const currentRunFile = fileAccessor(join(tempDir, ".legio", "current-run.txt"));
 			expect(await currentRunFile.exists()).toBe(true);
 		});
 
@@ -617,7 +617,7 @@ describe("logCommand", () => {
 
 		// Verify the pending-nudge marker was written for the coordinator
 		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
-		const markerFile = bunFile(markerPath);
+		const markerFile = fileAccessor(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		const marker = JSON.parse(await markerFile.text());
@@ -657,7 +657,7 @@ describe("logCommand", () => {
 
 		// Verify no pending-nudge marker was written
 		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
-		const markerFile = bunFile(markerPath);
+		const markerFile = fileAccessor(markerPath);
 		expect(await markerFile.exists()).toBe(false);
 	});
 
@@ -754,7 +754,7 @@ describe("logCommand", () => {
 		// Verify log was created
 		const logsDir = join(tempDir, ".legio", "logs", "default-tool-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = bunFile(markerPath);
+		const markerFile = fileAccessor(markerPath);
 
 		expect(await markerFile.exists()).toBe(true);
 
@@ -762,7 +762,7 @@ describe("logCommand", () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 
 		const sessionDir = (await markerFile.text()).trim();
-		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
+		const eventsFile = fileAccessor(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		// Should contain "unknown" as the tool name
@@ -781,7 +781,7 @@ describe("logCommand", () => {
 		const logsDir = join(tempDir, ".legio", "logs", "default-end-agent");
 		const markerPath = join(logsDir, ".current-session");
 		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
-		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
+		const eventsFile = fileAccessor(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		expect(eventsContent).toContain("unknown");
@@ -862,7 +862,7 @@ describe("logCommand", () => {
 
 		// Verify no mail.db was created (mulch auto-record was skipped)
 		const mailDbPath = join(tempDir, ".legio", "mail.db");
-		const mailDbFile = bunFile(mailDbPath);
+		const mailDbFile = fileAccessor(mailDbPath);
 		expect(await mailDbFile.exists()).toBe(false);
 
 		// Coordinator should remain working (persistent agent)
@@ -963,7 +963,7 @@ describe("logCommand", () => {
 
 		// All records failed, so no domains recorded and no mail sent
 		expect(result).toEqual([]);
-		const mailFile = bunFile(mailDbPath);
+		const mailFile = fileAccessor(mailDbPath);
 		expect(await mailFile.exists()).toBe(false);
 	});
 
@@ -1165,8 +1165,8 @@ describe("logCommand", () => {
 /**
  * Tests for `legio log` with --stdin flag.
  *
- * Uses Bun.spawn to invoke the log command as a subprocess with piped stdin,
- * because Bun.stdin.stream() cannot be injected in-process.
+ * Uses child_process.spawn to invoke the log command as a subprocess with piped stdin,
+ * because stdin.stream() cannot be injected in-process.
  * Real filesystem + real SQLite for EventStore verification.
  */
 describe("logCommand --stdin integration", () => {
@@ -1375,11 +1375,11 @@ try {
 		// Verify legacy log files exist
 		const logsDir = join(tempDir, ".legio", "logs", "legacy-compat-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = bunFile(markerPath);
+		const markerFile = fileAccessor(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		const sessionDir = (await markerFile.text()).trim();
-		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
+		const eventsFile = fileAccessor(join(sessionDir, "events.ndjson"));
 		expect(await eventsFile.exists()).toBe(true);
 
 		const eventsContent = await eventsFile.text();
@@ -1393,8 +1393,8 @@ try {
 		const scriptContent = `
 import { logCommand } from "${join(import.meta.dir, "log.ts").replace(/\\/g, "/")}";
 import { spawn } from "node:child_process";
-/** Test helper: create a file accessor compatible with the Bun.file() API. */
-function bunFile(path: string) {
+/** Test helper: create a file accessor for checking existence and reading content. */
+function fileAccessor(path: string) {
 	return {
 		exists: () => access(path).then(() => true, () => false),
 		text: () => readFile(path, "utf-8"),

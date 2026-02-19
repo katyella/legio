@@ -1,6 +1,19 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readdir, stat } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+
+/** Test helper: check whether a file exists using Node.js fs/promises. */
+async function fileExists(path: string): Promise<boolean> {
+	return access(path).then(
+		() => true,
+		() => false,
+	);
+}
+
+/** Test helper: read a file as UTF-8 text using Node.js fs/promises. */
+function fileText(path: string): Promise<string> {
+	return readFile(path, "utf-8");
+}
 import { createManifestLoader } from "../agents/manifest.ts";
 import { writeOverlay } from "../agents/overlay.ts";
 import { initCommand } from "../commands/init.ts";
@@ -57,25 +70,21 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		const legioDir = join(tempDir, ".legio");
 
 		// config.yaml exists
-		const configFile = Bun.file(join(legioDir, "config.yaml"));
-		expect(await configFile.exists()).toBe(true);
+		expect(await fileExists(join(legioDir, "config.yaml"))).toBe(true);
 
 		// agent-manifest.json exists and is valid JSON
-		const manifestFile = Bun.file(join(legioDir, "agent-manifest.json"));
-		expect(await manifestFile.exists()).toBe(true);
-		const manifestText = await manifestFile.text();
+		expect(await fileExists(join(legioDir, "agent-manifest.json"))).toBe(true);
+		const manifestText = await fileText(join(legioDir, "agent-manifest.json"));
 		const manifestJson = JSON.parse(manifestText);
 		expect(manifestJson).toBeDefined();
 		expect(manifestJson.version).toBe("1.0");
 		expect(typeof manifestJson.agents).toBe("object");
 
 		// hooks.json exists
-		const hooksFile = Bun.file(join(legioDir, "hooks.json"));
-		expect(await hooksFile.exists()).toBe(true);
+		expect(await fileExists(join(legioDir, "hooks.json"))).toBe(true);
 
 		// .gitignore exists
-		const gitignoreFile = Bun.file(join(legioDir, ".gitignore"));
-		expect(await gitignoreFile.exists()).toBe(true);
+		expect(await fileExists(join(legioDir, ".gitignore"))).toBe(true);
 
 		// agent-defs/ contains all 8 agent definition files
 		const agentDefsDir = join(legioDir, "agent-defs");
@@ -133,10 +142,9 @@ describe("E2E: init→sling lifecycle on external project", () => {
 
 		// Each agent has a valid file reference
 		for (const [_name, def] of Object.entries(manifest.agents)) {
-			expect(def.file).toEndWith(".md");
+			expect(def.file).toMatch(/\.md$/);
 			// Verify the referenced .md file actually exists
-			const mdFile = Bun.file(join(agentDefsDir, def.file));
-			expect(await mdFile.exists()).toBe(true);
+			expect(await fileExists(join(agentDefsDir, def.file))).toBe(true);
 		}
 
 		// Validation returns no errors
@@ -170,7 +178,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		await initCommand([]);
 
 		const agentDefsDir = join(tempDir, ".legio", "agent-defs");
-		const baseDefinition = await Bun.file(join(agentDefsDir, "builder.md")).text();
+		const baseDefinition = await fileText(join(agentDefsDir, "builder.md"));
 
 		const overlayConfig: OverlayConfig = {
 			agentName: "test-agent",
@@ -196,10 +204,9 @@ describe("E2E: init→sling lifecycle on external project", () => {
 
 		// Verify the overlay was written
 		const overlayPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const overlayFile = Bun.file(overlayPath);
-		expect(await overlayFile.exists()).toBe(true);
+		expect(await fileExists(overlayPath)).toBe(true);
 
-		const content = await overlayFile.text();
+		const content = await fileText(overlayPath);
 
 		// Verify template placeholders were replaced
 		expect(content).toContain("test-agent");
@@ -238,7 +245,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		expect(lead?.canSpawn).toBe(true);
 
 		// Step 4: Generate overlay using a realistic config
-		const builderDef = await Bun.file(join(agentDefsDir, "builder.md")).text();
+		const builderDef = await fileText(join(agentDefsDir, "builder.md"));
 		const overlayConfig: OverlayConfig = {
 			agentName: "lifecycle-builder",
 			beadId: "lifecycle-001",
@@ -260,7 +267,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 
 		await writeOverlay(worktreePath, overlayConfig, tempDir);
 
-		const overlayContent = await Bun.file(join(worktreePath, ".claude", "CLAUDE.md")).text();
+		const overlayContent = await fileText(join(worktreePath, ".claude", "CLAUDE.md"));
 
 		// Verify all overlay fields rendered correctly
 		expect(overlayContent).toContain("lifecycle-builder");

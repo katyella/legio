@@ -6,7 +6,7 @@
  * mock.module() to avoid the process-global mock leak issue
  * (see mulch record mx-56558b).
  *
- * WHY DI instead of mock.module: mock.module() in bun:test is process-global
+ * WHY DI instead of mock.module: mock.module() in vitest/bun:test is process-global
  * and leaks across test files. The DI approach (same pattern as daemon.ts
  * _tmux/_triage/_nudge) ensures mocks are scoped to each test invocation.
  */
@@ -292,7 +292,7 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 }
 
 /** Build default CoordinatorDeps with fake tmux, watchdog, and monitor.
- * Always injects fakes for all three to prevent real Bun.spawn(["legio", ...])
+ * Always injects fakes for all three to prevent real child_process.spawn(["legio", ...])
  * calls in tests (legio CLI is not available in CI). */
 function makeDeps(
 	sessionAliveMap: Record<string, boolean> = {},
@@ -470,7 +470,7 @@ describe("startCoordinator", () => {
 		// Deploy a coordinator agent definition
 		const agentDefsDir = join(legioDir, "agent-defs");
 		await mkdir(agentDefsDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(agentDefsDir, "coordinator.md"),
 			"# Coordinator Agent\n\nYou are the coordinator.\n",
 		);

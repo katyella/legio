@@ -13,8 +13,9 @@
 import { accessSync, constants as fsConstants, readFileSync } from "node:fs";
 import { vi } from "vitest";
 
-// Stub the global Bun object for modules not yet migrated from Bun APIs (e.g., config.ts).
-// Only provides what is needed by routes under test; not a full Bun implementation.
+// Stub the global Bun object because production modules (e.g., config.ts) still use Bun APIs
+// and have not yet been migrated to Node.js equivalents. This shim provides only the subset
+// of the Bun API surface required by the code paths exercised by these route tests.
 vi.stubGlobal("Bun", {
 	file: (path: string) => ({
 		exists: async () => {
