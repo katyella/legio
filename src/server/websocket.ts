@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ServerWebSocket } from "bun";
+import type { RawData, WebSocket } from "ws";
 import { createMailStore } from "../mail/store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
@@ -25,9 +25,9 @@ interface Snapshot {
 }
 
 export interface WebSocketManager {
-	addClient(ws: ServerWebSocket<WebSocketData>): void;
-	removeClient(ws: ServerWebSocket<WebSocketData>): void;
-	handleMessage(ws: ServerWebSocket<WebSocketData>, message: string | Buffer): void;
+	addClient(ws: WebSocket): void;
+	removeClient(ws: WebSocket): void;
+	handleMessage(ws: WebSocket, message: RawData): void;
 	startPolling(): void;
 	stopPolling(): void;
 }
@@ -36,7 +36,7 @@ export function createWebSocketManager(
 	legioDir: string,
 	getAutopilotState?: () => AutopilotState | null,
 ): WebSocketManager {
-	const clients = new Set<ServerWebSocket<WebSocketData>>();
+	const clients = new Set<WebSocket>();
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let lastSnapshot = "";
 
@@ -155,7 +155,15 @@ export function createWebSocketManager(
 
 		handleMessage(ws, message) {
 			try {
-				const parsed = JSON.parse(typeof message === "string" ? message : message.toString());
+				const msgStr =
+					typeof message === "string"
+						? message
+						: Buffer.isBuffer(message)
+							? message.toString("utf8")
+							: Array.isArray(message)
+								? Buffer.concat(message as Buffer[]).toString("utf8")
+								: Buffer.from(message as ArrayBuffer).toString("utf8");
+				const parsed = JSON.parse(msgStr);
 				if (parsed && typeof parsed === "object" && "type" in parsed && parsed.type === "refresh") {
 					const snapshot = gatherSnapshot();
 					ws.send(JSON.stringify(snapshot));

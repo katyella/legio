@@ -28,17 +28,22 @@
 	},
 	"scripts": {
 		"test": "bun test src/",
+		"test:server": "vitest run src/server/",
 		"test:e2e": "playwright test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
 		"typecheck": "tsc --noEmit",
 		"version:bump": "bun scripts/version-bump.ts"
 	},
-	"dependencies": {},
+	"dependencies": {
+		"ws": "^8.18.0"
+	},
 	"devDependencies": {
 		"@types/bun": "latest",
 		"@playwright/test": "^1.49.0",
 		"typescript": "^5.9.0",
-		"@biomejs/biome": "^2.3.15"
+		"@biomejs/biome": "^2.3.15",
+		"@types/ws": "^8.5.13",
+		"vitest": "^3.0.0"
 	}
 }
