@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LegioConfig } from "../types.ts";
@@ -275,7 +275,6 @@ describe("checkDatabases", () => {
 
 	test("fails when database is corrupted", () => {
 		// Create a corrupt database file (just write garbage)
-		const { writeFileSync } = require("node:fs");
 		writeFileSync(join(tempDir, "mail.db"), "not a valid sqlite database");
 
 		const checks = checkDatabases(mockConfig, tempDir) as DoctorCheck[];

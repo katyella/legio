@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
@@ -12,8 +13,8 @@ export const checkVersion: DoctorCheckFn = async (
 	const checks: DoctorCheck[] = [];
 
 	// Determine legio tool root (not the target project)
-	// import.meta.dir is src/doctor/, so go up two levels to repo root
-	const toolRoot = join(import.meta.dir, "..", "..");
+	// import.meta.dirname is src/doctor/, so go up two levels to repo root
+	const toolRoot = join(import.meta.dirname, "..", "..");
 
 	// Check 1: version-current (read package.json)
 	const versionCheck = await checkCurrentVersion(toolRoot);
@@ -32,7 +33,7 @@ export const checkVersion: DoctorCheckFn = async (
 async function checkCurrentVersion(toolRoot: string): Promise<DoctorCheck> {
 	try {
 		const packageJsonPath = join(toolRoot, "package.json");
-		const packageJson = (await Bun.file(packageJsonPath).json()) as { version?: string };
+		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as { version?: string };
 
 		if (!packageJson.version) {
 			return {
@@ -67,7 +68,7 @@ async function checkVersionSync(toolRoot: string): Promise<DoctorCheck> {
 	try {
 		// Read package.json version
 		const packageJsonPath = join(toolRoot, "package.json");
-		const packageJson = (await Bun.file(packageJsonPath).json()) as { version?: string };
+		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as { version?: string };
 		const pkgVersion = packageJson.version;
 
 		if (!pkgVersion) {
@@ -81,7 +82,7 @@ async function checkVersionSync(toolRoot: string): Promise<DoctorCheck> {
 
 		// Read src/index.ts and extract VERSION constant
 		const indexPath = join(toolRoot, "src", "index.ts");
-		const indexContent = await Bun.file(indexPath).text();
+		const indexContent = await readFile(indexPath, "utf-8");
 
 		// Regex to find: const VERSION = "x.y.z"
 		const versionRegex = /const\s+VERSION\s*=\s*["']([^"']+)["']/;

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { StoredEvent, ToolStats } from "../types.ts";
 import { analyzeSessionInsights, inferDomain } from "./analyzer.ts";
 

@@ -5,8 +5,8 @@
  * No mocks needed -- all operations are cheap and local.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LegioConfig } from "../types.ts";
@@ -91,13 +91,13 @@ describe("checkStructure", () => {
 		await mkdir(join(legioDir, "specs"), { recursive: true });
 		await mkdir(join(legioDir, "logs"), { recursive: true });
 
-		await Bun.write(join(legioDir, "config.yaml"), "project:\n  name: test\n");
-		await Bun.write(
+		await writeFile(join(legioDir, "config.yaml"), "project:\n  name: test\n");
+		await writeFile(
 			join(legioDir, "agent-manifest.json"),
 			JSON.stringify({ version: "1.0", agents: {}, capabilityIndex: {} }, null, 2),
 		);
-		await Bun.write(join(legioDir, "hooks.json"), "{}");
-		await Bun.write(
+		await writeFile(join(legioDir, "hooks.json"), "{}");
+		await writeFile(
 			join(legioDir, ".gitignore"),
 			`# Wildcard+whitelist: ignore everything, whitelist tracked files
 # Auto-healed by legio prime on each session start
@@ -132,7 +132,7 @@ describe("checkStructure", () => {
 
 	test("reports missing required files", async () => {
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(join(legioDir, "config.yaml"), "project:\n  name: test\n");
+		await writeFile(join(legioDir, "config.yaml"), "project:\n  name: test\n");
 		// Missing: agent-manifest.json, hooks.json, .gitignore
 
 		const checks = await checkStructure(mockConfig, legioDir);
@@ -165,7 +165,7 @@ describe("checkStructure", () => {
 
 	test("warns when .gitignore is missing entries", async () => {
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(legioDir, ".gitignore"),
 			`# Incomplete gitignore
 *
@@ -203,8 +203,8 @@ describe("checkStructure", () => {
 			capabilityIndex: {},
 		};
 
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
 		// Missing: builder.md
 
 		const checks = await checkStructure(mockConfig, legioDir);
@@ -235,9 +235,9 @@ describe("checkStructure", () => {
 			capabilityIndex: {},
 		};
 
-		await Bun.write(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
-		await Bun.write(join(legioDir, "agent-defs", "scout.md"), "# Scout");
-		await Bun.write(join(legioDir, "agent-defs", "builder.md"), "# Builder");
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+		await writeFile(join(legioDir, "agent-defs", "builder.md"), "# Builder");
 
 		const checks = await checkStructure(mockConfig, legioDir);
 
@@ -248,7 +248,7 @@ describe("checkStructure", () => {
 
 	test("fails gracefully when manifest is malformed", async () => {
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(join(legioDir, "agent-manifest.json"), "invalid json{");
+		await writeFile(join(legioDir, "agent-manifest.json"), "invalid json{");
 
 		const checks = await checkStructure(mockConfig, legioDir);
 
@@ -261,8 +261,8 @@ describe("checkStructure", () => {
 
 	test("detects leftover temp files", async () => {
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(join(legioDir, "config.yaml.tmp"), "temp");
-		await Bun.write(join(legioDir, "old-file.bak"), "backup");
+		await writeFile(join(legioDir, "config.yaml.tmp"), "temp");
+		await writeFile(join(legioDir, "old-file.bak"), "backup");
 
 		const checks = await checkStructure(mockConfig, legioDir);
 
@@ -276,7 +276,7 @@ describe("checkStructure", () => {
 
 	test("passes when no temp files exist", async () => {
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(join(legioDir, "config.yaml"), "project:\n  name: test\n");
+		await writeFile(join(legioDir, "config.yaml"), "project:\n  name: test\n");
 
 		const checks = await checkStructure(mockConfig, legioDir);
 

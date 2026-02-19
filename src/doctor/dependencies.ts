@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
 /**
@@ -49,14 +50,20 @@ async function checkBdCgoSupport(): Promise<DoctorCheck> {
 	let tempDir: string | undefined;
 	try {
 		tempDir = await mkdtemp(join(tmpdir(), "legio-bd-cgo-"));
-		const proc = Bun.spawn(["bd", "status"], {
-			cwd: tempDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-
-		const exitCode = await proc.exited;
-		const stderr = await new Response(proc.stderr).text();
+		const { exitCode, stderr } = await new Promise<{ exitCode: number; stderr: string }>(
+			(resolve, reject) => {
+				const proc = spawn("bd", ["status"], {
+					cwd: tempDir,
+					stdio: ["ignore", "ignore", "pipe"],
+				});
+				let stderr = "";
+				proc.stderr?.on("data", (chunk: Buffer) => {
+					stderr += chunk.toString();
+				});
+				proc.on("close", (code) => resolve({ exitCode: code ?? 1, stderr }));
+				proc.on("error", reject);
+			},
+		);
 
 		if (stderr.includes("without CGO support")) {
 			return {
@@ -116,15 +123,25 @@ async function checkTool(
 	required: boolean,
 ): Promise<DoctorCheck> {
 	try {
-		const proc = Bun.spawn([name, versionFlag], {
-			stdout: "pipe",
-			stderr: "pipe",
+		const { exitCode, stdout, stderr } = await new Promise<{
+			exitCode: number;
+			stdout: string;
+			stderr: string;
+		}>((resolve, reject) => {
+			const proc = spawn(name, [versionFlag], { stdio: ["ignore", "pipe", "pipe"] });
+			let stdout = "";
+			let stderr = "";
+			proc.stdout?.on("data", (chunk: Buffer) => {
+				stdout += chunk.toString();
+			});
+			proc.stderr?.on("data", (chunk: Buffer) => {
+				stderr += chunk.toString();
+			});
+			proc.on("close", (code) => resolve({ exitCode: code ?? 1, stdout, stderr }));
+			proc.on("error", reject);
 		});
 
-		const exitCode = await proc.exited;
-
 		if (exitCode === 0) {
-			const stdout = await new Response(proc.stdout).text();
 			const version = stdout.split("\n")[0]?.trim() || "version unknown";
 
 			return {
@@ -137,7 +154,6 @@ async function checkTool(
 		}
 
 		// Non-zero exit code
-		const stderr = await new Response(proc.stderr).text();
 		return {
 			name: `${name} availability`,
 			category: "dependencies",

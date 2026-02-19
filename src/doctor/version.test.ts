@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { LegioConfig } from "../types.ts";
 import { checkVersion } from "./version.ts";
 
@@ -52,7 +52,7 @@ describe("checkVersion", () => {
 	test("returns checks with category version", async () => {
 		const checks = await checkVersion(mockConfig, "/tmp/.legio");
 
-		expect(checks).toBeArray();
+		expect(Array.isArray(checks)).toBe(true);
 		expect(checks.length).toBeGreaterThan(0);
 
 		for (const check of checks) {
@@ -65,7 +65,7 @@ describe("checkVersion", () => {
 
 		const versionCheck = checks.find((c) => c.name === "version-current");
 		expect(versionCheck).toBeDefined();
-		expect(versionCheck?.status).toBeOneOf(["pass", "warn", "fail"]);
+		expect(["pass", "warn", "fail"]).toContain(versionCheck?.status);
 		expect(versionCheck?.message).toContain("legio");
 	});
 
@@ -74,7 +74,7 @@ describe("checkVersion", () => {
 
 		const syncCheck = checks.find((c) => c.name === "package-json-sync");
 		expect(syncCheck).toBeDefined();
-		expect(syncCheck?.status).toBeOneOf(["pass", "warn", "fail"]);
+		expect(["pass", "warn", "fail"]).toContain(syncCheck?.status);
 	});
 
 	test("version-current check reports version string", async () => {
@@ -121,7 +121,7 @@ describe("checkVersion", () => {
 			expect(["pass", "warn", "fail"]).toContain(check.status);
 
 			if (check.details !== undefined) {
-				expect(check.details).toBeArray();
+				expect(Array.isArray(check.details)).toBe(true);
 			}
 
 			if (check.fixable !== undefined) {

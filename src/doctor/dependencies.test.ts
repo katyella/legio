@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import type { LegioConfig } from "../types.ts";
 import { checkDependencies } from "./dependencies.ts";
 
@@ -52,7 +52,7 @@ describe("checkDependencies", () => {
 	test("returns checks for all required tools", async () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
 
-		expect(checks).toBeArray();
+		expect(Array.isArray(checks)).toBe(true);
 		expect(checks.length).toBeGreaterThanOrEqual(5);
 
 		// Verify we have checks for each required tool
@@ -91,7 +91,7 @@ describe("checkDependencies", () => {
 			expect(typeof check.message).toBe("string");
 
 			if (check.details !== undefined) {
-				expect(check.details).toBeArray();
+				expect(Array.isArray(check.details)).toBe(true);
 			}
 
 			if (check.fixable !== undefined) {
@@ -116,7 +116,7 @@ describe("checkDependencies", () => {
 
 		// Passing checks should include version info
 		if (gitCheck?.status === "pass") {
-			expect(gitCheck.details).toBeArray();
+			expect(Array.isArray(gitCheck.details)).toBe(true);
 			expect(gitCheck.details?.length).toBeGreaterThan(0);
 		}
 	});
@@ -128,7 +128,7 @@ describe("checkDependencies", () => {
 
 		for (const check of passingChecks) {
 			expect(check.details).toBeDefined();
-			expect(check.details).toBeArray();
+			expect(Array.isArray(check.details)).toBe(true);
 			expect(check.details?.length).toBeGreaterThan(0);
 
 			// Version string should not be empty

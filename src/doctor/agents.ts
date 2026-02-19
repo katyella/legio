@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentManifest } from "../types.ts";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
@@ -28,7 +28,7 @@ async function loadAndValidateManifest(
 	const errors: string[] = [];
 
 	try {
-		const content = await Bun.file(manifestPath).text();
+		const content = await readFile(manifestPath, "utf-8");
 		const raw = JSON.parse(content) as {
 			version?: unknown;
 			agents?: unknown;
@@ -321,7 +321,7 @@ export const checkAgents: DoctorCheckFn = async (_config, legioDir): Promise<Doc
 
 			// Parse and validate identity
 			try {
-				const content = await Bun.file(identityPath).text();
+				const content = await readFile(identityPath, "utf-8");
 				const identity = parseIdentityYaml(content);
 
 				if (!identity.name) {

@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMergeQueue } from "../merge/queue.ts";
@@ -102,8 +102,7 @@ describe("checkMergeQueue", () => {
 	test("fails when db is corrupted", () => {
 		const dbPath = join(tempDir, "merge-queue.db");
 		// Write invalid data to db file
-		const fs = require("node:fs");
-		fs.writeFileSync(dbPath, "not a valid sqlite database");
+		writeFileSync(dbPath, "not a valid sqlite database");
 
 		const checks = checkMergeQueue(mockConfig, tempDir) as DoctorCheck[];
 

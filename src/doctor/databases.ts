@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
@@ -108,7 +109,9 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 			db = new Database(dbPath);
 
 			// Check WAL mode is enabled
-			const journalMode = db.prepare<{ journal_mode: string }, []>("PRAGMA journal_mode").get();
+			const journalMode = db.prepare("PRAGMA journal_mode").get() as
+				| { journal_mode: string }
+				| undefined;
 			const walEnabled = journalMode?.journal_mode?.toLowerCase() === "wal";
 
 			// Check for required tables
@@ -117,10 +120,10 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 
 			for (const tableName of dbSpec.tables) {
 				const tableExists = db
-					.prepare<{ count: number }, [string]>(
+					.prepare(
 						"SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name=?",
 					)
-					.get(tableName);
+					.get(tableName) as { count: number } | undefined;
 
 				if (!tableExists || tableExists.count === 0) {
 					missingTables.push(tableName);
@@ -131,7 +134,9 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 				const requiredCols =
 					dbSpec.requiredColumns[tableName as keyof typeof dbSpec.requiredColumns];
 				if (requiredCols) {
-					const columns = db.prepare<{ name: string }, []>(`PRAGMA table_info(${tableName})`).all();
+					const columns = db
+						.prepare(`PRAGMA table_info(${tableName})`)
+						.all() as Array<{ name: string }>;
 					const existingCols = new Set(columns.map((c) => c.name));
 
 					for (const reqCol of requiredCols) {
@@ -207,12 +212,3 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 	return checks;
 };
 
-/** Helper to check if file exists (synchronous). */
-function existsSync(path: string): boolean {
-	try {
-		const { existsSync } = require("node:fs");
-		return existsSync(path);
-	} catch {
-		return false;
-	}
-}

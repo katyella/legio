@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
@@ -59,7 +59,7 @@ async function checkNDJSON(filePath: string): Promise<string[]> {
 	const errors: string[] = [];
 
 	try {
-		const content = await Bun.file(filePath).text();
+		const content = await readFile(filePath, "utf-8");
 		const lines = content.split("\n").filter((line) => line.trim() !== "");
 
 		for (let i = 0; i < lines.length; i++) {
@@ -86,7 +86,7 @@ async function checkOrphanedToolEvents(filePath: string): Promise<string[]> {
 	const orphans: string[] = [];
 
 	try {
-		const content = await Bun.file(filePath).text();
+		const content = await readFile(filePath, "utf-8");
 		const lines = content.split("\n").filter((line) => line.trim() !== "");
 
 		const startEvents = new Set<string>();
