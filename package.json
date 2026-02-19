@@ -27,7 +27,7 @@
 		"legio": "./src/index.ts"
 	},
 	"scripts": {
-		"test": "bun test src/",
+		"test": "bunx vitest run src/test-helpers.test.ts src/worktree/manager.test.ts src/worktree/tmux.test.ts && bun test src/agents src/autopilot src/beads src/commands src/config.test.ts src/doctor src/e2e src/events src/insights src/logging src/mail src/merge src/metrics src/mulch src/server src/sessions src/watchdog",
 		"test:e2e": "playwright test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
@@ -36,9 +36,10 @@
 	},
 	"dependencies": {},
 	"devDependencies": {
-		"@types/bun": "latest",
+		"@biomejs/biome": "^2.3.15",
 		"@playwright/test": "^1.49.0",
+		"@types/bun": "latest",
 		"typescript": "^5.9.0",
-		"@biomejs/biome": "^2.3.15"
+		"vitest": "^4.0.18"
 	}
 }

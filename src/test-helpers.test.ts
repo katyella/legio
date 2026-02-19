@@ -1,8 +1,30 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, commitFile, createTempGitRepo } from "./test-helpers.ts";
+
+/**
+ * Run a git command in a directory and return stdout. Throws on non-zero exit.
+ */
+async function runGit(cwd: string, args: string[]): Promise<{ stdout: string; exitCode: number }> {
+	return new Promise((resolve, reject) => {
+		const proc = spawn("git", args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const stdoutChunks: Buffer[] = [];
+		proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+		proc.on("error", reject);
+		proc.on("close", (code) => {
+			resolve({
+				stdout: Buffer.concat(stdoutChunks).toString(),
+				exitCode: code ?? 1,
+			});
+		});
+	});
+}
 
 describe("createTempGitRepo", () => {
 	let repoDir: string | undefined;
@@ -23,12 +45,7 @@ describe("createTempGitRepo", () => {
 	test("repo has at least one commit (HEAD exists)", async () => {
 		repoDir = await createTempGitRepo();
 
-		const proc = Bun.spawn(["git", "rev-parse", "HEAD"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const exitCode = await proc.exited;
+		const { exitCode } = await runGit(repoDir, ["rev-parse", "HEAD"]);
 
 		expect(exitCode).toBe(0);
 	});
@@ -36,13 +53,7 @@ describe("createTempGitRepo", () => {
 	test("repo is on a branch (not detached HEAD)", async () => {
 		repoDir = await createTempGitRepo();
 
-		const proc = Bun.spawn(["git", "symbolic-ref", "HEAD"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		const exitCode = await proc.exited;
+		const { stdout, exitCode } = await runGit(repoDir, ["symbolic-ref", "HEAD"]);
 
 		expect(exitCode).toBe(0);
 		expect(stdout.trim()).toMatch(/^refs\/heads\//);
@@ -69,13 +80,7 @@ describe("commitFile", () => {
 		expect(content).toBe("world");
 
 		// Git log shows the commit
-		const proc = Bun.spawn(["git", "log", "--oneline"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		await proc.exited;
+		const { stdout } = await runGit(repoDir, ["log", "--oneline"]);
 
 		expect(stdout).toContain("add hello.txt");
 	});
@@ -93,13 +98,7 @@ describe("commitFile", () => {
 
 		await commitFile(repoDir, "readme.md", "# Hi", "docs: add readme");
 
-		const proc = Bun.spawn(["git", "log", "--oneline", "-1"], {
-			cwd: repoDir,
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const stdout = await new Response(proc.stdout).text();
-		await proc.exited;
+		const { stdout } = await runGit(repoDir, ["log", "--oneline", "-1"]);
 
 		expect(stdout).toContain("docs: add readme");
 	});

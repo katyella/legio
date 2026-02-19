@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { WorktreeError } from "../errors.ts";
 import {
 	cleanupTempDir,
@@ -16,23 +17,27 @@ import { createWorktree, listWorktrees, removeWorktree } from "./manager.ts";
  * Run a git command in a directory and return stdout. Throws on non-zero exit.
  */
 async function git(cwd: string, args: string[]): Promise<string> {
-	const proc = Bun.spawn(["git", ...args], {
-		cwd,
-		stdout: "pipe",
-		stderr: "pipe",
+	return new Promise((resolve, reject) => {
+		const proc = spawn("git", args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout.on("data", (data: Buffer) => stdoutChunks.push(data));
+		proc.stderr.on("data", (data: Buffer) => stderrChunks.push(data));
+		proc.on("error", reject);
+		proc.on("close", (code) => {
+			const stdout = Buffer.concat(stdoutChunks).toString();
+			const stderr = Buffer.concat(stderrChunks).toString();
+			if (code !== 0) {
+				reject(new Error(`git ${args.join(" ")} failed (exit ${code}): ${stderr.trim()}`));
+			} else {
+				resolve(stdout);
+			}
+		});
 	});
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
-
-	if (exitCode !== 0) {
-		throw new Error(`git ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
-	}
-
-	return stdout;
 }
 
 describe("createWorktree", () => {
@@ -317,7 +322,7 @@ describe("removeWorktree", () => {
 		});
 
 		// Create an untracked file in the worktree
-		await Bun.write(join(wtPath, "untracked.txt"), "some content");
+		await writeFile(join(wtPath, "untracked.txt"), "some content", "utf-8");
 
 		// Without force, git worktree remove may fail on dirty worktrees.
 		// With force, it should succeed.

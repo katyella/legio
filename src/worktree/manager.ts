@@ -1,5 +1,34 @@
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { WorktreeError } from "../errors.ts";
+
+/**
+ * Run a shell command and capture its output.
+ */
+async function runCommand(
+	cmd: string[],
+	cwd?: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+	const [command, ...args] = cmd;
+	if (!command) throw new Error("Empty command");
+	return new Promise((resolve, reject) => {
+		const proc = spawn(command, args, {
+			cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const chunks: { stdout: Buffer[]; stderr: Buffer[] } = { stdout: [], stderr: [] };
+		proc.stdout.on("data", (data: Buffer) => chunks.stdout.push(data));
+		proc.stderr.on("data", (data: Buffer) => chunks.stderr.push(data));
+		proc.on("error", reject);
+		proc.on("close", (code) => {
+			resolve({
+				stdout: Buffer.concat(chunks.stdout).toString(),
+				stderr: Buffer.concat(chunks.stderr).toString(),
+				exitCode: code ?? 1,
+			});
+		});
+	});
+}
 
 /**
  * Run a git command and return stdout. Throws WorktreeError on non-zero exit.
@@ -9,17 +38,7 @@ async function runGit(
 	args: string[],
 	context?: { worktreePath?: string; branchName?: string },
 ): Promise<string> {
-	const proc = Bun.spawn(["git", ...args], {
-		cwd: repoRoot,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited,
-	]);
+	const { stdout, stderr, exitCode } = await runCommand(["git", ...args], repoRoot);
 
 	if (exitCode !== 0) {
 		throw new WorktreeError(

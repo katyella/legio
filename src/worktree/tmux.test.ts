@@ -1,4 +1,8 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import type { ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AgentError } from "../errors.ts";
 import {
 	createSession,
@@ -13,59 +17,62 @@ import {
 } from "./tmux.ts";
 
 /**
- * tmux tests use Bun.spawn mocks — legitimate exception to "never mock what you can use for real".
+ * tmux tests use child_process mocks — legitimate exception to "never mock what you can use for real".
  * Real tmux operations would hijack the developer's session and are unavailable in CI.
  */
 
+vi.mock("node:child_process", () => ({
+	spawn: vi.fn(),
+}));
+
+const mockSpawn = vi.mocked(spawn);
+
 /**
- * Helper to create a mock Bun.spawn return value.
+ * Helper to create a mock ChildProcess return value.
  *
- * The actual code reads stdout/stderr via `new Response(proc.stdout).text()`
- * and `new Response(proc.stderr).text()`, so we need ReadableStreams.
+ * Creates an EventEmitter with stdout/stderr PassThrough streams that
+ * emit data and close events asynchronously via process.nextTick.
  */
-function mockSpawnResult(
-	stdout: string,
-	stderr: string,
-	exitCode: number,
-): {
-	stdout: ReadableStream<Uint8Array>;
-	stderr: ReadableStream<Uint8Array>;
-	exited: Promise<number>;
-	pid: number;
-} {
-	return {
-		stdout: new Response(stdout).body as ReadableStream<Uint8Array>,
-		stderr: new Response(stderr).body as ReadableStream<Uint8Array>,
-		exited: Promise.resolve(exitCode),
+function createMockProcess(stdout: string, stderr: string, exitCode: number): ChildProcess {
+	const proc = new EventEmitter();
+	const stdoutStream = new PassThrough();
+	const stderrStream = new PassThrough();
+	Object.assign(proc, {
+		stdout: stdoutStream,
+		stderr: stderrStream,
+		stdin: null,
 		pid: 12345,
-	};
+		kill: vi.fn(),
+	});
+	process.nextTick(() => {
+		if (stdout) stdoutStream.push(Buffer.from(stdout));
+		stdoutStream.push(null);
+		if (stderr) stderrStream.push(Buffer.from(stderr));
+		stderrStream.push(null);
+		proc.emit("close", exitCode);
+	});
+	return proc as unknown as ChildProcess;
 }
 
 describe("createSession", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("creates session and returns pane PID", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio — return a bin path
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
 			if (callCount === 2) {
 				// tmux new-session
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
 			// tmux list-panes -t legio-auth -F '#{pane_pid}'
-			return mockSpawnResult("42\n", "", 0);
+			return createMockProcess("42\n", "", 0);
 		});
 
 		const pid = await createSession(
@@ -79,70 +86,79 @@ describe("createSession", () => {
 
 	test("passes correct args to tmux new-session with PATH wrapping", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
 			if (callCount === 2) {
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
-			return mockSpawnResult("1234\n", "", 0);
+			return createMockProcess("1234\n", "", 0);
 		});
 
 		await createSession("my-session", "/work/dir", "echo hello");
 
 		// Call 0 is 'which legio', call 1 is 'tmux new-session'
-		const tmuxCallArgs = spawnSpy.mock.calls[1] as unknown[];
-		const cmd = tmuxCallArgs[0] as string[];
-		expect(cmd[0]).toBe("tmux");
-		expect(cmd[1]).toBe("new-session");
-		expect(cmd[3]).toBe("-s");
-		expect(cmd[4]).toBe("my-session");
-		expect(cmd[5]).toBe("-c");
-		expect(cmd[6]).toBe("/work/dir");
+		const tmuxCallArgs = mockSpawn.mock.calls[1] as unknown[];
+		const command = tmuxCallArgs[0] as string;
+		const args = tmuxCallArgs[1] as string[];
+		expect(command).toBe("tmux");
+		expect(args[0]).toBe("new-session");
+		expect(args[2]).toBe("-s");
+		expect(args[3]).toBe("my-session");
+		expect(args[4]).toBe("-c");
+		expect(args[5]).toBe("/work/dir");
 		// The command should be wrapped with PATH export
-		const wrappedCmd = cmd[7] as string;
+		const wrappedCmd = args[6] as string;
 		expect(wrappedCmd).toContain("echo hello");
 		expect(wrappedCmd).toContain("export PATH=");
 
-		const opts = tmuxCallArgs[1] as { cwd: string };
+		const opts = tmuxCallArgs[2] as { cwd: string };
 		expect(opts.cwd).toBe("/work/dir");
 	});
 
 	test("calls list-panes after creating to get pane PID", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
 			if (callCount === 2) {
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
-			return mockSpawnResult("7777\n", "", 0);
+			return createMockProcess("7777\n", "", 0);
 		});
 
 		await createSession("test-agent", "/tmp", "ls");
 
 		// 3 calls: which legio, tmux new-session, tmux list-panes
-		expect(spawnSpy).toHaveBeenCalledTimes(3);
-		const thirdCallArgs = spawnSpy.mock.calls[2] as unknown[];
-		const cmd = thirdCallArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "list-panes", "-t", "test-agent", "-F", "#{pane_pid}"]);
+		expect(mockSpawn).toHaveBeenCalledTimes(3);
+		const thirdCallArgs = mockSpawn.mock.calls[2] as unknown[];
+		const command = thirdCallArgs[0] as string;
+		const args = thirdCallArgs[1] as string[];
+		expect([command, ...args]).toEqual([
+			"tmux",
+			"list-panes",
+			"-t",
+			"test-agent",
+			"-F",
+			"#{pane_pid}",
+		]);
 	});
 
 	test("throws AgentError if session creation fails", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
-			return mockSpawnResult("", "duplicate session: my-session", 1);
+			return createMockProcess("", "duplicate session: my-session", 1);
 		});
 
 		await expect(createSession("my-session", "/tmp", "ls")).rejects.toThrow(AgentError);
@@ -150,18 +166,18 @@ describe("createSession", () => {
 
 	test("throws AgentError if list-panes fails after creation", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
 			if (callCount === 2) {
 				// new-session succeeds
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
 			// list-panes fails
-			return mockSpawnResult("", "error listing panes", 1);
+			return createMockProcess("", "error listing panes", 1);
 		});
 
 		await expect(createSession("my-session", "/tmp", "ls")).rejects.toThrow(AgentError);
@@ -169,17 +185,17 @@ describe("createSession", () => {
 
 	test("throws AgentError if pane PID output is empty", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
 			if (callCount === 2) {
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
 			// list-panes returns empty output
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
 
 		await expect(createSession("my-session", "/tmp", "ls")).rejects.toThrow(AgentError);
@@ -187,13 +203,13 @@ describe("createSession", () => {
 
 	test("AgentError includes session name context", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio
-				return mockSpawnResult("/usr/local/bin/legio\n", "", 0);
+				return createMockProcess("/usr/local/bin/legio\n", "", 0);
 			}
-			return mockSpawnResult("", "duplicate session: agent-foo", 1);
+			return createMockProcess("", "duplicate session: agent-foo", 1);
 		});
 
 		try {
@@ -209,46 +225,38 @@ describe("createSession", () => {
 
 	test("still creates session when which legio fails (uses fallback)", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// which legio fails
-				return mockSpawnResult("", "legio not found", 1);
+				return createMockProcess("", "legio not found", 1);
 			}
 			if (callCount === 2) {
 				// tmux new-session
-				return mockSpawnResult("", "", 0);
+				return createMockProcess("", "", 0);
 			}
 			// tmux list-panes
-			return mockSpawnResult("5555\n", "", 0);
+			return createMockProcess("5555\n", "", 0);
 		});
 
 		const pid = await createSession("fallback-agent", "/tmp", "echo test");
 		expect(pid).toBe(5555);
 
 		// The tmux command should contain the original command
-		const tmuxCallArgs = spawnSpy.mock.calls[1] as unknown[];
-		const cmd = tmuxCallArgs[0] as string[];
-		const tmuxCmd = cmd[7] as string;
+		const tmuxCallArgs = mockSpawn.mock.calls[1] as unknown[];
+		const args = tmuxCallArgs[1] as string[];
+		const tmuxCmd = args[6] as string;
 		expect(tmuxCmd).toContain("echo test");
 	});
 });
 
 describe("listSessions", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("parses session list output", async () => {
-		spawnSpy.mockImplementation(() =>
-			mockSpawnResult("legio-auth:42\nlegio-data:99\n", "", 0),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("legio-auth:42\nlegio-data:99\n", "", 0));
 
 		const sessions = await listSessions();
 
@@ -260,8 +268,8 @@ describe("listSessions", () => {
 	});
 
 	test("returns empty array when no server running", async () => {
-		spawnSpy.mockImplementation(() =>
-			mockSpawnResult("", "no server running on /tmp/tmux-501/default", 1),
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "no server running on /tmp/tmux-501/default", 1),
 		);
 
 		const sessions = await listSessions();
@@ -270,7 +278,7 @@ describe("listSessions", () => {
 	});
 
 	test("returns empty array when 'no sessions' in stderr", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "no sessions", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "no sessions", 1));
 
 		const sessions = await listSessions();
 
@@ -278,14 +286,14 @@ describe("listSessions", () => {
 	});
 
 	test("throws AgentError on other tmux failures", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "protocol version mismatch", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "protocol version mismatch", 1));
 
 		await expect(listSessions()).rejects.toThrow(AgentError);
 	});
 
 	test("skips malformed lines", async () => {
-		spawnSpy.mockImplementation(() =>
-			mockSpawnResult("valid-session:123\nmalformed-no-colon\n:no-name\n\n", "", 0),
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("valid-session:123\nmalformed-no-colon\n:no-name\n\n", "", 0),
 		);
 
 		const sessions = await listSessions();
@@ -296,41 +304,44 @@ describe("listSessions", () => {
 	});
 
 	test("passes correct args to tmux", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		await listSessions();
 
-		expect(spawnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "list-sessions", "-F", "#{session_name}:#{pid}"]);
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "list-sessions", "-F", "#{session_name}:#{pid}"]);
 	});
 });
 
 describe("getPanePid", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("returns PID from tmux display-message", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("42\n", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("42\n", "", 0));
 
 		const pid = await getPanePid("legio-auth");
 
 		expect(pid).toBe(42);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "display-message", "-p", "-t", "legio-auth", "#{pane_pid}"]);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual([
+			"tmux",
+			"display-message",
+			"-p",
+			"-t",
+			"legio-auth",
+			"#{pane_pid}",
+		]);
 	});
 
 	test("returns null when session does not exist", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "can't find session: gone", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "can't find session: gone", 1));
 
 		const pid = await getPanePid("gone");
 
@@ -338,7 +349,7 @@ describe("getPanePid", () => {
 	});
 
 	test("returns null when output is empty", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		const pid = await getPanePid("empty-output");
 
@@ -346,7 +357,7 @@ describe("getPanePid", () => {
 	});
 
 	test("returns null when output is not a number", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("not-a-pid\n", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("not-a-pid\n", "", 0));
 
 		const pid = await getPanePid("bad-output");
 
@@ -355,18 +366,12 @@ describe("getPanePid", () => {
 });
 
 describe("getDescendantPids", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("returns empty array when process has no children", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 1));
 
 		const pids = await getDescendantPids(100);
 
@@ -375,14 +380,14 @@ describe("getDescendantPids", () => {
 
 	test("returns direct children when they have no grandchildren", async () => {
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// pgrep -P 100 → children 200, 300
-				return mockSpawnResult("200\n300\n", "", 0);
+				return createMockProcess("200\n300\n", "", 0);
 			}
 			// pgrep -P 200 and pgrep -P 300 → no grandchildren
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const pids = await getDescendantPids(100);
@@ -394,22 +399,22 @@ describe("getDescendantPids", () => {
 		// Tree: 100 → 200 → 400
 		//             → 300
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// pgrep -P 100 → children 200, 300
-				return mockSpawnResult("200\n300\n", "", 0);
+				return createMockProcess("200\n300\n", "", 0);
 			}
 			if (callCount === 2) {
 				// pgrep -P 200 → child 400
-				return mockSpawnResult("400\n", "", 0);
+				return createMockProcess("400\n", "", 0);
 			}
 			if (callCount === 3) {
 				// pgrep -P 400 → no children
-				return mockSpawnResult("", "", 1);
+				return createMockProcess("", "", 1);
 			}
 			// pgrep -P 300 → no children
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const pids = await getDescendantPids(100);
@@ -421,22 +426,22 @@ describe("getDescendantPids", () => {
 	test("handles deeply nested tree", async () => {
 		// Tree: 1 → 2 → 3 → 4
 		let callCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			callCount++;
 			if (callCount === 1) {
 				// pgrep -P 1 → 2
-				return mockSpawnResult("2\n", "", 0);
+				return createMockProcess("2\n", "", 0);
 			}
 			if (callCount === 2) {
 				// pgrep -P 2 → 3
-				return mockSpawnResult("3\n", "", 0);
+				return createMockProcess("3\n", "", 0);
 			}
 			if (callCount === 3) {
 				// pgrep -P 3 → 4
-				return mockSpawnResult("4\n", "", 0);
+				return createMockProcess("4\n", "", 0);
 			}
 			// pgrep -P 4 → no children
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const pids = await getDescendantPids(1);
@@ -446,12 +451,11 @@ describe("getDescendantPids", () => {
 	});
 
 	test("skips non-numeric pgrep output lines", async () => {
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = (args[0] as string[])[2];
-			if (cmd === "100") {
-				return mockSpawnResult("200\nnot-a-pid\n300\n", "", 0);
+		mockSpawn.mockImplementation((_command: string, args: readonly string[]) => {
+			if (args[1] === "100") {
+				return createMockProcess("200\nnot-a-pid\n300\n", "", 0);
 			}
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const pids = await getDescendantPids(100);
@@ -473,23 +477,20 @@ describe("isProcessAlive", () => {
 });
 
 describe("killProcessTree", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-	let killSpy: ReturnType<typeof spyOn>;
+	let killSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-		killSpy = spyOn(process, "kill");
+		mockSpawn.mockReset();
+		killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
 	});
 
 	afterEach(() => {
-		spawnSpy.mockRestore();
 		killSpy.mockRestore();
 	});
 
 	test("sends SIGTERM to root when no descendants", async () => {
 		// pgrep -P 100 → no children
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 1));
-		killSpy.mockImplementation(() => true);
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 1));
 
 		await killProcessTree(100, 0);
 
@@ -499,18 +500,18 @@ describe("killProcessTree", () => {
 	test("sends SIGTERM deepest-first then SIGKILL survivors", async () => {
 		// Tree: 100 → 200 → 300
 		let pgrepCallCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			pgrepCallCount++;
 			if (pgrepCallCount === 1) {
 				// pgrep -P 100 → 200
-				return mockSpawnResult("200\n", "", 0);
+				return createMockProcess("200\n", "", 0);
 			}
 			if (pgrepCallCount === 2) {
 				// pgrep -P 200 → 300
-				return mockSpawnResult("300\n", "", 0);
+				return createMockProcess("300\n", "", 0);
 			}
 			// pgrep -P 300 → no children
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const signals: Array<{ pid: number; signal: string }> = [];
@@ -534,12 +535,12 @@ describe("killProcessTree", () => {
 	test("sends SIGKILL to survivors after grace period", async () => {
 		// Tree: 100 → 200 (no grandchildren)
 		let pgrepCallCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			pgrepCallCount++;
 			if (pgrepCallCount === 1) {
-				return mockSpawnResult("200\n", "", 0);
+				return createMockProcess("200\n", "", 0);
 			}
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const signals: Array<{ pid: number; signal: string | number }> = [];
@@ -560,16 +561,13 @@ describe("killProcessTree", () => {
 	});
 
 	test("skips SIGKILL for processes that died during grace period", async () => {
-		// No children
-		spawnSpy.mockImplementation(() => mockSpawnResult("200\n", "", 0));
-		// First call for pgrep children of 200
 		let pgrepCallCount = 0;
-		spawnSpy.mockImplementation(() => {
+		mockSpawn.mockImplementation(() => {
 			pgrepCallCount++;
 			if (pgrepCallCount === 1) {
-				return mockSpawnResult("200\n", "", 0);
+				return createMockProcess("200\n", "", 0);
 			}
-			return mockSpawnResult("", "", 1);
+			return createMockProcess("", "", 1);
 		});
 
 		const signals: Array<{ pid: number; signal: string | number }> = [];
@@ -591,7 +589,7 @@ describe("killProcessTree", () => {
 
 	test("silently handles SIGTERM errors for already-dead processes", async () => {
 		// No children
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 1));
 
 		killSpy.mockImplementation(() => {
 			throw new Error("ESRCH: No such process");
@@ -603,52 +601,40 @@ describe("killProcessTree", () => {
 });
 
 describe("killSession", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-	let killSpy: ReturnType<typeof spyOn>;
+	let killSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-		killSpy = spyOn(process, "kill");
+		mockSpawn.mockReset();
+		killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
 	});
 
 	afterEach(() => {
-		spawnSpy.mockRestore();
 		killSpy.mockRestore();
 	});
 
 	test("gets pane PID, kills process tree, then kills tmux session", async () => {
 		const cmds: string[][] = [];
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = args[0] as string[];
-			cmds.push(cmd);
+		mockSpawn.mockImplementation((command: string, args: readonly string[]) => {
+			cmds.push([command, ...args]);
 
-			if (cmd[0] === "tmux" && cmd[1] === "display-message") {
+			if (command === "tmux" && args[0] === "display-message") {
 				// getPanePid → returns PID 500
-				return mockSpawnResult("500\n", "", 0);
+				return createMockProcess("500\n", "", 0);
 			}
-			if (cmd[0] === "pgrep") {
+			if (command === "pgrep") {
 				// getDescendantPids → no children
-				return mockSpawnResult("", "", 1);
+				return createMockProcess("", "", 1);
 			}
-			if (cmd[0] === "tmux" && cmd[1] === "kill-session") {
-				return mockSpawnResult("", "", 0);
+			if (command === "tmux" && args[0] === "kill-session") {
+				return createMockProcess("", "", 0);
 			}
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
-
-		killSpy.mockImplementation(() => true);
 
 		await killSession("legio-auth");
 
 		// Should have called: tmux display-message, pgrep, tmux kill-session
-		expect(cmds[0]).toEqual([
-			"tmux",
-			"display-message",
-			"-p",
-			"-t",
-			"legio-auth",
-			"#{pane_pid}",
-		]);
+		expect(cmds[0]).toEqual(["tmux", "display-message", "-p", "-t", "legio-auth", "#{pane_pid}"]);
 		expect(cmds[1]).toEqual(["pgrep", "-P", "500"]);
 		const lastCmd = cmds[cmds.length - 1];
 		expect(lastCmd).toEqual(["tmux", "kill-session", "-t", "legio-auth"]);
@@ -659,18 +645,17 @@ describe("killSession", () => {
 
 	test("skips process cleanup when pane PID is not available", async () => {
 		const cmds: string[][] = [];
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = args[0] as string[];
-			cmds.push(cmd);
+		mockSpawn.mockImplementation((command: string, args: readonly string[]) => {
+			cmds.push([command, ...args]);
 
-			if (cmd[0] === "tmux" && cmd[1] === "display-message") {
+			if (command === "tmux" && args[0] === "display-message") {
 				// getPanePid → session not found
-				return mockSpawnResult("", "can't find session", 1);
+				return createMockProcess("", "can't find session", 1);
 			}
-			if (cmd[0] === "tmux" && cmd[1] === "kill-session") {
-				return mockSpawnResult("", "", 0);
+			if (command === "tmux" && args[0] === "kill-session") {
+				return createMockProcess("", "", 0);
 			}
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
 
 		await killSession("legio-auth");
@@ -684,52 +669,47 @@ describe("killSession", () => {
 	});
 
 	test("succeeds silently when session is already gone after process cleanup", async () => {
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = args[0] as string[];
-			if (cmd[0] === "tmux" && cmd[1] === "display-message") {
-				return mockSpawnResult("500\n", "", 0);
+		mockSpawn.mockImplementation((command: string, args: readonly string[]) => {
+			if (command === "tmux" && args[0] === "display-message") {
+				return createMockProcess("500\n", "", 0);
 			}
-			if (cmd[0] === "pgrep") {
-				return mockSpawnResult("", "", 1);
+			if (command === "pgrep") {
+				return createMockProcess("", "", 1);
 			}
-			if (cmd[0] === "tmux" && cmd[1] === "kill-session") {
+			if (command === "tmux" && args[0] === "kill-session") {
 				// Session already gone after process cleanup
-				return mockSpawnResult("", "can't find session: legio-auth", 1);
+				return createMockProcess("", "can't find session: legio-auth", 1);
 			}
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
-
-		killSpy.mockImplementation(() => true);
 
 		// Should not throw — session disappearing is expected
 		await killSession("legio-auth");
 	});
 
 	test("throws AgentError on unexpected tmux kill-session failure", async () => {
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = args[0] as string[];
-			if (cmd[0] === "tmux" && cmd[1] === "display-message") {
-				return mockSpawnResult("", "can't find session", 1);
+		mockSpawn.mockImplementation((command: string, args: readonly string[]) => {
+			if (command === "tmux" && args[0] === "display-message") {
+				return createMockProcess("", "can't find session", 1);
 			}
-			if (cmd[0] === "tmux" && cmd[1] === "kill-session") {
-				return mockSpawnResult("", "server exited unexpectedly", 1);
+			if (command === "tmux" && args[0] === "kill-session") {
+				return createMockProcess("", "server exited unexpectedly", 1);
 			}
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
 
 		await expect(killSession("broken-session")).rejects.toThrow(AgentError);
 	});
 
 	test("AgentError contains session name on failure", async () => {
-		spawnSpy.mockImplementation((...args: unknown[]) => {
-			const cmd = args[0] as string[];
-			if (cmd[0] === "tmux" && cmd[1] === "display-message") {
-				return mockSpawnResult("", "error", 1);
+		mockSpawn.mockImplementation((command: string, args: readonly string[]) => {
+			if (command === "tmux" && args[0] === "display-message") {
+				return createMockProcess("", "error", 1);
 			}
-			if (cmd[0] === "tmux" && cmd[1] === "kill-session") {
-				return mockSpawnResult("", "server exited unexpectedly", 1);
+			if (command === "tmux" && args[0] === "kill-session") {
+				return createMockProcess("", "server exited unexpectedly", 1);
 			}
-			return mockSpawnResult("", "", 0);
+			return createMockProcess("", "", 0);
 		});
 
 		try {
@@ -745,18 +725,12 @@ describe("killSession", () => {
 });
 
 describe("isSessionAlive", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("returns true when session exists (exit 0)", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		const alive = await isSessionAlive("legio-auth");
 
@@ -764,7 +738,7 @@ describe("isSessionAlive", () => {
 	});
 
 	test("returns false when session does not exist (non-zero exit)", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "can't find session: nonexistent", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "can't find session: nonexistent", 1));
 
 		const alive = await isSessionAlive("nonexistent");
 
@@ -772,48 +746,52 @@ describe("isSessionAlive", () => {
 	});
 
 	test("passes correct args to tmux has-session", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		await isSessionAlive("my-agent");
 
-		expect(spawnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "has-session", "-t", "my-agent"]);
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "has-session", "-t", "my-agent"]);
 	});
 });
 
 describe("sendKeys", () => {
-	let spawnSpy: ReturnType<typeof spyOn>;
-
 	beforeEach(() => {
-		spawnSpy = spyOn(Bun, "spawn");
-	});
-
-	afterEach(() => {
-		spawnSpy.mockRestore();
+		mockSpawn.mockReset();
 	});
 
 	test("passes correct args to tmux send-keys", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		await sendKeys("legio-auth", "echo hello world");
 
-		expect(spawnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "send-keys", "-t", "legio-auth", "echo hello world", "Enter"]);
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual([
+			"tmux",
+			"send-keys",
+			"-t",
+			"legio-auth",
+			"echo hello world",
+			"Enter",
+		]);
 	});
 
 	test("flattens newlines in keys to spaces", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		await sendKeys("legio-agent", "line1\nline2\nline3");
 
-		expect(spawnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual([
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual([
 			"tmux",
 			"send-keys",
 			"-t",
@@ -824,13 +802,13 @@ describe("sendKeys", () => {
 	});
 
 	test("throws AgentError on failure", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "session not found: dead-agent", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "session not found: dead-agent", 1));
 
 		await expect(sendKeys("dead-agent", "echo test")).rejects.toThrow(AgentError);
 	});
 
 	test("AgentError contains session name on failure", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "session not found: my-agent", 1));
+		mockSpawn.mockImplementation(() => createMockProcess("", "session not found: my-agent", 1));
 
 		try {
 			await sendKeys("my-agent", "test command");
@@ -844,13 +822,14 @@ describe("sendKeys", () => {
 	});
 
 	test("sends Enter with empty string (follow-up submission)", async () => {
-		spawnSpy.mockImplementation(() => mockSpawnResult("", "", 0));
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		await sendKeys("legio-agent", "");
 
-		expect(spawnSpy).toHaveBeenCalledTimes(1);
-		const callArgs = spawnSpy.mock.calls[0] as unknown[];
-		const cmd = callArgs[0] as string[];
-		expect(cmd).toEqual(["tmux", "send-keys", "-t", "legio-agent", "", "Enter"]);
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "send-keys", "-t", "legio-agent", "", "Enter"]);
 	});
 });
