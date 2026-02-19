@@ -333,6 +333,51 @@ export async function handleApiRequest(
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Setup — POST route (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/setup/init") {
+		let force = false;
+		try {
+			const body = await request.json();
+			if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+				const obj = body as Record<string, unknown>;
+				force = obj.force === true;
+			}
+		} catch {
+			// ignore — force defaults to false
+		}
+
+		return new Promise<Response>((resolve) => {
+			const args = force ? ["init", "--force"] : ["init"];
+			const proc = spawn("legio", args, {
+				cwd: projectRoot,
+				stdio: ["ignore", "pipe", "pipe"],
+			});
+			let stdout = "";
+			let stderr = "";
+			proc.stdout?.on("data", (chunk: Buffer) => {
+				stdout += chunk;
+			});
+			proc.stderr?.on("data", (chunk: Buffer) => {
+				stderr += chunk;
+			});
+			proc.on("close", (code: number | null) => {
+				if (code === 0) {
+					resolve(jsonResponse({ success: true, message: "Project initialized successfully" }));
+				} else {
+					const raw = stderr.trim() || stdout.trim() || "Init failed";
+					const errorText = raw.split("\n")[0] ?? "Init failed";
+					resolve(jsonResponse({ success: false, error: errorText }));
+				}
+			});
+			proc.on("error", (err: Error) => {
+				resolve(jsonResponse({ success: false, error: err.message }));
+			});
+		});
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
@@ -344,6 +389,21 @@ export async function handleApiRequest(
 
 	if (path === "/api/health") {
 		return jsonResponse({ ok: true, timestamp: new Date().toISOString() });
+	}
+
+	if (path === "/api/setup/status") {
+		const configPath = join(legioDir, "config.yaml");
+		const initialized = await fileExists(configPath);
+		let projectName: string | null = null;
+		if (initialized) {
+			try {
+				const config = await loadConfig(projectRoot);
+				projectName = config.project.name;
+			} catch {
+				// ignore — return initialized: true with null name
+			}
+		}
+		return jsonResponse({ initialized, projectName, projectRoot });
 	}
 
 	if (path === "/api/status") {

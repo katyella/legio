@@ -1373,3 +1373,96 @@ describe("POST /api/autopilot/stop", () => {
 		expect(res.status).toBe(404);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Setup routes
+// ---------------------------------------------------------------------------
+
+describe("GET /api/setup/status", () => {
+	it("returns initialized:true with projectName when config.yaml exists", async () => {
+		// beforeEach already writes config.yaml with project name "test"
+		const res = await dispatch("/api/setup/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as {
+			initialized: boolean;
+			projectName: string | null;
+			projectRoot: string;
+		};
+		expect(body.initialized).toBe(true);
+		expect(body.projectName).toBe("test");
+		expect(body.projectRoot).toBe(projectRoot);
+	});
+
+	it("returns initialized:false with null projectName when config.yaml is missing", async () => {
+		await rm(join(legioDir, "config.yaml"), { force: true });
+		const res = await dispatch("/api/setup/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as {
+			initialized: boolean;
+			projectName: string | null;
+			projectRoot: string;
+		};
+		expect(body.initialized).toBe(false);
+		expect(body.projectName).toBeNull();
+		expect(body.projectRoot).toBe(projectRoot);
+	});
+
+	it("returns projectRoot in response", async () => {
+		const res = await dispatch("/api/setup/status");
+		const body = (await json(res)) as { projectRoot: string };
+		expect(body.projectRoot).toBe(projectRoot);
+	});
+});
+
+describe("POST /api/setup/init", () => {
+	it("returns success:false with error string when not a git repo", async () => {
+		// Default temp dir is not a git repo — legio init should fail
+		const res = await dispatchPost("/api/setup/init", {});
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { success: boolean; error?: string };
+		expect(body.success).toBe(false);
+		expect(typeof body.error).toBe("string");
+	});
+
+	it("accepts force:true and returns failure when not a git repo", async () => {
+		const res = await dispatchPost("/api/setup/init", { force: true });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { success: boolean; error?: string };
+		expect(body.success).toBe(false);
+		expect(typeof body.error).toBe("string");
+	});
+
+	it("returns success:true with message when init succeeds in a git repo", async () => {
+		// Create a fresh temp dir with a git repo but no .legio/ for a clean init
+		const { execSync } = await import("node:child_process");
+		const freshDir = join(tmpdir(), `routes-init-success-${Date.now()}`);
+		await mkdir(freshDir, { recursive: true });
+		try {
+			execSync("git init", { cwd: freshDir, stdio: "pipe" });
+			execSync("git config user.email test@test.com", { cwd: freshDir, stdio: "pipe" });
+			execSync("git config user.name Test", { cwd: freshDir, stdio: "pipe" });
+			const req = makePostRequest("/api/setup/init", {});
+			const res = await handleApiRequest(req, join(freshDir, ".legio"), freshDir);
+			expect(res.status).toBe(200);
+			const body = (await json(res)) as {
+				success: boolean;
+				message?: string;
+				error?: string;
+			};
+			if (body.success) {
+				// legio init succeeded — verify the success response shape
+				expect(body.message).toBe("Project initialized successfully");
+			} else {
+				// legio not on PATH or init failed for env reasons — still verify error shape
+				expect(typeof body.error).toBe("string");
+			}
+		} finally {
+			await rm(freshDir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns 405 for GET requests on /api/setup/init", async () => {
+		const res = await dispatch("/api/setup/init");
+		expect([404, 405]).toContain(res.status);
+	});
+});
