@@ -7,6 +7,8 @@
  * Called by the SessionStart hook.
  */
 
+import { spawn } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCheckpoint } from "../agents/checkpoint.ts";
 import { loadIdentity } from "../agents/identity.ts";
@@ -299,7 +301,7 @@ async function outputOrchestratorContext(
 		const tmuxSession = await getCurrentSessionName();
 		if (tmuxSession) {
 			const regPath = join(config.project.root, ".legio", "orchestrator-tmux.json");
-			await Bun.write(
+			await writeFile(
 				regPath,
 				`${JSON.stringify({ tmuxSession, registeredAt: new Date().toISOString() }, null, "\t")}\n`,
 			);
@@ -311,19 +313,22 @@ async function outputOrchestratorContext(
 	// Record the orchestrator's current branch for merge targeting
 	let sessionBranch: string | null = null;
 	try {
-		const branchProc = Bun.spawn(["git", "symbolic-ref", "--short", "HEAD"], {
-			cwd: config.project.root,
-			stdout: "pipe",
-			stderr: "pipe",
+		const branch = await new Promise<string>((res) => {
+			let out = "";
+			const p = spawn("git", ["symbolic-ref", "--short", "HEAD"], {
+				cwd: config.project.root,
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+			p.stdout.on("data", (d: Buffer) => {
+				out += d.toString();
+			});
+			p.on("close", () => res(out.trim()));
+			p.on("error", () => res(""));
 		});
-		const branchExit = await branchProc.exited;
-		if (branchExit === 0) {
-			const branch = (await new Response(branchProc.stdout).text()).trim();
-			if (branch) {
-				sessionBranch = branch;
-				const sessionBranchPath = join(config.project.root, ".legio", "session-branch.txt");
-				await Bun.write(sessionBranchPath, `${branch}\n`);
-			}
+		if (branch) {
+			sessionBranch = branch;
+			const sessionBranchPath = join(config.project.root, ".legio", "session-branch.txt");
+			await writeFile(sessionBranchPath, `${branch}\n`);
 		}
 	} catch {
 		// Branch detection is optional — silently skip

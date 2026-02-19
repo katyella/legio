@@ -6,6 +6,7 @@
  * and various filters for listing messages.
  */
 
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveProjectRoot } from "../config.ts";
 import { MailError, ValidationError } from "../errors.ts";
@@ -143,7 +144,7 @@ async function writePendingNudge(
 		createdAt: new Date().toISOString(),
 	};
 	const filePath = join(dir, `${agentName}.json`);
-	await Bun.write(filePath, `${JSON.stringify(marker, null, "\t")}\n`);
+	await writeFile(filePath, `${JSON.stringify(marker, null, "\t")}\n`);
 }
 
 /**
@@ -157,12 +158,13 @@ async function readAndClearPendingNudge(
 	agentName: string,
 ): Promise<PendingNudge | null> {
 	const filePath = join(pendingNudgeDir(cwd), `${agentName}.json`);
-	const file = Bun.file(filePath);
-	if (!(await file.exists())) {
+	try {
+		await access(filePath);
+	} catch {
 		return null;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(filePath, "utf-8");
 		const nudge = JSON.parse(text) as PendingNudge;
 		const { unlink } = await import("node:fs/promises");
 		await unlink(filePath);
@@ -206,12 +208,13 @@ async function isMailCheckDebounced(
 	debounceMs: number,
 ): Promise<boolean> {
 	const statePath = mailCheckStatePath(cwd);
-	const file = Bun.file(statePath);
-	if (!(await file.exists())) {
+	try {
+		await access(statePath);
+	} catch {
 		return false;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(statePath, "utf-8");
 		const state = JSON.parse(text) as Record<string, number>;
 		const lastCheck = state[agentName];
 		if (lastCheck === undefined) {
@@ -232,17 +235,14 @@ async function isMailCheckDebounced(
 async function recordMailCheck(cwd: string, agentName: string): Promise<void> {
 	const statePath = mailCheckStatePath(cwd);
 	let state: Record<string, number> = {};
-	const file = Bun.file(statePath);
-	if (await file.exists()) {
-		try {
-			const text = await file.text();
-			state = JSON.parse(text) as Record<string, number>;
-		} catch {
-			// Corrupt state file — start fresh
-		}
+	try {
+		const text = await readFile(statePath, "utf-8");
+		state = JSON.parse(text) as Record<string, number>;
+	} catch {
+		// File does not exist or corrupt state — start fresh
 	}
 	state[agentName] = Date.now();
-	await Bun.write(statePath, `${JSON.stringify(state, null, "\t")}\n`);
+	await writeFile(statePath, `${JSON.stringify(state, null, "\t")}\n`);
 }
 
 /**
@@ -332,13 +332,14 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 						try {
 							let runId: string | null = null;
 							const runIdPath = join(cwd, ".legio", "current-run.txt");
-							const runIdFile = Bun.file(runIdPath);
-							if (await runIdFile.exists()) {
-								const text = await runIdFile.text();
+							try {
+								const text = await readFile(runIdPath, "utf-8");
 								const trimmed = text.trim();
 								if (trimmed.length > 0) {
 									runId = trimmed;
 								}
+							} catch {
+								/* file doesn't exist */
 							}
 							eventStore.insert({
 								runId,
@@ -416,13 +417,14 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			try {
 				let runId: string | null = null;
 				const runIdPath = join(cwd, ".legio", "current-run.txt");
-				const runIdFile = Bun.file(runIdPath);
-				if (await runIdFile.exists()) {
-					const text = await runIdFile.text();
+				try {
+					const text = await readFile(runIdPath, "utf-8");
 					const trimmed = text.trim();
 					if (trimmed.length > 0) {
 						runId = trimmed;
 					}
+				} catch {
+					/* file doesn't exist */
 				}
 				eventStore.insert({
 					runId,

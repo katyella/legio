@@ -12,7 +12,8 @@
  * - Persists across work batches
  */
 
-import { mkdir, unlink } from "node:fs/promises";
+import { spawn, spawnSync } from "node:child_process";
+import { access, mkdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -34,6 +35,48 @@ const COORDINATOR_NAME = "coordinator";
  */
 function coordinatorTmuxSession(projectName: string): string {
 	return `legio-${projectName}-${COORDINATOR_NAME}`;
+}
+
+/**
+ * Run a subprocess and collect its output. Returns exit code, stdout, and stderr.
+ */
+function runProcess(
+	cmd: string[],
+	opts: { cwd?: string } = {},
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+	return new Promise((resolve, reject) => {
+		const [command, ...args] = cmd;
+		if (!command) {
+			reject(new Error("Empty command array"));
+			return;
+		}
+		const proc = spawn(command, args, {
+			cwd: opts.cwd,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		proc.stdout.on("data", (d: Buffer) => {
+			stdout += d.toString();
+		});
+		proc.stderr.on("data", (d: Buffer) => {
+			stderr += d.toString();
+		});
+		proc.on("close", (code) => resolve({ exitCode: code ?? 1, stdout, stderr }));
+		proc.on("error", reject);
+	});
+}
+
+/**
+ * Check if a file exists at the given path.
+ */
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /** Dependency injection for testing. Uses real implementations when omitted. */
@@ -59,6 +102,7 @@ export interface CoordinatorDeps {
 		stop: () => Promise<boolean>;
 		isRunning: () => Promise<boolean>;
 	};
+	_sleep?: (ms: number) => Promise<void>;
 }
 
 /**
@@ -67,14 +111,12 @@ export interface CoordinatorDeps {
  */
 async function readWatchdogPid(projectRoot: string): Promise<number | null> {
 	const pidFilePath = join(projectRoot, ".legio", "watchdog.pid");
-	const file = Bun.file(pidFilePath);
-	const exists = await file.exists();
-	if (!exists) {
+	if (!(await fileExists(pidFilePath))) {
 		return null;
 	}
 
 	try {
-		const text = await file.text();
+		const text = await readFile(pidFilePath, "utf-8");
 		const pid = Number.parseInt(text.trim(), 10);
 		if (Number.isNaN(pid) || pid <= 0) {
 			return null;
@@ -116,13 +158,9 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 			}
 
 			// Start watchdog in background
-			const proc = Bun.spawn(["legio", "watch", "--background"], {
+			const { exitCode } = await runProcess(["legio", "watch", "--background"], {
 				cwd: projectRoot,
-				stdout: "pipe",
-				stderr: "pipe",
 			});
-
-			const exitCode = await proc.exited;
 			if (exitCode !== 0) {
 				return null; // Failed to start
 			}
@@ -178,15 +216,12 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 function createDefaultMonitor(projectRoot: string): NonNullable<CoordinatorDeps["_monitor"]> {
 	return {
 		async start(): Promise<{ pid: number } | null> {
-			const proc = Bun.spawn(["legio", "monitor", "start", "--no-attach", "--json"], {
-				cwd: projectRoot,
-				stdout: "pipe",
-				stderr: "pipe",
-			});
-			const exitCode = await proc.exited;
+			const { exitCode, stdout } = await runProcess(
+				["legio", "monitor", "start", "--no-attach", "--json"],
+				{ cwd: projectRoot },
+			);
 			if (exitCode !== 0) return null;
 			try {
-				const stdout = await new Response(proc.stdout).text();
 				const result = JSON.parse(stdout.trim()) as { pid?: number };
 				return result.pid ? { pid: result.pid } : null;
 			} catch {
@@ -194,24 +229,17 @@ function createDefaultMonitor(projectRoot: string): NonNullable<CoordinatorDeps[
 			}
 		},
 		async stop(): Promise<boolean> {
-			const proc = Bun.spawn(["legio", "monitor", "stop", "--json"], {
+			const { exitCode } = await runProcess(["legio", "monitor", "stop", "--json"], {
 				cwd: projectRoot,
-				stdout: "pipe",
-				stderr: "pipe",
 			});
-			const exitCode = await proc.exited;
 			return exitCode === 0;
 		},
 		async isRunning(): Promise<boolean> {
-			const proc = Bun.spawn(["legio", "monitor", "status", "--json"], {
+			const { exitCode, stdout } = await runProcess(["legio", "monitor", "status", "--json"], {
 				cwd: projectRoot,
-				stdout: "pipe",
-				stderr: "pipe",
 			});
-			const exitCode = await proc.exited;
 			if (exitCode !== 0) return false;
 			try {
-				const stdout = await new Response(proc.stdout).text();
 				const result = JSON.parse(stdout.trim()) as { running?: boolean };
 				return result.running === true;
 			} catch {
@@ -260,6 +288,8 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
 
 async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Promise<void> {
 	const tmux = deps._tmux ?? { createSession, isSessionAlive, killSession, sendKeys };
+	const sleep =
+		deps._sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
 	const json = args.includes("--json");
 	const shouldAttach = resolveAttach(args, !!process.stdout.isTTY);
@@ -331,10 +361,9 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// coordinator knows its role, hierarchy rules, and delegation patterns
 		// (legio-gaio, legio-0kwf).
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "coordinator.md");
-		const agentDefFile = Bun.file(agentDefPath);
 		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
-		if (await agentDefFile.exists()) {
-			const agentDef = await agentDefFile.text();
+		if (await fileExists(agentDefPath)) {
+			const agentDef = await readFile(agentDefPath, "utf-8");
 			// Single-quote the content for safe shell expansion (only escape single quotes)
 			const escaped = agentDef.replace(/'/g, "'\\''");
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
@@ -369,12 +398,12 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		store.upsert(session);
 
 		// Send beacon after TUI initialization delay
-		await Bun.sleep(3_000);
+		await sleep(3_000);
 		const beacon = buildCoordinatorBeacon();
 		await tmux.sendKeys(tmuxSession, beacon);
 
 		// Follow-up Enter to ensure submission (same pattern as sling.ts)
-		await Bun.sleep(500);
+		await sleep(500);
 		await tmux.sendKeys(tmuxSession, "");
 
 		// Auto-start watchdog if --watchdog flag is present
@@ -421,7 +450,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		}
 
 		if (shouldAttach) {
-			Bun.spawnSync(["tmux", "attach-session", "-t", tmuxSession], {
+			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
 				stdio: ["inherit", "inherit", "inherit"],
 			});
 		}
@@ -484,9 +513,8 @@ async function stopCoordinator(args: string[], deps: CoordinatorDeps = {}): Prom
 		let runCompleted = false;
 		try {
 			const currentRunPath = join(legioDir, "current-run.txt");
-			const currentRunFile = Bun.file(currentRunPath);
-			if (await currentRunFile.exists()) {
-				const runId = (await currentRunFile.text()).trim();
+			if (await fileExists(currentRunPath)) {
+				const runId = (await readFile(currentRunPath, "utf-8")).trim();
 				if (runId.length > 0) {
 					const runStore = createRunStore(join(legioDir, "sessions.db"));
 					try {

@@ -18,7 +18,8 @@
  * 14. Return AgentSession
  */
 
-import { mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -226,8 +227,13 @@ export async function slingCommand(args: string[]): Promise<void> {
 	let absoluteSpecPath: string | null = null;
 	if (specPath !== null) {
 		absoluteSpecPath = resolve(specPath);
-		const specFile = Bun.file(absoluteSpecPath);
-		const specExists = await specFile.exists();
+		let specExists = false;
+		try {
+			await access(absoluteSpecPath);
+			specExists = true;
+		} catch {
+			specExists = false;
+		}
 		if (!specExists) {
 			throw new ValidationError(`Spec file not found: ${specPath}`, {
 				field: "spec",
@@ -280,9 +286,15 @@ export async function slingCommand(args: string[]): Promise<void> {
 	const currentRunPath = join(legioDir, "current-run.txt");
 	let runId: string;
 
-	const currentRunFile = Bun.file(currentRunPath);
-	if (await currentRunFile.exists()) {
-		runId = (await currentRunFile.text()).trim();
+	let currentRunExists = false;
+	try {
+		await access(currentRunPath);
+		currentRunExists = true;
+	} catch {
+		currentRunExists = false;
+	}
+	if (currentRunExists) {
+		runId = (await readFile(currentRunPath, "utf-8")).trim();
 	} else {
 		runId = `run-${new Date().toISOString().replace(/[:.]/g, "-")}`;
 		const runStore = createRunStore(join(legioDir, "sessions.db"));
@@ -296,7 +308,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		} finally {
 			runStore.close();
 		}
-		await Bun.write(currentRunPath, runId);
+		await writeFile(currentRunPath, runId);
 	}
 
 	// 5. Check name uniqueness and concurrency limit against active sessions
@@ -320,7 +332,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// 5b. Enforce stagger delay between agent spawns
 		const staggerMs = calculateStaggerDelay(config.agents.staggerDelayMs, activeSessions);
 		if (staggerMs > 0) {
-			await Bun.sleep(staggerMs);
+			await new Promise<void>((resolve) => setTimeout(resolve, staggerMs));
 		}
 
 		// 5c. Structural enforcement: warn when a lead spawns a builder without prior scouts.
@@ -371,7 +383,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 
 		// 8. Generate + write overlay CLAUDE.md
 		const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
-		const baseDefinition = await Bun.file(agentDefPath).text();
+		const baseDefinition = await readFile(agentDefPath, "utf-8");
 
 		// 8a. Fetch file-scoped mulch expertise if mulch is enabled and files are provided
 		let mulchExpertise: string | undefined;
@@ -406,12 +418,14 @@ export async function slingCommand(args: string[]): Promise<void> {
 		} catch (err) {
 			// Clean up the orphaned worktree created in step 7 (legio-p4st)
 			try {
-				const cleanupProc = Bun.spawn(["git", "worktree", "remove", "--force", worktreePath], {
-					cwd: config.project.root,
-					stdout: "pipe",
-					stderr: "pipe",
+				await new Promise<void>((res) => {
+					const p = spawn("git", ["worktree", "remove", "--force", worktreePath], {
+						cwd: config.project.root,
+						stdio: "ignore",
+					});
+					p.on("close", () => res());
+					p.on("error", () => res());
 				});
-				await cleanupProc.exited;
 			} catch {
 				// Best-effort cleanup; the original error is more important
 			}
@@ -488,7 +502,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// 13b. Send beacon prompt via tmux send-keys
 		// Allow Claude Code time to initialize its TUI before sending input.
 		// 3s gives the TUI enough time to render and attach its input handler.
-		await Bun.sleep(3_000);
+		await new Promise<void>((resolve) => setTimeout(resolve, 3_000));
 		const beacon = buildBeacon({
 			agentName: name,
 			capability,
@@ -502,7 +516,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// Claude Code's TUI may consume the first Enter during initialization,
 		// leaving the beacon text visible but unsubmitted (legio-yhv6).
 		// A redundant Enter on an empty input line is harmless.
-		await Bun.sleep(500);
+		await new Promise<void>((resolve) => setTimeout(resolve, 500));
 		await sendKeys(tmuxSessionName, "");
 
 		// 14. Output result

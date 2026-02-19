@@ -11,9 +11,10 @@
  * _tmux/_triage/_nudge) ensures mocks are scoped to each test invocation.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, realpath } from "node:fs/promises";
+import { statSync } from "node:fs";
+import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
@@ -211,7 +212,7 @@ beforeEach(async () => {
 	await mkdir(legioDir, { recursive: true });
 
 	// Write a minimal config.yaml so loadConfig succeeds
-	await Bun.write(
+	await writeFile(
 		join(legioDir, "config.yaml"),
 		["project:", "  name: test-project", `  root: ${tempDir}`, "  canonicalBranch: main"].join(
 			"\n",
@@ -235,11 +236,11 @@ beforeEach(async () => {
 		},
 		capabilityIndex: { coordinate: ["coordinator"] },
 	};
-	await Bun.write(
+	await writeFile(
 		join(legioDir, "agent-manifest.json"),
 		`${JSON.stringify(manifest, null, "\t")}\n`,
 	);
-	await Bun.write(join(agentDefsDir, "coordinator.md"), "# Coordinator\n");
+	await writeFile(join(agentDefsDir, "coordinator.md"), "# Coordinator\n");
 
 	// Override cwd so coordinator commands find our temp project
 	process.chdir(tempDir);
@@ -319,6 +320,7 @@ function makeDeps(
 		_tmux: tmux,
 		_watchdog: watchdog,
 		_monitor: monitor,
+		_sleep: () => Promise.resolve(),
 	};
 
 	return {
@@ -381,15 +383,7 @@ describe("startCoordinator", () => {
 	test("writes session to sessions.json with correct fields", async () => {
 		const { deps, calls } = makeDeps();
 
-		// Override Bun.sleep to skip the 3s and 0.5s waits
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-		try {
-			await captureStdout(() => coordinatorCommand(["start"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start"], deps));
 
 		// Verify sessions.json was written
 		const sessions = loadSessionsFromDb();
@@ -420,21 +414,21 @@ describe("startCoordinator", () => {
 
 	test("deploys hooks to project root .claude/settings.local.json", async () => {
 		const { deps } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		try {
-			await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
 
 		// Verify .claude/settings.local.json was created at the project root
 		const settingsPath = join(tempDir, ".claude", "settings.local.json");
-		const settingsFile = Bun.file(settingsPath);
-		expect(await settingsFile.exists()).toBe(true);
+		let settingsExists = false;
+		try {
+			await access(settingsPath);
+			settingsExists = true;
+		} catch {
+			// not found
+		}
+		expect(settingsExists).toBe(true);
 
-		const content = await settingsFile.text();
+		const content = await readFile(settingsPath, "utf-8");
 		const config = JSON.parse(content) as {
 			hooks: Record<string, unknown[]>;
 		};
@@ -450,17 +444,11 @@ describe("startCoordinator", () => {
 
 	test("hooks use coordinator agent name for event logging", async () => {
 		const { deps } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		try {
-			await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
 
 		const settingsPath = join(tempDir, ".claude", "settings.local.json");
-		const content = await Bun.file(settingsPath).text();
+		const content = await readFile(settingsPath, "utf-8");
 
 		// The hooks should reference the coordinator agent name
 		expect(content).toContain("--agent coordinator");
@@ -468,17 +456,11 @@ describe("startCoordinator", () => {
 
 	test("hooks include ENV_GUARD to avoid affecting user's Claude Code session", async () => {
 		const { deps } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		try {
-			await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
 
 		const settingsPath = join(tempDir, ".claude", "settings.local.json");
-		const content = await Bun.file(settingsPath).text();
+		const content = await readFile(settingsPath, "utf-8");
 
 		// PreToolUse guards should include the ENV_GUARD prefix
 		expect(content).toContain("LEGIO_AGENT_NAME");
@@ -494,14 +476,8 @@ describe("startCoordinator", () => {
 		);
 
 		const { deps, calls } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		try {
-			await captureStdout(() => coordinatorCommand(["start", "--no-attach", "--json"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start", "--no-attach", "--json"], deps));
 
 		expect(calls.createSession).toHaveLength(1);
 		const cmd = calls.createSession[0]?.command ?? "";
@@ -525,20 +501,14 @@ describe("startCoordinator", () => {
 			},
 			capabilityIndex: { coordinate: ["coordinator"] },
 		};
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "agent-manifest.json"),
 			`${JSON.stringify(manifest, null, "\t")}\n`,
 		);
 
 		const { deps, calls } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		try {
-			await captureStdout(() => coordinatorCommand(["start", "--no-attach", "--json"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start", "--no-attach", "--json"], deps));
 
 		expect(calls.createSession).toHaveLength(1);
 		const cmd = calls.createSession[0]?.command ?? "";
@@ -548,15 +518,8 @@ describe("startCoordinator", () => {
 
 	test("--json outputs JSON with expected fields", async () => {
 		const { deps } = makeDeps();
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
 
-		let output: string;
-		try {
-			output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		const output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 		const parsed = JSON.parse(output) as Record<string, unknown>;
 		expect(parsed.agentName).toBe("coordinator");
@@ -596,14 +559,7 @@ describe("startCoordinator", () => {
 		// Mock tmux as NOT alive for the existing session
 		const { deps } = makeDeps({ "legio-test-project-coordinator": false });
 
-		const originalSleep = Bun.sleep;
-		Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-		try {
-			await captureStdout(() => coordinatorCommand(["start"], deps));
-		} finally {
-			Bun.sleep = originalSleep;
-		}
+		await captureStdout(() => coordinatorCommand(["start"], deps));
 
 		// SessionStore uses UNIQUE(agent_name), so the new session replaces the old one.
 		// Verify the new session is in booting state with the coordinator name.
@@ -709,7 +665,7 @@ describe("stopCoordinator run completion", () => {
 		runStore.close();
 
 		// Write current-run.txt
-		await Bun.write(join(legioDir, "current-run.txt"), "run-test-123");
+		await writeFile(join(legioDir, "current-run.txt"), "run-test-123");
 
 		// Stop coordinator
 		const { deps } = makeDeps({ "legio-test-project-coordinator": true });
@@ -722,8 +678,14 @@ describe("stopCoordinator run completion", () => {
 		expect(run?.status).toBe("completed");
 
 		// Verify current-run.txt is deleted
-		const currentRunFile = Bun.file(join(legioDir, "current-run.txt"));
-		expect(await currentRunFile.exists()).toBe(false);
+		let currentRunExists = false;
+		try {
+			await access(join(legioDir, "current-run.txt"));
+			currentRunExists = true;
+		} catch {
+			// expected
+		}
+		expect(currentRunExists).toBe(false);
 	});
 
 	test("coordinator stop succeeds when no active run exists", async () => {
@@ -748,7 +710,7 @@ describe("stopCoordinator run completion", () => {
 		saveSessionsToDb([session]);
 
 		// Write empty current-run.txt
-		await Bun.write(join(legioDir, "current-run.txt"), "");
+		await writeFile(join(legioDir, "current-run.txt"), "");
 
 		// Stop coordinator (should succeed without errors)
 		const { deps } = makeDeps({ "legio-test-project-coordinator": true });
@@ -776,7 +738,7 @@ describe("stopCoordinator run completion", () => {
 		runStore.close();
 
 		// Write current-run.txt
-		await Bun.write(join(legioDir, "current-run.txt"), "run-test-456");
+		await writeFile(join(legioDir, "current-run.txt"), "run-test-456");
 
 		// Stop coordinator with --json
 		const { deps } = makeDeps({ "legio-test-project-coordinator": true });
@@ -967,45 +929,23 @@ describe("watchdog integration", () => {
 	describe("startCoordinator with --watchdog", () => {
 		test("calls watchdog.start() when --watchdog flag is present", async () => {
 			const { deps, watchdogCalls } = makeDeps({}, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			try {
-				await captureStdout(() => coordinatorCommand(["start", "--watchdog", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			await captureStdout(() => coordinatorCommand(["start", "--watchdog", "--json"], deps));
 
 			expect(watchdogCalls?.start).toBe(1);
 		});
 
 		test("does NOT call watchdog.start() when --watchdog flag is absent", async () => {
 			const { deps, watchdogCalls } = makeDeps({}, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			try {
-				await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 			expect(watchdogCalls?.start).toBe(0);
 		});
 
 		test("--json output includes watchdog field when --watchdog is present and succeeds", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--watchdog", "--json"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--watchdog", "--json"], deps),
+			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.watchdog).toBe(true);
@@ -1013,17 +953,9 @@ describe("watchdog integration", () => {
 
 		test("--json output includes watchdog:false when --watchdog is present but start fails", async () => {
 			const { deps } = makeDeps({}, { startSuccess: false });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--watchdog", "--json"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--watchdog", "--json"], deps),
+			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.watchdog).toBe(false);
@@ -1031,15 +963,7 @@ describe("watchdog integration", () => {
 
 		test("--json output includes watchdog:false when --watchdog is absent", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.watchdog).toBe(false);
@@ -1047,17 +971,9 @@ describe("watchdog integration", () => {
 
 		test("text output includes watchdog PID when --watchdog succeeds", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--watchdog", "--no-attach"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--watchdog", "--no-attach"], deps),
+			);
 
 			expect(output).toContain("Watchdog: started (PID 88888)");
 		});
@@ -1080,10 +996,7 @@ describe("watchdog integration", () => {
 		test("--json output includes watchdogStopped:true when watchdog was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
-			const { deps } = makeDeps(
-				{ "legio-test-project-coordinator": true },
-				{ stopSuccess: true },
-			);
+			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
@@ -1093,10 +1006,7 @@ describe("watchdog integration", () => {
 		test("--json output includes watchdogStopped:false when no watchdog was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
-			const { deps } = makeDeps(
-				{ "legio-test-project-coordinator": true },
-				{ stopSuccess: false },
-			);
+			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
@@ -1106,10 +1016,7 @@ describe("watchdog integration", () => {
 		test("text output shows 'Watchdog stopped' when watchdog was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
-			const { deps } = makeDeps(
-				{ "legio-test-project-coordinator": true },
-				{ stopSuccess: true },
-			);
+			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop"], deps));
 			expect(output).toContain("Watchdog stopped");
@@ -1118,10 +1025,7 @@ describe("watchdog integration", () => {
 		test("text output shows 'No watchdog running' when no watchdog was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
-			const { deps } = makeDeps(
-				{ "legio-test-project-coordinator": true },
-				{ stopSuccess: false },
-			);
+			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop"], deps));
 			expect(output).toContain("No watchdog running");
@@ -1190,45 +1094,23 @@ describe("monitor integration", () => {
 	describe("startCoordinator with --monitor", () => {
 		test("calls monitor.start() when --monitor flag is present", async () => {
 			const { deps, monitorCalls } = makeDeps({}, undefined, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			try {
-				await captureStdout(() => coordinatorCommand(["start", "--monitor", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			await captureStdout(() => coordinatorCommand(["start", "--monitor", "--json"], deps));
 
 			expect(monitorCalls?.start).toBe(1);
 		});
 
 		test("does NOT call monitor.start() when --monitor flag is absent", async () => {
 			const { deps, monitorCalls } = makeDeps({}, undefined, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			try {
-				await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 			expect(monitorCalls?.start).toBe(0);
 		});
 
 		test("--json output includes monitor field when --monitor is present and succeeds", async () => {
 			const { deps } = makeDeps({}, undefined, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--monitor", "--json"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--monitor", "--json"], deps),
+			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.monitor).toBe(true);
@@ -1236,17 +1118,9 @@ describe("monitor integration", () => {
 
 		test("--json output includes monitor:false when --monitor is present but start fails", async () => {
 			const { deps } = makeDeps({}, undefined, { startSuccess: false });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--monitor", "--json"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--monitor", "--json"], deps),
+			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.monitor).toBe(false);
@@ -1254,15 +1128,7 @@ describe("monitor integration", () => {
 
 		test("--json output includes monitor:false when --monitor is absent", async () => {
 			const { deps } = makeDeps({}, undefined, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.monitor).toBe(false);
@@ -1270,17 +1136,9 @@ describe("monitor integration", () => {
 
 		test("text output includes monitor PID when --monitor succeeds", async () => {
 			const { deps } = makeDeps({}, undefined, { startSuccess: true });
-			const originalSleep = Bun.sleep;
-			Bun.sleep = (() => Promise.resolve()) as typeof Bun.sleep;
-
-			let output: string;
-			try {
-				output = await captureStdout(() =>
-					coordinatorCommand(["start", "--monitor", "--no-attach"], deps),
-				);
-			} finally {
-				Bun.sleep = originalSleep;
-			}
+			const output = await captureStdout(() =>
+				coordinatorCommand(["start", "--monitor", "--no-attach"], deps),
+			);
 
 			expect(output).toContain("Monitor:  started (PID 77777)");
 		});
@@ -1433,7 +1291,7 @@ describe("SessionStore round-trip", () => {
 	test("sessions.db is created after save", () => {
 		saveSessionsToDb([makeCoordinatorSession()]);
 		const dbPath = join(legioDir, "sessions.db");
-		const exists = Bun.file(dbPath).size > 0;
+		const exists = statSync(dbPath).size > 0;
 		expect(exists).toBe(true);
 	});
 });

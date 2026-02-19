@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createSessionStore } from "../sessions/store.ts";
 import type { AgentSession, StoredEvent } from "../types.ts";
@@ -122,7 +122,7 @@ describe("nudgeAgent", () => {
 		// No sessions.db, but orchestrator-tmux.json exists
 		const { mkdir } = await import("node:fs/promises");
 		await mkdir(join(tempDir, ".legio"), { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "orchestrator-tmux.json"),
 			`${JSON.stringify({ tmuxSession: "my-session", registeredAt: new Date().toISOString() }, null, "\t")}\n`,
 		);
@@ -153,7 +153,7 @@ describe("nudgeAgent", () => {
 				state: "working",
 			}),
 		]);
-		await Bun.write(
+		await writeFile(
 			join(tempDir, ".legio", "orchestrator-tmux.json"),
 			`${JSON.stringify({ tmuxSession: "fallback-session" }, null, "\t")}\n`,
 		);
@@ -205,7 +205,7 @@ describe("nudgeAgent", () => {
 
 		// Write a current-run.txt
 		const runId = "run-test-123";
-		await Bun.write(join(tempDir, ".legio", "current-run.txt"), runId);
+		await writeFile(join(tempDir, ".legio", "current-run.txt"), runId);
 
 		const { nudgeAgent } = await importNudge();
 		await nudgeAgent(tempDir, "test-agent");
