@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, realpathSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import {access, mkdir, readFile, writeFile} from "node:fs/promises";
 import { join } from "node:path";
 import { createSessionStore } from "../sessions/store.ts";
 import { cleanupTempDir, createTempGitRepo, runGitInDir } from "../test-helpers.ts";
 import type { AgentSession } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
 import { worktreeCommand } from "./worktree.ts";
+import { spawn } from "node:child_process";
+
 
 /**
  * Tests for `legio worktree` command.
@@ -36,7 +38,7 @@ describe("worktreeCommand", () => {
 		tempDir = realpathSync(tempDir);
 		const legioDir = join(tempDir, ".legio");
 		await mkdir(legioDir, { recursive: true });
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
@@ -312,15 +314,20 @@ describe("worktreeCommand", () => {
 			expect(out).toContain("Cleaned 1 worktree");
 
 			// Verify the worktree directory is gone
-			const worktreeExists = await Bun.file(worktreePath).exists();
+			const worktreeExists = await access(worktreePath).then(() => true, () => false);
 			expect(worktreeExists).toBe(false);
 
 			// Verify the branch is deleted
-			const branchListProc = Bun.spawn(["git", "branch", "--list", "legio/completed-agent/*"], {
-				cwd: tempDir,
-				stdout: "pipe",
+			const branchListResult = await new Promise<{ stdout: string }>((resolve) => {
+				const proc = spawn("git", ["branch", "--list", "legio/completed-agent/*"], {
+					cwd: tempDir,
+					stdio: ["ignore", "pipe", "pipe"],
+				});
+				const chunks: Buffer[] = [];
+				proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
+				proc.on("close", () => resolve({ stdout: Buffer.concat(chunks).toString("utf-8") }));
 			});
-			const branchList = await new Response(branchListProc.stdout).text();
+			const branchList = branchListResult.stdout;
 			expect(branchList.trim()).toBe("");
 		});
 

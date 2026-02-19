@@ -6,6 +6,7 @@
  * Shows chronological events from all agents merged into a single feed.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -223,8 +224,9 @@ export async function feedCommand(args: string[]): Promise<void> {
 
 	// Open event store
 	const eventsDbPath = join(legioDir, "events.db");
-	const eventsFile = Bun.file(eventsDbPath);
-	if (!(await eventsFile.exists())) {
+	let eventsDbExists = false;
+	try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+	if (!eventsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");
 		} else {
@@ -315,7 +317,7 @@ export async function feedCommand(args: string[]): Promise<void> {
 
 		// Poll for new events
 		while (true) {
-			await Bun.sleep(interval);
+			await new Promise((resolve) => setTimeout(resolve, interval));
 
 			// Query events from 60s ago, then filter client-side for id > lastSeenId
 			const pollSince = new Date(Date.now() - 60 * 1000).toISOString();

@@ -8,7 +8,7 @@
  * on disk — the source of truth written by each agent logger.
  */
 
-import { readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -185,8 +185,7 @@ async function parseLogFile(path: string): Promise<LogEvent[]> {
 	const events: LogEvent[] = [];
 
 	try {
-		const file = Bun.file(path);
-		const text = await file.text();
+		const text = await readFile(path, "utf-8");
 		const lines = text.split("\n");
 
 		for (const line of lines) {
@@ -335,7 +334,6 @@ async function followLogs(
 		const discovered = await discoverLogFiles(logsDir, filters.agent);
 
 		for (const { path } of discovered) {
-			const file = Bun.file(path);
 			let fileSize: number;
 
 			try {
@@ -350,7 +348,7 @@ async function followLogs(
 			if (fileSize > lastPosition) {
 				// New data available
 				try {
-					const fullText = await file.text();
+					const fullText = await readFile(path, "utf-8");
 					const newText = fullText.slice(lastPosition);
 					const lines = newText.split("\n");
 
@@ -423,7 +421,7 @@ async function followLogs(
 		}
 
 		// Sleep for 1 second before next poll
-		await Bun.sleep(1000);
+		await new Promise((resolve) => setTimeout(resolve, 1000));
 	}
 }
 

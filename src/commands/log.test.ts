@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+/** Test helper: create a file accessor compatible with the Bun.file() API. */
+function bunFile(path: string) {
+	return {
+		exists: () => access(path).then(() => true, () => false),
+		text: () => readFile(path, "utf-8"),
+	};
+}
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailClient } from "../mail/client.ts";
@@ -37,7 +46,7 @@ describe("logCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "log-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
@@ -154,7 +163,7 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "test-scout");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = Bun.file(markerPath);
+		const markerFile = bunFile(markerPath);
 
 		expect(await markerFile.exists()).toBe(true);
 
@@ -175,10 +184,10 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "test-builder");
 		const markerPath = join(logsDir, ".current-session");
-		const sessionDir = (await Bun.file(markerPath).text()).trim();
+		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
 
 		// Check for events.ndjson file
-		const eventsFile = Bun.file(join(sessionDir, "events.ndjson"));
+		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
 		expect(await eventsFile.exists()).toBe(true);
 	});
 
@@ -187,11 +196,11 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "test-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const sessionDirAfterStart = (await Bun.file(markerPath).text()).trim();
+		const sessionDirAfterStart = (await readFile(markerPath, "utf-8")).trim();
 
 		await logCommand(["tool-end", "--agent", "test-agent", "--tool-name", "Edit"]);
 
-		const sessionDirAfterEnd = (await Bun.file(markerPath).text()).trim();
+		const sessionDirAfterEnd = (await readFile(markerPath, "utf-8")).trim();
 		expect(sessionDirAfterEnd).toBe(sessionDirAfterStart);
 	});
 
@@ -204,10 +213,10 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "test-worker");
 		const markerPath = join(logsDir, ".current-session");
-		const sessionDir = (await Bun.file(markerPath).text()).trim();
+		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
 
 		// Events file should contain both tool-start and tool-end events
-		const eventsFile = Bun.file(join(sessionDir, "events.ndjson"));
+		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		expect(eventsContent).toContain("tool.start");
@@ -258,14 +267,14 @@ describe("logCommand", () => {
 		const markerPath = join(logsDir, ".current-session");
 
 		// Verify marker exists before session-end
-		let markerFile = Bun.file(markerPath);
+		let markerFile = bunFile(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		// Now end the session
 		await logCommand(["session-end", "--agent", "test-cleanup"]);
 
 		// Marker should be removed - need to create a new Bun.file reference
-		markerFile = Bun.file(markerPath);
+		markerFile = bunFile(markerPath);
 		expect(await markerFile.exists()).toBe(false);
 	});
 
@@ -420,10 +429,10 @@ describe("logCommand", () => {
 
 			// Write current-run.txt
 			const currentRunPath = join(tempDir, ".legio", "current-run.txt");
-			await Bun.write(currentRunPath, "run-test-001");
+			await writeFile(currentRunPath, "run-test-001");
 
 			// Verify current-run.txt exists before test
-			expect(await Bun.file(currentRunPath).exists()).toBe(true);
+			expect(await access(currentRunPath).then(() => true, () => false)).toBe(true);
 
 			// Call session-end
 			await logCommand(["session-end", "--agent", "coordinator"]);
@@ -438,7 +447,7 @@ describe("logCommand", () => {
 			expect(run?.completedAt).toBeTruthy();
 
 			// Verify: current-run.txt is deleted (create fresh file reference)
-			expect(await Bun.file(currentRunPath).exists()).toBe(false);
+			expect(await access(currentRunPath).then(() => true, () => false)).toBe(false);
 		});
 
 		test("session-end does not fail when no active run for coordinator", async () => {
@@ -506,7 +515,7 @@ describe("logCommand", () => {
 			runStore.close();
 
 			// Write current-run.txt
-			await Bun.write(join(tempDir, ".legio", "current-run.txt"), "run-test-002");
+			await writeFile(join(tempDir, ".legio", "current-run.txt"), "run-test-002");
 
 			// Call session-end for builder
 			await logCommand(["session-end", "--agent", "test-builder"]);
@@ -521,7 +530,7 @@ describe("logCommand", () => {
 			expect(run?.completedAt).toBeNull();
 
 			// Verify: current-run.txt still exists
-			const currentRunFile = Bun.file(join(tempDir, ".legio", "current-run.txt"));
+			const currentRunFile = bunFile(join(tempDir, ".legio", "current-run.txt"));
 			expect(await currentRunFile.exists()).toBe(true);
 		});
 
@@ -562,7 +571,7 @@ describe("logCommand", () => {
 			runStore.close();
 
 			// Write current-run.txt
-			await Bun.write(join(tempDir, ".legio", "current-run.txt"), "run-test-003");
+			await writeFile(join(tempDir, ".legio", "current-run.txt"), "run-test-003");
 
 			// Call session-end (should not throw — completeRun is idempotent)
 			await expect(async () => {
@@ -608,7 +617,7 @@ describe("logCommand", () => {
 
 		// Verify the pending-nudge marker was written for the coordinator
 		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
-		const markerFile = Bun.file(markerPath);
+		const markerFile = bunFile(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		const marker = JSON.parse(await markerFile.text());
@@ -648,7 +657,7 @@ describe("logCommand", () => {
 
 		// Verify no pending-nudge marker was written
 		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
-		const markerFile = Bun.file(markerPath);
+		const markerFile = bunFile(markerPath);
 		expect(await markerFile.exists()).toBe(false);
 	});
 
@@ -745,7 +754,7 @@ describe("logCommand", () => {
 		// Verify log was created
 		const logsDir = join(tempDir, ".legio", "logs", "default-tool-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = Bun.file(markerPath);
+		const markerFile = bunFile(markerPath);
 
 		expect(await markerFile.exists()).toBe(true);
 
@@ -753,7 +762,7 @@ describe("logCommand", () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 
 		const sessionDir = (await markerFile.text()).trim();
-		const eventsFile = Bun.file(join(sessionDir, "events.ndjson"));
+		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		// Should contain "unknown" as the tool name
@@ -771,8 +780,8 @@ describe("logCommand", () => {
 
 		const logsDir = join(tempDir, ".legio", "logs", "default-end-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const sessionDir = (await Bun.file(markerPath).text()).trim();
-		const eventsFile = Bun.file(join(sessionDir, "events.ndjson"));
+		const sessionDir = (await readFile(markerPath, "utf-8")).trim();
+		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
 		const eventsContent = await eventsFile.text();
 
 		expect(eventsContent).toContain("unknown");
@@ -853,7 +862,7 @@ describe("logCommand", () => {
 
 		// Verify no mail.db was created (mulch auto-record was skipped)
 		const mailDbPath = join(tempDir, ".legio", "mail.db");
-		const mailDbFile = Bun.file(mailDbPath);
+		const mailDbFile = bunFile(mailDbPath);
 		expect(await mailDbFile.exists()).toBe(false);
 
 		// Coordinator should remain working (persistent agent)
@@ -954,7 +963,7 @@ describe("logCommand", () => {
 
 		// All records failed, so no domains recorded and no mail sent
 		expect(result).toEqual([]);
-		const mailFile = Bun.file(mailDbPath);
+		const mailFile = bunFile(mailDbPath);
 		expect(await mailFile.exists()).toBe(false);
 	});
 
@@ -1166,7 +1175,7 @@ describe("logCommand --stdin integration", () => {
 	beforeEach(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "log-stdin-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
@@ -1197,22 +1206,27 @@ try {
 	process.exit(1);
 }
 `;
-		await Bun.write(scriptPath, scriptContent);
+		await writeFile(scriptPath, scriptContent);
 
-		const proc = Bun.spawn(["bun", "run", scriptPath, event, "--agent", agentName, "--stdin"], {
+		const proc = spawn("bun", ["run", scriptPath, event, "--agent", agentName, "--stdin"], {
 			cwd: tempDir,
-			stdin: "pipe",
-			stdout: "pipe",
-			stderr: "pipe",
+			stdio: ["pipe", "pipe", "pipe"],
 		});
 
-		// Write the JSON payload to stdin and close
-		proc.stdin.write(JSON.stringify(stdinJson));
-		proc.stdin.end();
+		const stdoutChunks: Buffer[] = [];
+		const stderrChunks: Buffer[] = [];
+		proc.stdout?.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+		proc.stderr?.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
 
-		const exitCode = await proc.exited;
-		const stdout = await new Response(proc.stdout).text();
-		const stderr = await new Response(proc.stderr).text();
+		// Write the JSON payload to stdin and close
+		proc.stdin?.write(JSON.stringify(stdinJson));
+		proc.stdin?.end();
+
+		const exitCode = await new Promise<number>((resolve) => {
+			proc.on("close", (code: number | null) => resolve(code ?? 1));
+		});
+		const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+		const stderr = Buffer.concat(stderrChunks).toString("utf-8");
 
 		return { exitCode, stdout, stderr };
 	}
@@ -1361,11 +1375,11 @@ try {
 		// Verify legacy log files exist
 		const logsDir = join(tempDir, ".legio", "logs", "legacy-compat-agent");
 		const markerPath = join(logsDir, ".current-session");
-		const markerFile = Bun.file(markerPath);
+		const markerFile = bunFile(markerPath);
 		expect(await markerFile.exists()).toBe(true);
 
 		const sessionDir = (await markerFile.text()).trim();
-		const eventsFile = Bun.file(join(sessionDir, "events.ndjson"));
+		const eventsFile = bunFile(join(sessionDir, "events.ndjson"));
 		expect(await eventsFile.exists()).toBe(true);
 
 		const eventsContent = await eventsFile.text();
@@ -1378,6 +1392,16 @@ try {
 		const scriptPath = join(tempDir, "_run-log-empty.ts");
 		const scriptContent = `
 import { logCommand } from "${join(import.meta.dir, "log.ts").replace(/\\/g, "/")}";
+import { spawn } from "node:child_process";
+/** Test helper: create a file accessor compatible with the Bun.file() API. */
+function bunFile(path: string) {
+	return {
+		exists: () => access(path).then(() => true, () => false),
+		text: () => readFile(path, "utf-8"),
+	};
+}
+
+
 try {
 	await logCommand(["tool-start", "--agent", "empty-stdin-agent", "--stdin"]);
 } catch (e) {
@@ -1385,19 +1409,19 @@ try {
 	process.exit(1);
 }
 `;
-		await Bun.write(scriptPath, scriptContent);
+		await writeFile(scriptPath, scriptContent);
 
-		const proc = Bun.spawn(["bun", "run", scriptPath], {
+		const proc2 = spawn("bun", ["run", scriptPath], {
 			cwd: tempDir,
-			stdin: "pipe",
-			stdout: "pipe",
-			stderr: "pipe",
+			stdio: ["pipe", "pipe", "pipe"],
 		});
 
 		// Write empty string and close immediately
-		proc.stdin.end();
+		proc2.stdin?.end();
 
-		const exitCode = await proc.exited;
+		const exitCode = await new Promise<number>((resolve) => {
+			proc2.on("close", (code: number | null) => resolve(code ?? 1));
+		});
 		expect(exitCode).toBe(0);
 	});
 

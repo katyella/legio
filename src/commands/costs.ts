@@ -12,6 +12,8 @@ import { color } from "../logging/color.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { SessionMetrics } from "../types.ts";
+import { access } from "node:fs/promises";
+
 
 /**
  * Parse a named flag value from args.
@@ -238,8 +240,9 @@ export async function costsCommand(args: string[]): Promise<void> {
 	// Handle --live flag (early return for live view)
 	if (live) {
 		const metricsDbPath = join(legioDir, "metrics.db");
-		const metricsFile = Bun.file(metricsDbPath);
-		if (!(await metricsFile.exists())) {
+		let metricsDbExists = false;
+		try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+		if (!metricsDbExists) {
 			if (json) {
 				process.stdout.write(
 					`${JSON.stringify({ agents: [], totals: { inputTokens: 0, outputTokens: 0, cacheTokens: 0, costUsd: 0, burnRatePerMin: 0, tokensPerMin: 0 } })}\n`,
@@ -409,8 +412,9 @@ export async function costsCommand(args: string[]): Promise<void> {
 
 	// Check if metrics.db exists
 	const metricsDbPath = join(legioDir, "metrics.db");
-	const metricsFile = Bun.file(metricsDbPath);
-	if (!(await metricsFile.exists())) {
+	let metricsDbExists = false;
+	try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+	if (!metricsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");
 		} else {

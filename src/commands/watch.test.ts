@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import {access, mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { watchCommand } from "./watch.ts";
@@ -51,7 +51,7 @@ describe("watchCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "watch-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
@@ -98,7 +98,7 @@ describe("watchCommand", () => {
 	test("background mode: already running detection", async () => {
 		// Write a PID file with a running process (use our own PID)
 		const pidFilePath = join(tempDir, ".legio", "watchdog.pid");
-		await Bun.write(pidFilePath, `${process.pid}\n`);
+		await writeFile(pidFilePath, `${process.pid}\n`);
 
 		// Try to start in background mode — should fail with "already running"
 		await watchCommand(["--background"]);
@@ -112,10 +112,10 @@ describe("watchCommand", () => {
 	test("background mode: stale PID cleanup", async () => {
 		// Write a PID file with a non-running process (999999 is very unlikely to exist)
 		const pidFilePath = join(tempDir, ".legio", "watchdog.pid");
-		await Bun.write(pidFilePath, "999999\n");
+		await writeFile(pidFilePath, "999999\n");
 
 		// Verify the stale PID file exists before the test
-		const fileBeforeExists = await Bun.file(pidFilePath).exists();
+		const fileBeforeExists = await access(pidFilePath).then(() => true, () => false);
 		expect(fileBeforeExists).toBe(true);
 
 		// Try to start in background mode
@@ -135,9 +135,9 @@ describe("watchCommand", () => {
 		// OR replaced with a new PID.
 
 		// Let's check: the file should either not exist, OR contain a different PID
-		const fileAfterExists = await Bun.file(pidFilePath).exists();
+		const fileAfterExists = await access(pidFilePath).then(() => true, () => false);
 		if (fileAfterExists) {
-			const content = await Bun.file(pidFilePath).text();
+			const content = await readFile(pidFilePath, "utf-8");
 			expect(content.trim()).not.toBe("999999");
 		}
 		// If it doesn't exist, that's also valid (spawn failed before writing new PID)

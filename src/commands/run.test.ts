@@ -6,12 +6,20 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, unlink } from "node:fs/promises";
+import {access, mkdir, mkdtemp, readFile, rm, unlink, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionStore } from "../sessions/store.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type { AgentSession, InsertRun, RunStore } from "../types.ts";
+/** Test helper: create a file accessor compatible with the Bun.file() API. */
+function bunFile(path: string) {
+	return {
+		exists: () => access(path).then(() => true, () => false),
+		text: () => readFile(path, "utf-8"),
+	};
+}
+
 
 let tempDir: string;
 let legioDir: string;
@@ -36,12 +44,12 @@ afterEach(async () => {
 
 /** Write a run ID to current-run.txt. */
 async function writeCurrentRun(runId: string): Promise<void> {
-	await Bun.write(join(legioDir, "current-run.txt"), runId);
+	await writeFile(join(legioDir, "current-run.txt"), runId);
 }
 
 /** Read current-run.txt contents, or null if missing/empty. */
 async function readCurrentRunFile(): Promise<string | null> {
-	const file = Bun.file(join(legioDir, "current-run.txt"));
+	const file = bunFile(join(legioDir, "current-run.txt"));
 	if (!(await file.exists())) {
 		return null;
 	}
@@ -90,7 +98,7 @@ function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
 describe("show current run (default)", () => {
 	test("shows 'No active run' when current-run.txt does not exist", async () => {
 		// No current-run.txt written -- file does not exist
-		const file = Bun.file(join(legioDir, "current-run.txt"));
+		const file = bunFile(join(legioDir, "current-run.txt"));
 		expect(await file.exists()).toBe(false);
 	});
 
@@ -186,7 +194,7 @@ describe("complete run", () => {
 
 		// Simulate what completeCurrentRun does
 		await unlink(join(legioDir, "current-run.txt"));
-		const file = Bun.file(join(legioDir, "current-run.txt"));
+		const file = bunFile(join(legioDir, "current-run.txt"));
 		expect(await file.exists()).toBe(false);
 	});
 
@@ -197,13 +205,13 @@ describe("complete run", () => {
 	});
 
 	test("empty current-run.txt returns null", async () => {
-		await Bun.write(join(legioDir, "current-run.txt"), "");
+		await writeFile(join(legioDir, "current-run.txt"), "");
 		const content = await readCurrentRunFile();
 		expect(content).toBeNull();
 	});
 
 	test("whitespace-only current-run.txt returns null", async () => {
-		await Bun.write(join(legioDir, "current-run.txt"), "  \n  ");
+		await writeFile(join(legioDir, "current-run.txt"), "  \n  ");
 		const content = await readCurrentRunFile();
 		expect(content).toBeNull();
 	});
@@ -421,7 +429,7 @@ describe("edge cases", () => {
 		await rm(`${dbPath}-wal`, { force: true });
 		await rm(`${dbPath}-shm`, { force: true });
 
-		const file = Bun.file(dbPath);
+		const file = bunFile(dbPath);
 		expect(await file.exists()).toBe(false);
 
 		// Re-create stores for afterEach cleanup

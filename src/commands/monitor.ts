@@ -13,7 +13,8 @@
  * - Persists across patrol cycles
  */
 
-import { mkdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -131,12 +132,13 @@ async function startMonitor(args: string[]): Promise<void> {
 		// Spawn tmux session at project root with Claude Code (interactive mode).
 		// Inject the monitor base definition via --append-system-prompt.
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "monitor.md");
-		const agentDefFile = Bun.file(agentDefPath);
 		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
-		if (await agentDefFile.exists()) {
-			const agentDef = await agentDefFile.text();
+		try {
+			const agentDef = await readFile(agentDefPath, "utf-8");
 			const escaped = agentDef.replace(/'/g, "'\\''");
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
+		} catch {
+			// agent def file not found, proceed without system prompt
 		}
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: MONITOR_NAME,
@@ -166,12 +168,12 @@ async function startMonitor(args: string[]): Promise<void> {
 		store.upsert(session);
 
 		// Send beacon after TUI initialization delay
-		await Bun.sleep(3_000);
+		await new Promise((resolve) => setTimeout(resolve, 3_000));
 		const beacon = buildMonitorBeacon();
 		await sendKeys(tmuxSession, beacon);
 
 		// Follow-up Enter to ensure submission (same pattern as sling.ts)
-		await Bun.sleep(500);
+		await new Promise((resolve) => setTimeout(resolve, 500));
 		await sendKeys(tmuxSession, "");
 
 		const output = {
@@ -192,7 +194,7 @@ async function startMonitor(args: string[]): Promise<void> {
 		}
 
 		if (shouldAttach) {
-			Bun.spawnSync(["tmux", "attach-session", "-t", tmuxSession], {
+			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
 				stdio: ["inherit", "inherit", "inherit"],
 			});
 		}

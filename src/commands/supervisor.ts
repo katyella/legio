@@ -12,7 +12,7 @@
  * - Multiple supervisors can run concurrently (distinguished by --name)
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -195,19 +195,20 @@ async function startSupervisor(args: string[]): Promise<void> {
 		// Inject the supervisor base definition via --append-system-prompt.
 		const tmuxSession = `legio-${config.project.name}-supervisor-${flags.name}`;
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "supervisor.md");
-		const agentDefFile = Bun.file(agentDefPath);
 		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
-		if (await agentDefFile.exists()) {
-			const agentDef = await agentDefFile.text();
+		try {
+			const agentDef = await readFile(agentDefPath, "utf-8");
 			const escaped = agentDef.replace(/'/g, "'\\''");
 			claudeCmd += ` --append-system-prompt '${escaped}'`;
+		} catch {
+			// agent def file not found, proceed without system prompt
 		}
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: flags.name,
 		});
 
 		// Send beacon after TUI initialization delay
-		await Bun.sleep(3_000);
+		await new Promise((resolve) => setTimeout(resolve, 3_000));
 		const beacon = buildSupervisorBeacon({
 			name: flags.name,
 			beadId: flags.task,
@@ -217,7 +218,7 @@ async function startSupervisor(args: string[]): Promise<void> {
 		await sendKeys(tmuxSession, beacon);
 
 		// Follow-up Enter to ensure submission
-		await Bun.sleep(500);
+		await new Promise((resolve) => setTimeout(resolve, 500));
 		await sendKeys(tmuxSession, "");
 
 		// Record session

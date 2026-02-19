@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import {mkdtemp, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMetricsStore } from "../metrics/store.ts";
@@ -31,7 +31,7 @@ describe("metricsCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "metrics-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
@@ -340,7 +340,7 @@ describe("formatDuration helper", () => {
 
 		tempDir = await mkdtemp(join(tmpdir(), "metrics-test-"));
 		const legioDir = join(tempDir, ".legio");
-		await Bun.write(
+		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
