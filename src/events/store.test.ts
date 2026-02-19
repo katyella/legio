@@ -5,7 +5,7 @@
  * Philosophy: "never mock what you can use for real".
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { EventStore, InsertEvent, StoredEvent, ToolStats } from "../types.ts";
 import { createEventStore } from "./store.ts";
 

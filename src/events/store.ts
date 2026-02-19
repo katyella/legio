@@ -6,7 +6,7 @@
  * WAL mode enables concurrent reads from multiple agent processes.
  */
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import type {
 	EventLevel,
 	EventQueryOptions,
@@ -81,15 +81,15 @@ function buildFilterClauses(
 
 	if (opts?.since !== undefined) {
 		conditions.push("created_at >= $since");
-		params.$since = opts.since;
+		params.since = opts.since;
 	}
 	if (opts?.until !== undefined) {
 		conditions.push("created_at <= $until");
-		params.$until = opts.until;
+		params.until = opts.until;
 	}
 	if (opts?.level !== undefined) {
 		conditions.push("level = $level");
-		params.$level = opts.level;
+		params.level = opts.level;
 	}
 
 	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -117,20 +117,7 @@ export function createEventStore(dbPath: string): EventStore {
 	db.exec(CREATE_INDEXES);
 
 	// Prepare the insert statement
-	const insertStmt = db.prepare<
-		{ id: number },
-		{
-			$run_id: string | null;
-			$agent_name: string;
-			$session_id: string | null;
-			$event_type: string;
-			$tool_name: string | null;
-			$tool_args: string | null;
-			$tool_duration_ms: number | null;
-			$level: string;
-			$data: string | null;
-		}
-	>(`
+	const insertStmt = db.prepare(`
 		INSERT INTO events
 			(run_id, agent_name, session_id, event_type, tool_name, tool_args, tool_duration_ms, level, data)
 		VALUES
@@ -140,10 +127,7 @@ export function createEventStore(dbPath: string): EventStore {
 
 	// Prepare correlateToolEnd: find the most recent tool_start for this agent+tool
 	// that has no corresponding tool_end yet (no tool_duration_ms set).
-	const correlateStmt = db.prepare<
-		{ id: number; created_at: string },
-		{ $agent_name: string; $tool_name: string }
-	>(`
+	const correlateStmt = db.prepare(`
 		SELECT id, created_at FROM events
 		WHERE agent_name = $agent_name
 		  AND tool_name = $tool_name
@@ -153,33 +137,33 @@ export function createEventStore(dbPath: string): EventStore {
 		LIMIT 1
 	`);
 
-	const updateDurationStmt = db.prepare<void, { $id: number; $duration_ms: number }>(`
+	const updateDurationStmt = db.prepare(`
 		UPDATE events SET tool_duration_ms = $duration_ms WHERE id = $id
 	`);
 
 	// Prepare getByAgent
-	const byAgentStmt = db.prepare<EventRow, { $agent_name: string }>(`
+	const byAgentStmt = db.prepare(`
 		SELECT * FROM events WHERE agent_name = $agent_name ORDER BY created_at ASC
 	`);
 
 	// Prepare getByRun
-	const byRunStmt = db.prepare<EventRow, { $run_id: string }>(`
+	const byRunStmt = db.prepare(`
 		SELECT * FROM events WHERE run_id = $run_id ORDER BY created_at ASC
 	`);
 
 	return {
 		insert(event: InsertEvent): number {
 			const row = insertStmt.get({
-				$run_id: event.runId,
-				$agent_name: event.agentName,
-				$session_id: event.sessionId,
-				$event_type: event.eventType,
-				$tool_name: event.toolName,
-				$tool_args: event.toolArgs,
-				$tool_duration_ms: event.toolDurationMs,
-				$level: event.level,
-				$data: event.data,
-			});
+				run_id: event.runId,
+				agent_name: event.agentName,
+				session_id: event.sessionId,
+				event_type: event.eventType,
+				tool_name: event.toolName,
+				tool_args: event.toolArgs,
+				tool_duration_ms: event.toolDurationMs,
+				level: event.level,
+				data: event.data,
+			}) as { id: number } | undefined;
 			// RETURNING id always returns a row for INSERT; if somehow null, fallback to 0
 			if (!row) {
 				return 0;
@@ -192,9 +176,9 @@ export function createEventStore(dbPath: string): EventStore {
 			toolName: string,
 		): { startId: number; durationMs: number } | null {
 			const startRow = correlateStmt.get({
-				$agent_name: agentName,
-				$tool_name: toolName,
-			});
+				agent_name: agentName,
+				tool_name: toolName,
+			}) as { id: number; created_at: string } | undefined;
 
 			if (!startRow) {
 				return null;
@@ -205,8 +189,8 @@ export function createEventStore(dbPath: string): EventStore {
 
 			// Mark the start event with the computed duration
 			updateDurationStmt.run({
-				$id: startRow.id,
-				$duration_ms: durationMs,
+				id: startRow.id,
+				duration_ms: durationMs,
 			});
 
 			return { startId: startRow.id, durationMs };
@@ -224,13 +208,13 @@ export function createEventStore(dbPath: string): EventStore {
 				const { whereClause, params, limitClause } = buildFilterClauses(
 					opts,
 					["agent_name = $agent_name"],
-					{ $agent_name: agentName },
+					{ agent_name: agentName },
 				);
 				const query = `SELECT * FROM events ${whereClause} ORDER BY created_at ASC ${limitClause}`;
-				const rows = db.prepare<EventRow, Record<string, string | number>>(query).all(params);
+				const rows = db.prepare(query).all(params) as EventRow[];
 				return rows.map(rowToEvent);
 			}
-			const rows = byAgentStmt.all({ $agent_name: agentName });
+			const rows = byAgentStmt.all({ agent_name: agentName }) as EventRow[];
 			return rows.map(rowToEvent);
 		},
 
@@ -245,27 +229,27 @@ export function createEventStore(dbPath: string): EventStore {
 				const { whereClause, params, limitClause } = buildFilterClauses(
 					opts,
 					["run_id = $run_id"],
-					{ $run_id: runId },
+					{ run_id: runId },
 				);
 				const query = `SELECT * FROM events ${whereClause} ORDER BY created_at ASC ${limitClause}`;
-				const rows = db.prepare<EventRow, Record<string, string | number>>(query).all(params);
+				const rows = db.prepare(query).all(params) as EventRow[];
 				return rows.map(rowToEvent);
 			}
-			const rows = byRunStmt.all({ $run_id: runId });
+			const rows = byRunStmt.all({ run_id: runId }) as EventRow[];
 			return rows.map(rowToEvent);
 		},
 
 		getErrors(opts?: EventQueryOptions): StoredEvent[] {
 			const { whereClause, params, limitClause } = buildFilterClauses(opts, ["level = 'error'"]);
 			const query = `SELECT * FROM events ${whereClause} ORDER BY created_at DESC ${limitClause}`;
-			const rows = db.prepare<EventRow, Record<string, string | number>>(query).all(params);
+			const rows = db.prepare(query).all(params) as EventRow[];
 			return rows.map(rowToEvent);
 		},
 
 		getTimeline(opts: EventQueryOptions & { since: string }): StoredEvent[] {
 			const { whereClause, params, limitClause } = buildFilterClauses(opts);
 			const query = `SELECT * FROM events ${whereClause} ORDER BY created_at ASC ${limitClause}`;
-			const rows = db.prepare<EventRow, Record<string, string | number>>(query).all(params);
+			const rows = db.prepare(query).all(params) as EventRow[];
 			return rows.map(rowToEvent);
 		},
 
@@ -275,11 +259,11 @@ export function createEventStore(dbPath: string): EventStore {
 
 			if (opts?.agentName !== undefined) {
 				conditions.push("agent_name = $agent_name");
-				params.$agent_name = opts.agentName;
+				params.agent_name = opts.agentName;
 			}
 			if (opts?.since !== undefined) {
 				conditions.push("created_at >= $since");
-				params.$since = opts.since;
+				params.since = opts.since;
 			}
 
 			const whereClause = `WHERE ${conditions.join(" AND ")}`;
@@ -294,17 +278,12 @@ export function createEventStore(dbPath: string): EventStore {
 				GROUP BY tool_name
 				ORDER BY count DESC
 			`;
-			const rows = db
-				.prepare<
-					{
-						tool_name: string;
-						count: number;
-						avg_duration_ms: number;
-						max_duration_ms: number;
-					},
-					Record<string, string>
-				>(query)
-				.all(params);
+			const rows = db.prepare(query).all(params) as {
+				tool_name: string;
+				count: number;
+				avg_duration_ms: number;
+				max_duration_ms: number;
+			}[];
 
 			return rows.map((row) => ({
 				toolName: row.tool_name,
@@ -317,8 +296,8 @@ export function createEventStore(dbPath: string): EventStore {
 		purge(opts: { all?: boolean; olderThanMs?: number; agentName?: string }): number {
 			if (opts.all) {
 				const countRow = db
-					.prepare<{ cnt: number }, []>("SELECT COUNT(*) as cnt FROM events")
-					.get();
+					.prepare("SELECT COUNT(*) as cnt FROM events")
+					.get() as { cnt: number } | undefined;
 				const count = countRow?.cnt ?? 0;
 				db.prepare("DELETE FROM events").run();
 				return count;
@@ -330,12 +309,12 @@ export function createEventStore(dbPath: string): EventStore {
 			if (opts.olderThanMs !== undefined) {
 				const cutoff = new Date(Date.now() - opts.olderThanMs).toISOString();
 				conditions.push("created_at < $cutoff");
-				params.$cutoff = cutoff;
+				params.cutoff = cutoff;
 			}
 
 			if (opts.agentName !== undefined) {
 				conditions.push("agent_name = $agent_name");
-				params.$agent_name = opts.agentName;
+				params.agent_name = opts.agentName;
 			}
 
 			if (conditions.length === 0) {
@@ -344,15 +323,11 @@ export function createEventStore(dbPath: string): EventStore {
 
 			const whereClause = conditions.join(" AND ");
 			const countRow = db
-				.prepare<{ cnt: number }, Record<string, string>>(
-					`SELECT COUNT(*) as cnt FROM events WHERE ${whereClause}`,
-				)
-				.get(params);
+				.prepare(`SELECT COUNT(*) as cnt FROM events WHERE ${whereClause}`)
+				.get(params) as { cnt: number } | undefined;
 			const count = countRow?.cnt ?? 0;
 
-			db.prepare<void, Record<string, string>>(`DELETE FROM events WHERE ${whereClause}`).run(
-				params,
-			);
+			db.prepare(`DELETE FROM events WHERE ${whereClause}`).run(params);
 
 			return count;
 		},
