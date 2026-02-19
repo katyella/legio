@@ -6,6 +6,9 @@
  * the request — per-request store lifecycle with no shared state.
  */
 
+import { spawn } from "node:child_process";
+import { constants } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AutopilotInstance } from "../autopilot/daemon.ts";
 import { createBeadsClient } from "../beads/client.ts";
@@ -21,6 +24,19 @@ import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type { EventLevel, MailMessage, MergeEntry, RunStatus } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { sendKeys } from "../worktree/tmux.ts";
+
+// ---------------------------------------------------------------------------
+// File helpers
+// ---------------------------------------------------------------------------
+
+async function fileExists(p: string): Promise<boolean> {
+	try {
+		await access(p, constants.F_OK);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Route helpers
@@ -57,12 +73,11 @@ function errorResponse(message: string, status = 500): Response {
  */
 async function loadOrchestratorTmuxSession(projectRoot: string): Promise<string | null> {
 	const regPath = join(projectRoot, ".legio", "orchestrator-tmux.json");
-	const file = Bun.file(regPath);
-	if (!(await file.exists())) {
+	if (!(await fileExists(regPath))) {
 		return null;
 	}
 	try {
-		const text = await file.text();
+		const text = await readFile(regPath, "utf-8");
 		const reg = JSON.parse(text) as { tmuxSession?: string };
 		return reg.tmuxSession ?? null;
 	} catch {
@@ -82,7 +97,7 @@ async function resolveTerminalSession(
 	agentName: string,
 ): Promise<string | null> {
 	const dbPath = join(legioDir, "sessions.db");
-	if (await Bun.file(dbPath).exists()) {
+	if (await fileExists(dbPath)) {
 		const { store } = openSessionStore(legioDir);
 		try {
 			const session = store.getByName(agentName);
@@ -110,13 +125,18 @@ async function resolveTerminalSession(
  * @returns Captured pane output, or null if capture failed
  */
 async function captureTmuxPane(sessionName: string, lines: number): Promise<string | null> {
-	const proc = Bun.spawn(["tmux", "capture-pane", "-t", sessionName, "-p", "-S", `-${lines}`], {
-		stdout: "pipe",
-		stderr: "pipe",
+	return new Promise((resolve) => {
+		const proc = spawn("tmux", ["capture-pane", "-t", sessionName, "-p", "-S", `-${lines}`], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let out = "";
+		proc.stdout.on("data", (chunk: Buffer) => {
+			out += chunk;
+		});
+		proc.on("close", (code: number | null) => {
+			resolve(code === 0 ? out.trim() : null);
+		});
 	});
-	const exitCode = await proc.exited;
-	if (exitCode !== 0) return null;
-	return (await new Response(proc.stdout).text()).trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +250,7 @@ export async function handleApiRequest(
 			await sendKeys(tmuxSession, obj.text);
 			// Follow-up Enter after a short delay to ensure Claude Code's TUI submits.
 			// Same pattern as nudge.ts line 168-169.
-			await Bun.sleep(500);
+			await new Promise((resolve) => setTimeout(resolve, 500));
 			await sendKeys(tmuxSession, "");
 		} catch (err) {
 			return errorResponse(
@@ -302,7 +322,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/agents") {
 		const dbPath = join(legioDir, "sessions.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const { store } = openSessionStore(legioDir);
@@ -315,7 +335,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/agents/active") {
 		const dbPath = join(legioDir, "sessions.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const { store } = openSessionStore(legioDir);
@@ -348,7 +368,7 @@ export async function handleApiRequest(
 			const { name } = params;
 			if (!name) return errorResponse("Missing agent name", 400);
 			const dbPath = join(legioDir, "events.db");
-			if (!(await Bun.file(dbPath).exists())) {
+			if (!(await fileExists(dbPath))) {
 				return jsonResponse([]);
 			}
 			const since = url.searchParams.get("since") ?? undefined;
@@ -373,7 +393,7 @@ export async function handleApiRequest(
 			const { name } = params;
 			if (!name) return errorResponse("Missing agent name", 400);
 			const dbPath = join(legioDir, "sessions.db");
-			if (!(await Bun.file(dbPath).exists())) {
+			if (!(await fileExists(dbPath))) {
 				return errorResponse(`Agent not found: ${name}`, 404);
 			}
 			const { store } = openSessionStore(legioDir);
@@ -393,7 +413,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/mail") {
 		const dbPath = join(legioDir, "mail.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const from = url.searchParams.get("from") ?? undefined;
@@ -412,7 +432,7 @@ export async function handleApiRequest(
 		const agent = url.searchParams.get("agent");
 		if (!agent) return errorResponse("Missing required query param: agent", 400);
 		const dbPath = join(legioDir, "mail.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const store = createMailStore(dbPath);
@@ -425,7 +445,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/mail/conversations") {
 		const dbPath = join(legioDir, "mail.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const agentFilter = url.searchParams.get("agent") ?? undefined;
@@ -487,7 +507,7 @@ export async function handleApiRequest(
 			const { threadId } = params;
 			if (!threadId) return errorResponse("Missing thread ID", 400);
 			const dbPath = join(legioDir, "mail.db");
-			if (!(await Bun.file(dbPath).exists())) {
+			if (!(await fileExists(dbPath))) {
 				return jsonResponse([]);
 			}
 			const store = createMailStore(dbPath);
@@ -506,7 +526,7 @@ export async function handleApiRequest(
 			const { id } = params;
 			if (!id) return errorResponse("Missing message ID", 400);
 			const dbPath = join(legioDir, "mail.db");
-			if (!(await Bun.file(dbPath).exists())) {
+			if (!(await fileExists(dbPath))) {
 				return errorResponse(`Message not found: ${id}`, 404);
 			}
 			const store = createMailStore(dbPath);
@@ -528,7 +548,7 @@ export async function handleApiRequest(
 		const since = url.searchParams.get("since");
 		if (!since) return errorResponse("Missing required query param: since", 400);
 		const dbPath = join(legioDir, "events.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const until = url.searchParams.get("until") ?? undefined;
@@ -546,7 +566,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/events/errors") {
 		const dbPath = join(legioDir, "events.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const since = url.searchParams.get("since") ?? undefined;
@@ -563,7 +583,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/events/tools") {
 		const dbPath = join(legioDir, "events.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const agentName = url.searchParams.get("agent") ?? undefined;
@@ -582,7 +602,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/metrics") {
 		const dbPath = join(legioDir, "metrics.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const limitStr = url.searchParams.get("limit");
@@ -597,7 +617,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/metrics/snapshots") {
 		const dbPath = join(legioDir, "metrics.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const store = createMetricsStore(dbPath);
@@ -614,7 +634,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/runs") {
 		const dbPath = join(legioDir, "sessions.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const limitStr = url.searchParams.get("limit");
@@ -631,7 +651,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/runs/active") {
 		const dbPath = join(legioDir, "sessions.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse(null);
 		}
 		const store = createRunStore(dbPath);
@@ -649,7 +669,7 @@ export async function handleApiRequest(
 			const { id } = params;
 			if (!id) return errorResponse("Missing run ID", 400);
 			const dbPath = join(legioDir, "sessions.db");
-			if (!(await Bun.file(dbPath).exists())) {
+			if (!(await fileExists(dbPath))) {
 				return errorResponse(`Run not found: ${id}`, 404);
 			}
 			const runStore = createRunStore(dbPath);
@@ -672,7 +692,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/merge-queue") {
 		const dbPath = join(legioDir, "merge-queue.db");
-		if (!(await Bun.file(dbPath).exists())) {
+		if (!(await fileExists(dbPath))) {
 			return jsonResponse([]);
 		}
 		const statusParam = url.searchParams.get("status");
