@@ -212,10 +212,12 @@ describe("serverCommand start --daemon", () => {
 		let spawnArgs: string[] | undefined;
 		let spawnEnv: NodeJS.ProcessEnv | undefined;
 
+		let spawnCmd: string | undefined;
 		const deps: ServerDeps = {
 			_isProcessRunning: () => false,
-			_spawn: (_cmd, args, opts) => {
+			_spawn: (cmd, args, opts) => {
 				spawnCalled = true;
+				spawnCmd = cmd;
 				spawnArgs = args;
 				spawnEnv = opts.env as NodeJS.ProcessEnv;
 				return { pid: fakePid, unref: () => {} };
@@ -236,6 +238,7 @@ describe("serverCommand start --daemon", () => {
 		}
 
 		expect(spawnCalled).toBe(true);
+		expect(spawnCmd).toBe("legio");
 		expect(spawnArgs).toContain("server");
 		expect(spawnArgs).toContain("start");
 		expect(spawnArgs).toContain("--port");

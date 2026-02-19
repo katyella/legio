@@ -172,18 +172,10 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 
 		// Spawn detached child without --daemon, with LEGIO_SERVER_DAEMON=1
 		const spawnFn = deps._spawn ?? spawn;
-		const childArgs = [
-			process.argv[1] ?? "legio",
-			"server",
-			"start",
-			"--port",
-			String(port),
-			"--host",
-			host,
-		];
+		const childArgs = ["server", "start", "--port", String(port), "--host", host];
 		if (shouldOpen) childArgs.push("--open");
 
-		const child = spawnFn(process.execPath, childArgs, {
+		const child = spawnFn("legio", childArgs, {
 			detached: true,
 			stdio: "ignore",
 			env: { ...process.env, LEGIO_SERVER_DAEMON: "1" },
