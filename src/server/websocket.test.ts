@@ -159,6 +159,64 @@ describe("createWebSocketManager", () => {
 		expect(() => manager.handleMessage(fakeWs, Buffer.from("not-json{{{"))).not.toThrow();
 	});
 
+	it("broadcastEvent sends event to all connected clients", () => {
+		const manager = createWebSocketManager(legioDir);
+		const messagesA: string[] = [];
+		const messagesB: string[] = [];
+
+		const ws1 = {
+			send(msg: string) {
+				messagesA.push(msg);
+			},
+		} as unknown as WebSocket;
+
+		const ws2 = {
+			send(msg: string) {
+				messagesB.push(msg);
+			},
+		} as unknown as WebSocket;
+
+		manager.addClient(ws1); // initial snapshot
+		manager.addClient(ws2); // initial snapshot
+
+		manager.broadcastEvent({ type: "mail_new", data: { id: "msg-test-001" } });
+
+		// Each client received: 1 initial snapshot + 1 broadcastEvent
+		expect(messagesA.length).toBe(2);
+		expect(messagesB.length).toBe(2);
+
+		const evtA = JSON.parse(messagesA[1] as string);
+		expect(evtA.type).toBe("mail_new");
+		expect(evtA.timestamp).toBeDefined();
+		expect((evtA.data as { id: string }).id).toBe("msg-test-001");
+	});
+
+	it("broadcastEvent with no clients does not throw", () => {
+		const manager = createWebSocketManager(legioDir);
+		expect(() => manager.broadcastEvent({ type: "mail_new" })).not.toThrow();
+	});
+
+	it("broadcastEvent event format includes timestamp", () => {
+		const manager = createWebSocketManager(legioDir);
+		const received: string[] = [];
+
+		const fakeWs = {
+			send(msg: string) {
+				received.push(msg);
+			},
+		} as unknown as WebSocket;
+
+		manager.addClient(fakeWs); // initial snapshot (received[0])
+		manager.broadcastEvent({ type: "test_event", data: { foo: "bar" } });
+
+		expect(received.length).toBe(2);
+		const evt = JSON.parse(received[1] as string);
+		expect(evt.type).toBe("test_event");
+		expect(typeof evt.timestamp).toBe("string");
+		expect(() => new Date(evt.timestamp)).not.toThrow();
+		expect((evt.data as { foo: string }).foo).toBe("bar");
+	});
+
 	it("multiple clients receive snapshot when added", () => {
 		const manager = createWebSocketManager(legioDir);
 		const messages: Record<string, string[]> = { a: [], b: [] };

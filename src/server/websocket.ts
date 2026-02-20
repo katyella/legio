@@ -30,6 +30,7 @@ export interface WebSocketManager {
 	handleMessage(ws: WebSocket, message: RawData): void;
 	startPolling(): void;
 	stopPolling(): void;
+	broadcastEvent(event: { type: string; data?: unknown }): void;
 }
 
 export function createWebSocketManager(
@@ -189,6 +190,17 @@ export function createWebSocketManager(
 			if (pollInterval) {
 				clearInterval(pollInterval);
 				pollInterval = null;
+			}
+		},
+
+		broadcastEvent(event) {
+			const msg = JSON.stringify({ ...event, timestamp: new Date().toISOString() });
+			for (const client of clients) {
+				try {
+					client.send(msg);
+				} catch {
+					clients.delete(client);
+				}
 			}
 		},
 	};

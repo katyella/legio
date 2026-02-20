@@ -149,6 +149,7 @@ export async function handleApiRequest(
 	legioDir: string,
 	projectRoot: string,
 	autopilot?: AutopilotInstance | null,
+	wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const path = url.pathname;
@@ -210,6 +211,7 @@ export async function handleApiRequest(
 				priority,
 				threadId,
 			});
+			wsManager?.broadcastEvent({ type: "mail_new", data: message });
 			return jsonResponse(message, 201);
 		} catch (err) {
 			return errorResponse(
