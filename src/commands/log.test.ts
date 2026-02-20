@@ -1197,7 +1197,7 @@ describe("logCommand --stdin integration", () => {
 		// Inline script that calls logCommand with --stdin and reads from stdin
 		const scriptPath = join(tempDir, "_run-log.ts");
 		const scriptContent = `
-import { logCommand } from "${join(import.meta.dir, "log.ts").replace(/\\/g, "/")}";
+import { logCommand } from "${join(import.meta.dirname, "log.ts").replace(/\\/g, "/")}";
 const args = process.argv.slice(2);
 try {
 	await logCommand(args);
@@ -1391,7 +1391,7 @@ try {
 		// Send empty JSON object — should still work (falls back to "unknown" tool name)
 		const scriptPath = join(tempDir, "_run-log-empty.ts");
 		const scriptContent = `
-import { logCommand } from "${join(import.meta.dir, "log.ts").replace(/\\/g, "/")}";
+import { logCommand } from "${join(import.meta.dirname, "log.ts").replace(/\\/g, "/")}";
 import { spawn } from "node:child_process";
 /** Test helper: create a file accessor for checking existence and reading content. */
 function fileAccessor(path: string) {

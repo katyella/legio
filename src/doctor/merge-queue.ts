@@ -21,7 +21,7 @@ export const checkMergeQueue: DoctorCheckFn = (_config, legioDir): DoctorCheck[]
 		return checks;
 	}
 
-	let db: Database;
+	let db: InstanceType<typeof Database>;
 	try {
 		db = new Database(dbPath, { readonly: true });
 	} catch (err) {

@@ -104,7 +104,7 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 		}
 
 		// Try to open the database
-		let db: Database | null = null;
+		let db: InstanceType<typeof Database> | null = null;
 		try {
 			db = new Database(dbPath);
 
