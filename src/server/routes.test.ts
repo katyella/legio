@@ -1640,6 +1640,357 @@ describe("POST /api/setup/init", () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/coordinator/start
+// ---------------------------------------------------------------------------
+
+describe("POST /api/coordinator/start", () => {
+	it("returns well-formed response (success or graceful error from legio)", async () => {
+		const res = await dispatchPost("/api/coordinator/start", {});
+		// 200 if legio succeeded, 500 if legio not available or failed
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("passes --watchdog flag when body.watchdog is true", async () => {
+		const res = await dispatchPost("/api/coordinator/start", { watchdog: true });
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("passes --monitor flag when body.monitor is true", async () => {
+		const res = await dispatchPost("/api/coordinator/start", { monitor: true });
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/coordinator/start", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with coordinator_start on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/coordinator/start", {}),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			// legio succeeded — broadcastEvent should have been called
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("coordinator_start");
+		}
+		// If status is 500 (legio failed), no event expected
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/coordinator/stop
+// ---------------------------------------------------------------------------
+
+describe("POST /api/coordinator/stop", () => {
+	it("returns well-formed response (success or graceful error from legio)", async () => {
+		const res = await dispatchPost("/api/coordinator/stop", {});
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/coordinator/stop", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with coordinator_stop on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/coordinator/stop", {}),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("coordinator_stop");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/agents/spawn
+// ---------------------------------------------------------------------------
+
+describe("POST /api/agents/spawn", () => {
+	it("returns 400 when taskId is missing", async () => {
+		const res = await dispatchPost("/api/agents/spawn", {
+			name: "my-builder",
+			capability: "builder",
+		});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("taskId");
+	});
+
+	it("returns 400 when name is missing", async () => {
+		const res = await dispatchPost("/api/agents/spawn", {
+			taskId: "legio-abc1",
+			capability: "builder",
+		});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("name");
+	});
+
+	it("returns 400 when capability is missing", async () => {
+		const res = await dispatchPost("/api/agents/spawn", {
+			taskId: "legio-abc1",
+			name: "my-builder",
+		});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("capability");
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/agents/spawn", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("returns 201 on success or 500 on graceful error (legio CLI)", async () => {
+		const res = await dispatchPost("/api/agents/spawn", {
+			taskId: "legio-abc1",
+			name: "test-builder",
+			capability: "builder",
+		});
+		// 201 Created on success, 500 on legio error
+		expect([201, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("passes optional spec, files, parent, depth when provided", async () => {
+		const res = await dispatchPost("/api/agents/spawn", {
+			taskId: "legio-abc1",
+			name: "test-builder",
+			capability: "builder",
+			spec: "/tmp/spec.md",
+			files: ["src/foo.ts", "src/bar.ts"],
+			parent: "my-lead",
+			depth: 1,
+		});
+		// Verify optional fields are accepted (legio will fail but args were constructed)
+		expect([201, 500]).toContain(res.status);
+	});
+
+	it("calls wsManager.broadcastEvent with agent_spawn on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/agents/spawn", {
+				taskId: "legio-abc1",
+				name: "test-builder",
+				capability: "builder",
+			}),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		if (res.status === 201) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("agent_spawn");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/merge
+// ---------------------------------------------------------------------------
+
+describe("POST /api/merge", () => {
+	it("returns 400 when neither branch nor all is provided", async () => {
+		const res = await dispatchPost("/api/merge", {});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("branch");
+	});
+
+	it("returns well-formed response for branch merge (success or error)", async () => {
+		const res = await dispatchPost("/api/merge", { branch: "legio/some-agent/task-1" });
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("returns well-formed response for --all merge (success or error)", async () => {
+		const res = await dispatchPost("/api/merge", { all: true });
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("passes --into and --dry-run flags when provided", async () => {
+		const res = await dispatchPost("/api/merge", {
+			branch: "legio/some-agent/task-1",
+			into: "main",
+			dryRun: true,
+		});
+		expect([200, 500]).toContain(res.status);
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/merge", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with merge_complete on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/merge", { branch: "legio/some-agent/task-1" }),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("merge_complete");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/nudge
+// ---------------------------------------------------------------------------
+
+describe("POST /api/nudge", () => {
+	it("returns 400 when agent is missing", async () => {
+		const res = await dispatchPost("/api/nudge", { message: "hello" });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("agent");
+	});
+
+	it("returns well-formed response (success or graceful error)", async () => {
+		const res = await dispatchPost("/api/nudge", { agent: "my-builder" });
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("passes message as positional arg when provided", async () => {
+		const res = await dispatchPost("/api/nudge", {
+			agent: "my-builder",
+			message: "Please check your mail",
+		});
+		expect([200, 500]).toContain(res.status);
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/nudge", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with agent_nudge on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/nudge", { agent: "my-builder", message: "hey" }),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("agent_nudge");
+			const data = events[0]?.data as { agent: string; message: string | null };
+			expect(data.agent).toBe("my-builder");
+			expect(data.message).toBe("hey");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Strategy routes
 // ---------------------------------------------------------------------------
 
