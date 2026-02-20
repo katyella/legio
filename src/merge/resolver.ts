@@ -11,8 +11,8 @@
  * Disabled tiers are skipped. Uses child_process.spawn for all subprocess calls.
  */
 
-import * as cp from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import * as cp from "node:child_process";
 import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { MergeError } from "../errors.ts";
 import type { MulchClient } from "../mulch/client.ts";
@@ -27,6 +27,101 @@ import type {
 export interface MergeResolver {
 	/** Attempt to merge the entry's branch into the canonical branch with tiered resolution. */
 	resolve(entry: MergeEntry, canonicalBranch: string, repoRoot: string): Promise<MergeResult>;
+}
+
+/**
+ * Parse conflict markers in JSONL file content and resolve using a union-dedup-sort strategy.
+ *
+ * Collects all lines from both sides of each conflict block plus non-conflict content,
+ * parses each as JSON, deduplicates by `id` field (keeping the record with the later
+ * `recorded_at` value), and sorts the result by `recorded_at` ascending.
+ * Records without an `id` field are appended at the end.
+ *
+ * Returns null if:
+ * - No conflict markers are found
+ * - Any non-empty line fails JSON.parse (falls through to generic strategy)
+ * - Any parsed value is not a JSON object
+ */
+export function resolveJsonlConflict(content: string): string | null {
+	const conflictPattern = /^<{7} .+\n([\s\S]*?)^={7}\n([\s\S]*?)^>{7} .+\n?/gm;
+
+	if (!conflictPattern.test(content)) {
+		return null;
+	}
+
+	// Reset regex lastIndex after test()
+	conflictPattern.lastIndex = 0;
+
+	const allLines: string[] = [];
+	let lastIndex = 0;
+	let match: RegExpExecArray | null;
+
+	while ((match = conflictPattern.exec(content)) !== null) {
+		// Collect non-conflict content before this match
+		const before = content.slice(lastIndex, match.index);
+		for (const line of before.split("\n")) {
+			const trimmed = line.trim();
+			if (trimmed.length > 0) allLines.push(trimmed);
+		}
+
+		// Collect HEAD (canonical) side
+		const canonical = match[1] ?? "";
+		for (const line of canonical.split("\n")) {
+			const trimmed = line.trim();
+			if (trimmed.length > 0) allLines.push(trimmed);
+		}
+
+		// Collect incoming side
+		const incoming = match[2] ?? "";
+		for (const line of incoming.split("\n")) {
+			const trimmed = line.trim();
+			if (trimmed.length > 0) allLines.push(trimmed);
+		}
+
+		lastIndex = match.index + match[0].length;
+	}
+
+	// Collect remaining non-conflict content after last match
+	const remaining = content.slice(lastIndex);
+	for (const line of remaining.split("\n")) {
+		const trimmed = line.trim();
+		if (trimmed.length > 0) allLines.push(trimmed);
+	}
+
+	// Parse each line as JSON and dedup by id field
+	const idMap = new Map<string, { recordedAt: string; raw: string }>();
+	const noIdLines: string[] = [];
+
+	for (const line of allLines) {
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(line);
+		} catch {
+			return null; // Invalid JSON — fall through to generic strategy
+		}
+
+		if (typeof parsed !== "object" || parsed === null) {
+			return null; // Not a JSON object — fall through
+		}
+
+		const record = parsed as Record<string, unknown>;
+
+		if (typeof record["id"] === "string" && typeof record["recorded_at"] === "string") {
+			const existing = idMap.get(record["id"]);
+			if (!existing || record["recorded_at"] > existing.recordedAt) {
+				idMap.set(record["id"], { recordedAt: record["recorded_at"], raw: line });
+			}
+		} else {
+			noIdLines.push(line);
+		}
+	}
+
+	// Sort id-bearing records by recorded_at ascending, append no-id records at the end
+	const sorted = [...idMap.values()]
+		.sort((a, b) => (a.recordedAt < b.recordedAt ? -1 : a.recordedAt > b.recordedAt ? 1 : 0))
+		.map((r) => r.raw);
+
+	return [...sorted, ...noIdLines].join("\n") + "\n";
 }
 
 /**
@@ -312,7 +407,9 @@ export function createMergeResolver(options: {
 
 			try {
 				const content = await readFile(filePath);
-				const resolved = resolveConflictsKeepIncoming(content);
+				const resolved = file.endsWith(".jsonl")
+					? resolveJsonlConflict(content)
+					: resolveConflictsKeepIncoming(content);
 
 				if (resolved === null) {
 					// No conflict markers found (shouldn't happen but be defensive)
