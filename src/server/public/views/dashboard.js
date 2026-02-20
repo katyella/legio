@@ -1,8 +1,10 @@
 // dashboard.js — Dashboard view component (Preact+HTM)
 // 4-panel grid: Agents table, Recent Mail, Merge Queue, Metrics strip.
 
-import { html } from "../lib/preact-setup.js";
+import { html, useState } from "../lib/preact-setup.js";
 import { formatDuration, timeAgo, truncate } from "../lib/utils.js";
+import { postJson, fetchJson } from "../lib/api.js";
+import { appState } from "../lib/state.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,10 +63,20 @@ function sortAgents(agents) {
 function AgentsTable({ agents }) {
 	const sorted = sortAgents(agents);
 
+	function handleSpawn() {
+		if (appState.showSpawnDialog) appState.showSpawnDialog.value = true;
+	}
+
 	return html`
 		<div class="bg-surface border border-border rounded-sm col-span-10">
-			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400">
-				Agents
+			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
+				<span>Agents</span>
+				<button
+					class="bg-[#2a2a2a] hover:bg-[#333] text-[#999] text-xs px-2 py-1 rounded cursor-pointer border border-[#333]"
+					onClick=${handleSpawn}
+				>
+					Spawn Agent
+				</button>
 			</div>
 			<div class="overflow-x-auto overflow-y-auto max-h-[60vh]">
 				<table class="w-full text-sm">
@@ -147,12 +159,68 @@ function RecentMail({ mail }) {
 }
 
 function MergeQueue({ mergeQueue }) {
+	const [mergingBranch, setMergingBranch] = useState(null);
+	const [mergingAll, setMergingAll] = useState(false);
+	const [error, setError] = useState(null);
+
+	const pendingEntries = mergeQueue.filter((e) => e.status === "pending");
+
+	async function refreshQueue() {
+		try {
+			const data = await fetchJson("/api/merge-queue");
+			if (appState.mergeQueue) appState.mergeQueue.value = data;
+		} catch (_e) {
+			// ignore refresh errors
+		}
+	}
+
+	function showError(msg) {
+		setError(msg);
+		setTimeout(() => setError(null), 5000);
+	}
+
+	async function handleMergeAll() {
+		setMergingAll(true);
+		setError(null);
+		try {
+			await postJson("/api/merge", { all: true });
+			await refreshQueue();
+		} catch (e) {
+			showError(e.message || "Merge all failed");
+		} finally {
+			setMergingAll(false);
+		}
+	}
+
+	async function handleMergeBranch(branchName) {
+		setMergingBranch(branchName);
+		setError(null);
+		try {
+			await postJson("/api/merge", { branch: branchName });
+			await refreshQueue();
+		} catch (e) {
+			showError(e.message || `Merge failed for ${branchName}`);
+		} finally {
+			setMergingBranch(null);
+		}
+	}
+
 	return html`
 		<div class="bg-surface border border-border rounded-sm col-span-4">
-			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400">
-				Merge Queue
+			<div class="border-b border-border px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
+				<span>Merge Queue</span>
+				${pendingEntries.length > 0
+					? html`<button
+							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-1 rounded cursor-pointer border-none"
+							onClick=${handleMergeAll}
+							disabled=${mergingAll}
+						>
+							${mergingAll ? "Merging…" : "Merge All"}
+						</button>`
+					: null}
 			</div>
 			<div class="p-2 space-y-1 overflow-y-auto max-h-[40vh]">
+				${error ? html`<div class="text-xs text-red-400 mt-1 px-2">${error}</div>` : null}
 				${mergeQueue.length === 0
 					? html`<div class="px-2 py-6 text-center text-gray-500">Queue is empty</div>`
 					: mergeQueue.map(
@@ -169,6 +237,15 @@ function MergeQueue({ mergeQueue }) {
 									<span class="shrink-0 rounded-sm border border-border px-1.5 py-0.5 text-xs text-gray-400">
 										${entry.status || ""}
 									</span>
+									${entry.status === "pending"
+										? html`<button
+												class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-1 rounded cursor-pointer border-none shrink-0"
+												onClick=${() => handleMergeBranch(entry.branchName)}
+												disabled=${mergingBranch === entry.branchName || mergingAll}
+											>
+												${mergingBranch === entry.branchName ? "…" : "Merge"}
+											</button>`
+										: null}
 								</div>
 							`,
 						)}
