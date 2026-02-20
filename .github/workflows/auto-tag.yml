@@ -14,19 +14,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: '22'
+          cache: 'npm'
 
-      - run: bun install
-      - run: bun run lint
-      - run: bun run typecheck
-      - run: bun test
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
 
       - name: Check if version is already tagged
         id: version-check
         run: |
-          VERSION=$(bun -e "console.log(require('./package.json').version)")
+          VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
           if git tag -l "$TAG" | grep -q "$TAG"; then
             echo "tag=false" >> "$GITHUB_OUTPUT"
@@ -45,7 +46,7 @@ jobs:
           if [ "$PKG_VERSION" != "$SRC_VERSION" ]; then
             echo "::error::Version mismatch! package.json=$PKG_VERSION src/index.ts=$SRC_VERSION"
             echo "Both package.json and src/index.ts must have the same version."
-            echo "Use 'bun run version:bump <major|minor|patch>' to update both."
+            echo "Use 'npm run version:bump <major|minor|patch>' to update both."
             exit 1
           fi
 
