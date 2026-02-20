@@ -147,6 +147,7 @@ export async function createServer(options: ServerOptions, deps?: ServerDeps): P
 							legioDir: string,
 							root: string,
 							autopilot?: import("../autopilot/daemon.ts").AutopilotInstance | null,
+						wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
 						): Promise<Response>;
 					};
 					const { handleApiRequest } = (await import("./routes.ts")) as RoutesModule;
@@ -169,7 +170,7 @@ export async function createServer(options: ServerOptions, deps?: ServerDeps): P
 						body: body.length > 0 ? body.toString("utf8") : undefined,
 					});
 
-					const webRes = await handleApiRequest(webReq, legioDir, root, autopilot);
+					const webRes = await handleApiRequest(webReq, legioDir, root, autopilot, wsManager);
 					await sendWebResponse(webRes, res);
 				} catch (err) {
 					const message = err instanceof Error ? err.message : "Internal server error";

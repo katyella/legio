@@ -779,6 +779,70 @@ describe("POST /api/mail/send", () => {
 		expect(body.error).toContain("body");
 	});
 
+	it("calls wsManager.broadcastEvent with mail_new event after successful insert", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/mail/send", {
+				from: "agent1",
+				to: "agent2",
+				subject: "Worker done",
+				body: "Task complete",
+				type: "worker_done",
+			}),
+			legioDir,
+			projectRoot,
+			undefined,
+			mockWsManager,
+		);
+
+		expect(res.status).toBe(201);
+		expect(events.length).toBe(1);
+		expect(events[0]?.type).toBe("mail_new");
+		const data = events[0]?.data as { from: string; to: string; subject: string; type: string };
+		expect(data.from).toBe("agent1");
+		expect(data.to).toBe("agent2");
+		expect(data.subject).toBe("Worker done");
+		expect(data.type).toBe("worker_done");
+	});
+
+	it("works when wsManager is null (backward compat)", async () => {
+		const res = await handleApiRequest(
+			makePostRequest("/api/mail/send", {
+				from: "agent1",
+				to: "agent2",
+				subject: "Test",
+				body: "Body",
+			}),
+			legioDir,
+			projectRoot,
+			undefined,
+			null,
+		);
+		expect(res.status).toBe(201);
+	});
+
+	it("works when wsManager is undefined (backward compat)", async () => {
+		const res = await handleApiRequest(
+			makePostRequest("/api/mail/send", {
+				from: "agent1",
+				to: "agent2",
+				subject: "Test",
+				body: "Body",
+			}),
+			legioDir,
+			projectRoot,
+			undefined,
+			undefined,
+		);
+		expect(res.status).toBe(201);
+	});
+
 	it("returns 400 for non-JSON body", async () => {
 		const res = await handleApiRequest(
 			new Request("http://localhost/api/mail/send", {

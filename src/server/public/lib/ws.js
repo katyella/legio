@@ -47,6 +47,14 @@ export function connectWS() {
 		}
 		if (msg.type === "snapshot") {
 			handleSnapshot(msg.data || {});
+		} else if (msg.type === "mail_new") {
+			// Prepend new message to mail array if not already present
+			const current = appState.mail.value;
+			const newMsg = msg.data;
+			if (newMsg && !current.some(m => m.id === newMsg.id)) {
+				appState.mail.value = [newMsg, ...current];
+			}
+			setLastUpdated();
 		}
 	});
 
