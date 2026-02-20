@@ -6,13 +6,10 @@ import { useState, useEffect } from 'preact/hooks';
 import { html } from 'htm/preact';
 import { appState, setLastUpdated } from './lib/state.js';
 import { CommandView } from './views/command.js';
-import { ChatView } from './views/chat.js';
 import { DashboardView } from './views/dashboard.js';
-import { EventsView } from './views/events.js';
 import { IssuesView } from './views/issues.js';
 import { InspectView } from './views/inspect.js';
 import { CostsView } from './views/costs.js';
-import { TerminalView } from './views/terminal.js';
 import { connectWS } from './lib/ws.js';
 import { fetchJson } from './lib/api.js';
 import { timeAgo } from './lib/utils.js';
@@ -59,20 +56,12 @@ function parseHash(hash) {
 // ===== Router =====
 
 function Router({ view, param }) {
-	const chatState = {
-		mail: appState.mail.value,
-		agents: appState.agents.value,
-		issues: appState.issues.value,
-	};
 	switch (view) {
 		case 'command':   return html`<${CommandView} />`;
-		case 'chat':      return html`<${ChatView} state=${chatState} />`;
 		case 'dashboard': return html`<${DashboardView} agents=${appState.agents.value} mail=${appState.mail.value} mergeQueue=${appState.mergeQueue.value} status=${appState.status.value} />`;
-		case 'events':    return html`<${EventsView} events=${appState.events.value} />`;
 		case 'costs':     return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
 		case 'issues':    return html`<${IssuesView} issues=${appState.issues.value} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
-		case 'terminal':  return html`<${TerminalView} />`;
 		case 'autopilot': return html`<${AutopilotView} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
 		default:          return html`<${CommandView} />`;
@@ -83,13 +72,10 @@ function Router({ view, param }) {
 
 const NAV_LINKS = [
 	{ href: '#command',   label: 'Command',   view: 'command' },
-	{ href: '#chat',      label: 'Chat',      view: 'chat' },
 	{ href: '#dashboard', label: 'Dashboard', view: 'dashboard' },
-	{ href: '#events',    label: 'Events',    view: 'events' },
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
 	{ href: '#issues',    label: 'Issues',    view: 'issues' },
 	{ href: '#strategy',  label: 'Strategy',  view: 'strategy' },
-	{ href: '#terminal',  label: 'Terminal',  view: 'terminal' },
 	{ href: '#autopilot', label: 'Autopilot', view: 'autopilot' },
 ];
 
