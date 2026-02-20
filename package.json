@@ -24,7 +24,20 @@
 		"node": ">=22"
 	},
 	"bin": {
-		"legio": "./src/index.ts"
+		"legio": "./bin/legio.mjs"
+	},
+	"files": [
+		"src",
+		"agents",
+		"templates",
+		"bin",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	],
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
 	},
 	"scripts": {
 		"test": "vitest run",
@@ -38,6 +51,7 @@
 	},
 	"dependencies": {
 		"better-sqlite3": "^12.6.2",
+		"tsx": "^4.19.3",
 		"ws": "^8.18.0"
 	},
 	"devDependencies": {
