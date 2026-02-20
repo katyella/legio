@@ -33,13 +33,6 @@ function bunShims(): Plugin {
 export default defineConfig({
 	plugins: [bunShims()],
 	test: {
-		include: [
-			"src/mail/**/*.test.ts",
-			"src/sessions/**/*.test.ts",
-			"src/events/**/*.test.ts",
-			"src/metrics/**/*.test.ts",
-			"src/merge/**/*.test.ts",
-			"src/server/**/*.test.ts",
-		],
+		include: ["src/**/*.test.ts"],
 	},
 });
