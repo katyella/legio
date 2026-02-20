@@ -12,7 +12,7 @@ import { agentColor, timeAgo } from "../lib/utils.js";
  * @param {object} props.msg          - Message object { from, to, body, subject, createdAt, type, priority, read }
  * @param {string} [props.capability] - Agent capability for color coding ("coordinator", "builder", etc.)
  * @param {boolean} [props.isUser]    - True for user-sent messages (right-aligned, accent color)
- * @param {boolean} [props.showName]  - Show sender name + dot + timestamp header (default true)
+ * @param {boolean} [props.showName]  - Show sender name + avatar + timestamp header (default true)
  * @param {boolean} [props.compact]   - Tighter padding for grouped messages (default false)
  */
 export function MessageBubble({
@@ -28,6 +28,7 @@ export function MessageBubble({
 				border: "border-[#E64415]",
 				text: "text-[#E64415]",
 				dot: "bg-[#E64415]",
+				avatar: "💬",
 			}
 		: agentColor(capability);
 
@@ -56,7 +57,7 @@ export function MessageBubble({
 			${
 				showName &&
 				html`<div class="flex items-center gap-1.5 mb-1">
-				<span class=${`w-2 h-2 rounded-full flex-shrink-0 ${colors.dot}`}></span>
+				<span class="text-base leading-none flex-shrink-0">${colors.avatar}</span>
 				<span class=${`text-xs font-semibold ${colors.text}`}>${msg.from || ""}</span>
 				<span class="text-xs text-[#555]">${timeAgo(msg.createdAt)}</span>
 			</div>`
@@ -109,7 +110,7 @@ export function ActivityCard({ event, capability }) {
 		<div
 			class="mx-auto max-w-[70%] flex items-center gap-1.5 px-3 py-1 mb-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]"
 		>
-			<span class=${`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors.dot}`}></span>
+			<span class="text-xs leading-none flex-shrink-0">${colors.avatar}</span>
 			<span class="text-xs text-[#666] truncate">${summary}</span>
 			<span class="text-xs text-[#444] flex-shrink-0 ml-auto">${timeAgo(ts)}</span>
 		</div>

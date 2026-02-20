@@ -124,30 +124,35 @@ const AGENT_COLORS = {
 		border: "border-blue-500",
 		text: "text-blue-400",
 		dot: "bg-blue-500",
+		avatar: "🎯",
 	},
 	lead: {
 		bg: "bg-green-500/10",
 		border: "border-green-500",
 		text: "text-green-400",
 		dot: "bg-green-500",
+		avatar: "🏗️",
 	},
 	builder: {
 		bg: "bg-purple-500/10",
 		border: "border-purple-500",
 		text: "text-purple-400",
 		dot: "bg-purple-500",
+		avatar: "🔧",
 	},
 	scout: {
 		bg: "bg-orange-500/10",
 		border: "border-orange-500",
 		text: "text-orange-400",
 		dot: "bg-orange-500",
+		avatar: "🔍",
 	},
 	reviewer: {
 		bg: "bg-teal-500/10",
 		border: "border-teal-500",
 		text: "text-teal-400",
 		dot: "bg-teal-500",
+		avatar: "📝",
 	},
 };
 
@@ -156,6 +161,7 @@ const DEFAULT_AGENT_COLOR = {
 	border: "border-gray-500",
 	text: "text-gray-400",
 	dot: "bg-gray-500",
+	avatar: "💬",
 };
 
 /**
