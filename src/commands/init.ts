@@ -239,7 +239,7 @@ function buildAgentManifest(): AgentManifest {
 		},
 		lead: {
 			file: "lead.md",
-			model: "opus",
+			model: "sonnet",
 			tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "Task"],
 			capabilities: ["coordinate", "implement", "review"],
 			canSpawn: true,
