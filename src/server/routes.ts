@@ -141,6 +141,67 @@ async function captureTmuxPane(sessionName: string, lines: number): Promise<stri
 }
 
 // ---------------------------------------------------------------------------
+// runLegio helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Spawn `legio <args>` as a subprocess, capture stdout/stderr, and return
+ * parsed JSON output on success.
+ */
+async function runLegio(
+	args: string[],
+	projectRoot: string,
+): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
+	return new Promise((resolve) => {
+		const proc = spawn("legio", args, {
+			cwd: projectRoot,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		let stderr = "";
+		proc.stdout?.on("data", (chunk: Buffer) => {
+			stdout += chunk;
+		});
+		proc.stderr?.on("data", (chunk: Buffer) => {
+			stderr += chunk;
+		});
+		proc.on("close", (code: number | null) => {
+			if (code === 0) {
+				try {
+					resolve({ ok: true, data: JSON.parse(stdout) });
+				} catch {
+					resolve({ ok: true, data: stdout.trim() });
+				}
+			} else {
+				const raw = stderr.trim() || stdout.trim() || "Command failed";
+				const errorText = raw.split("\n")[0] ?? "Command failed";
+				resolve({ ok: false, error: errorText });
+			}
+		});
+		proc.on("error", (err: Error) => {
+			resolve({ ok: false, error: err.message });
+		});
+	});
+}
+
+/**
+ * Parse and validate a JSON request body as a plain object.
+ * Returns the parsed object or an error Response if invalid.
+ */
+async function parseJsonBody(request: Request): Promise<Record<string, unknown> | Response> {
+	let body: unknown;
+	try {
+		body = await request.json();
+	} catch {
+		return errorResponse("Invalid JSON body", 400);
+	}
+	if (typeof body !== "object" || body === null || Array.isArray(body)) {
+		return errorResponse("Request body must be a JSON object", 400);
+	}
+	return body as Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -350,34 +411,12 @@ export async function handleApiRequest(
 		} catch {
 			// ignore — force defaults to false
 		}
-
-		return new Promise<Response>((resolve) => {
-			const args = force ? ["init", "--force"] : ["init"];
-			const proc = spawn("legio", args, {
-				cwd: projectRoot,
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-			let stdout = "";
-			let stderr = "";
-			proc.stdout?.on("data", (chunk: Buffer) => {
-				stdout += chunk;
-			});
-			proc.stderr?.on("data", (chunk: Buffer) => {
-				stderr += chunk;
-			});
-			proc.on("close", (code: number | null) => {
-				if (code === 0) {
-					resolve(jsonResponse({ success: true, message: "Project initialized successfully" }));
-				} else {
-					const raw = stderr.trim() || stdout.trim() || "Init failed";
-					const errorText = raw.split("\n")[0] ?? "Init failed";
-					resolve(jsonResponse({ success: false, error: errorText }));
-				}
-			});
-			proc.on("error", (err: Error) => {
-				resolve(jsonResponse({ success: false, error: err.message }));
-			});
-		});
+		const args = force ? ["init", "--force"] : ["init"];
+		const result = await runLegio(args, projectRoot);
+		if (result.ok) {
+			return jsonResponse({ success: true, message: "Project initialized successfully" });
+		}
+		return jsonResponse({ success: false, error: result.error });
 	}
 
 	// -------------------------------------------------------------------------
@@ -460,6 +499,120 @@ export async function handleApiRequest(
 				);
 			}
 		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Coordinator — POST routes (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/coordinator/start") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+		const args = ["coordinator", "start", "--no-attach", "--json"];
+		if (parsed.watchdog === true) args.push("--watchdog");
+		if (parsed.monitor === true) args.push("--monitor");
+		const result = await runLegio(args, projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "coordinator_start", data: result.data });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
+	}
+
+	if (request.method === "POST" && path === "/api/coordinator/stop") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+		const result = await runLegio(["coordinator", "stop", "--json"], projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "coordinator_stop", data: result.data });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
+	}
+
+	// -------------------------------------------------------------------------
+	// Agents spawn — POST route (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/agents/spawn") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const taskId = typeof parsed.taskId === "string" ? parsed.taskId : null;
+		const name = typeof parsed.name === "string" ? parsed.name : null;
+		const capability = typeof parsed.capability === "string" ? parsed.capability : null;
+
+		if (!taskId) return errorResponse("Missing required field: taskId", 400);
+		if (!name) return errorResponse("Missing required field: name", 400);
+		if (!capability) return errorResponse("Missing required field: capability", 400);
+
+		const args = ["sling", taskId, "--name", name, "--capability", capability, "--json"];
+		if (typeof parsed.spec === "string") args.push("--spec", parsed.spec);
+		if (Array.isArray(parsed.files) && parsed.files.length > 0) {
+			args.push("--files", (parsed.files as string[]).join(","));
+		}
+		if (typeof parsed.parent === "string") args.push("--parent", parsed.parent);
+		if (parsed.depth !== undefined) args.push("--depth", String(parsed.depth));
+
+		const result = await runLegio(args, projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "agent_spawn", data: result.data });
+			return jsonResponse(result.data, 201);
+		}
+		return errorResponse(result.error);
+	}
+
+	// -------------------------------------------------------------------------
+	// Merge — POST route (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/merge") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const branch = typeof parsed.branch === "string" ? parsed.branch : null;
+		const all = parsed.all === true;
+
+		if (!branch && !all) {
+			return errorResponse("Must specify either branch or all", 400);
+		}
+
+		const args = ["merge", "--json"];
+		if (branch) args.push("--branch", branch);
+		if (all) args.push("--all");
+		if (typeof parsed.into === "string") args.push("--into", parsed.into);
+		if (parsed.dryRun === true) args.push("--dry-run");
+
+		const result = await runLegio(args, projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "merge_complete", data: result.data });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
+	}
+
+	// -------------------------------------------------------------------------
+	// Nudge — POST route (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/nudge") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const agent = typeof parsed.agent === "string" ? parsed.agent : null;
+		if (!agent) return errorResponse("Missing required field: agent", 400);
+
+		const message = typeof parsed.message === "string" ? parsed.message : null;
+		const args = ["nudge", agent];
+		if (message) args.push(message);
+		args.push("--json");
+
+		const result = await runLegio(args, projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "agent_nudge", data: { agent, message } });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
 	}
 
 	// Only handle GET requests for all other routes
