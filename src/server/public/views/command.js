@@ -7,6 +7,7 @@ import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import {
 	agentColor,
+	groupActivityMessages,
 	isActivityMessage,
 	stateColor,
 	stateIcon,
