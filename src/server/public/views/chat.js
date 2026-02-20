@@ -141,6 +141,9 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const [expandedTasks, setExpandedTasks] = useState(() => new Set());
 	const [collapsedThreads, setCollapsedThreads] = useState(() => new Set());
 
+	// Chat/All mode toggle
+	const [chatMode, setChatMode] = useState("chat");
+
 	// Chat input form state (simplified: no From, Subject, or Type)
 	const [toVal, setToVal] = useState("");
 	const [bodyVal, setBodyVal] = useState("");
@@ -223,6 +226,11 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	filteredMessages.sort(
 		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
 	);
+
+	// In chat mode, hide protocol/activity messages
+	if (chatMode === "chat") {
+		filteredMessages = filteredMessages.filter((m) => !isActivityMessage(m));
+	}
 
 	// Root messages: no threadId, or threadId equals their own id
 	const roots = filteredMessages.filter((m) => !m.threadId || m.threadId === m.id);
@@ -365,7 +373,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 			key=${msg.id}
 			msg=${msg}
 			capability=${capability || (isUser ? "coordinator" : null)}
-			isUser=${false}
+			isUser=${isUser}
 			showName=${showName}
 			compact=${compact}
 		/>`;
@@ -590,7 +598,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 			<div class="flex-1 flex flex-col min-w-0">
 
 				<!-- Header -->
-				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2">
+				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2 flex-wrap">
 					${
 						selectedAgent
 							? html`
@@ -653,12 +661,34 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						  `
 									: html`<span class="font-semibold text-[#e5e5e5]">All Messages</span>`
 					}
+					<span class="flex-1"></span>
 					${
 						unreadInView > 0 &&
 						html`<span class="text-xs bg-[#E64415] text-white px-1.5 py-0.5 rounded-full">
 						${unreadInView} unread
 					</span>`
 					}
+					<!-- Chat/All mode toggle -->
+					<div class="flex items-center gap-0.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full px-0.5 py-0.5">
+						<button
+							class=${
+								"text-xs px-2.5 py-0.5 rounded-full border-none cursor-pointer transition-colors" +
+								(chatMode === "chat"
+									? " bg-[#E64415] text-white"
+									: " bg-transparent text-[#666] hover:text-[#999]")
+							}
+							onClick=${() => setChatMode("chat")}
+						>Chat</button>
+						<button
+							class=${
+								"text-xs px-2.5 py-0.5 rounded-full border-none cursor-pointer transition-colors" +
+								(chatMode === "all"
+									? " bg-[#E64415] text-white"
+									: " bg-transparent text-[#666] hover:text-[#999]")
+							}
+							onClick=${() => setChatMode("all")}
+						>All</button>
+					</div>
 				</div>
 
 				<!-- Message feed -->
@@ -669,11 +699,12 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 				>
 					${
 						roots.length === 0
-							? html`<div
-								class="flex items-center justify-center h-full text-[#666] text-sm"
-							>
-								No messages yet
-							</div>`
+							? chatMode === "chat"
+								? html`<div class="flex flex-col items-center justify-center h-full text-[#666] text-sm gap-1">
+									<span>No conversation messages yet.</span>
+									<span class="text-xs">Switch to "All" to see protocol activity.</span>
+								</div>`
+								: html`<div class="flex items-center justify-center h-full text-[#666] text-sm">No messages yet</div>`
 							: feedItems
 					}
 				</div>
