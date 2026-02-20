@@ -1,7 +1,7 @@
 /**
  * Tests for SessionStore (SQLite-backed agent session tracking).
  *
- * Uses real bun:sqlite with temp files. No mocks.
+ * Uses real better-sqlite3 with temp files. No mocks.
  * Temp files (not :memory:) because file-based migration must be tested.
  */
 

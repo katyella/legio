@@ -4,7 +4,7 @@
  * Uses real SQLite databases in temp directories. No mocking of store logic.
  * gatherStatus/gatherInspectData are integration calls — tested via error paths.
  *
- * bun:sqlite shim: during the Node.js migration, stores still import from bun:sqlite.
+ * better-sqlite3 shim: during the Node.js migration, stores now import from better-sqlite3.
  * We redirect to better-sqlite3 which has a compatible synchronous API.
  * The shim normalises $key → key in param objects (bun:sqlite vs better-sqlite3 convention).
  * Real SQLite operations still happen — this is not mocking store logic.

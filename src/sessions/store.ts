@@ -2,7 +2,7 @@
  * SQLite-backed session store for agent lifecycle tracking.
  *
  * Replaces the flat-file sessions.json with a proper database.
- * Uses bun:sqlite for zero-dependency, synchronous database access.
+ * Uses better-sqlite3 for zero-dependency, synchronous database access.
  * WAL mode enables concurrent reads from multiple agent processes.
  */
 

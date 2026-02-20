@@ -2,7 +2,7 @@
  * Integration tests for the watchdog daemon tick loop.
  *
  * Uses real filesystem (temp directories via mkdtemp) and real SessionStore
- * (bun:sqlite) for session persistence, plus real health evaluation logic.
+ * (better-sqlite3) for session persistence, plus real health evaluation logic.
  *
  * Only tmux operations (isSessionAlive, killSession), triage, and nudge are
  * mocked via dependency injection (_tmux, _triage, _nudge params) because:

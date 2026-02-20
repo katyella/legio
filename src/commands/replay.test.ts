@@ -1,7 +1,7 @@
 /**
  * Tests for `legio replay` command.
  *
- * Uses real bun:sqlite (temp files) to test the replay command end-to-end.
+ * Uses real better-sqlite3 (temp files) to test the replay command end-to-end.
  * Captures process.stdout.write to verify output formatting.
  *
  * Real implementations used for: filesystem (temp dirs), SQLite (EventStore).

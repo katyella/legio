@@ -1,7 +1,7 @@
 /**
  * Tests for MetricsStore (SQLite-backed session metrics storage).
  *
- * Uses real bun:sqlite with temp files. No mocks.
+ * Uses real better-sqlite3 with temp files. No mocks.
  * Philosophy: "never mock what you can use for real" (mx-252b16).
  */
 

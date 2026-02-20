@@ -2,7 +2,7 @@
  * SQLite-backed event store for agent activity observability.
  *
  * Tracks tool invocations, session lifecycle, mail events, and errors.
- * Uses bun:sqlite for zero-dependency, synchronous database access.
+ * Uses better-sqlite3 for zero-dependency, synchronous database access.
  * WAL mode enables concurrent reads from multiple agent processes.
  */
 
