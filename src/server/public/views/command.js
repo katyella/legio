@@ -14,6 +14,30 @@ import {
 } from "../lib/utils.js";
 import { agentActivityLog, appState } from "../lib/state.js";
 
+function stripAnsi(str) {
+	return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, "");
+}
+
+function diffCapture(baselineText, currentText) {
+	const baselineLines = baselineText.trimEnd().split("\n");
+	const currentLines = currentText.trimEnd().split("\n");
+	const anchorLen = Math.min(3, baselineLines.length);
+	const anchor = baselineLines.slice(-anchorLen);
+
+	// Search for the anchor sequence in current capture (prefer latest match)
+	for (let i = currentLines.length - anchorLen; i >= 0; i--) {
+		let match = true;
+		for (let j = 0; j < anchorLen; j++) {
+			if (currentLines[i + j] !== anchor[j]) { match = false; break; }
+		}
+		if (match) {
+			return currentLines.slice(i + anchorLen).join("\n");
+		}
+	}
+	// Baseline scrolled off — show tail
+	return currentLines.slice(-20).join("\n");
+}
+
 // Type badge Tailwind classes for ActivityTimeline
 const TYPE_COLORS = {
 	session_start: "bg-green-900/50 text-green-400",
@@ -289,6 +313,8 @@ function CoordinatorChat({ mail }) {
 	const [sendError, setSendError] = useState("");
 	const [pendingMessages, setPendingMessages] = useState([]);
 	const [thinking, setThinking] = useState(false);
+	const [streamText, setStreamText] = useState("");
+	const baselineCaptureRef = useRef(null);
 	const feedRef = useRef(null);
 	const isNearBottomRef = useRef(true);
 	const prevFromCoordCountRef = useRef(0);
@@ -333,6 +359,45 @@ function CoordinatorChat({ mail }) {
 		}
 		prevFromCoordCountRef.current = fromCoordCount;
 	}, [fromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// Poll terminal capture while coordinator is thinking
+	useEffect(() => {
+		if (!thinking) {
+			setStreamText("");
+			baselineCaptureRef.current = null;
+			return;
+		}
+
+		let cancelled = false;
+
+		async function pollCapture() {
+			try {
+				const res = await fetch("/api/terminal/capture?agent=coordinator&lines=80");
+				if (!res.ok || cancelled) return;
+				const data = await res.json();
+				const output = stripAnsi(data.output || "");
+
+				if (baselineCaptureRef.current === null) {
+					baselineCaptureRef.current = output;
+					return;
+				}
+
+				const delta = diffCapture(baselineCaptureRef.current, output);
+				if (!cancelled && delta.trim()) {
+					setStreamText(delta);
+				}
+			} catch (_err) {
+				// non-fatal — capture may fail if coordinator tmux not ready
+			}
+		}
+
+		pollCapture();
+		const interval = setInterval(pollCapture, 1500);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [thinking]);
 
 	// Transform agent activity log entries into feed-compatible objects
 	const activityEntries = agentActivityLog.value.map((event, i) => ({
@@ -574,9 +639,19 @@ function CoordinatorChat({ mail }) {
 				${
 					thinking
 						? html`
-							<div class="flex items-center gap-2 px-3 py-2 text-sm text-[#666]">
-								<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
-								<span>${buildProgressNarration(appState.agents.value)}</span>
+							<div class="flex justify-start">
+								<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
+									<div class="flex items-center gap-1 mb-1">
+										<span class="text-xs text-[#999]">coordinator</span>
+										<span class="text-xs text-[#555] animate-pulse">\u00b7 working\u2026</span>
+									</div>
+									${streamText
+										? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
+										: html`<div class="flex items-center gap-2 text-sm text-[#666]">
+											<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
+										</div>`
+									}
+								</div>
 							</div>
 						`
 						: null
