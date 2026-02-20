@@ -24,6 +24,8 @@ export const appState = {
 	inspectData: signal(null),
 	selectedPair: signal(null),
 	collapsedThreads: signal(new Set()),
+	coordinator: signal(null),
+	showSpawnDialog: signal(false),
 };
 
 export function setConnected(value) {

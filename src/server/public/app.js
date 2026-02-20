@@ -16,6 +16,7 @@ import { timeAgo } from './lib/utils.js';
 import { AutopilotView } from './views/autopilot.js';
 import { SetupView } from './views/setup.js';
 import { StrategyView } from './views/strategy.js';
+import { SpawnDialog } from './components/spawn-dialog.js';
 
 // ===== Initial Data Fetch =====
 
@@ -116,6 +117,7 @@ function Layout({ view, param }) {
 			<main class="flex-1 overflow-auto min-h-0">
 				<${Router} view=${view} param=${param} />
 			</main>
+			<${SpawnDialog} />
 		</div>
 	`;
 }
