@@ -117,16 +117,33 @@ vi.mock("bun:sqlite", async () => {
 	return { Database };
 });
 
+// Mock the beads client so strategy tests can run without `bd` on PATH.
+// list/ready return [] (keeps existing /api/issues tests passing).
+// show throws (existing /api/issues/:id test expects 404 on error).
+// create returns a predictable issue ID for strategy approve tests.
+vi.mock("../beads/client.ts", () => ({
+	createBeadsClient: () => ({
+		ready: async () => [],
+		list: async () => [],
+		show: async (id: string) => {
+			throw new Error(`bd not available: ${id}`);
+		},
+		create: async () => "bead-test-001",
+		claim: async () => {},
+		close: async () => {},
+	}),
+}));
+
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createAuditStore } from "./audit-store.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
+import { createAuditStore } from "./audit-store.ts";
 import { handleApiRequest } from "./routes.ts";
 
 // ---------------------------------------------------------------------------
@@ -1464,5 +1481,144 @@ describe("POST /api/setup/init", () => {
 	it("returns 405 for GET requests on /api/setup/init", async () => {
 		const res = await dispatch("/api/setup/init");
 		expect([404, 405]).toContain(res.status);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Strategy routes
+// ---------------------------------------------------------------------------
+
+import type { StrategyRecommendation } from "../types.ts";
+
+function makeRec(overrides?: Partial<StrategyRecommendation>): StrategyRecommendation {
+	return {
+		id: "rec-001",
+		title: "Add caching layer",
+		priority: "high",
+		effort: "M",
+		rationale: "Reduce database load",
+		suggestedFiles: ["src/cache.ts"],
+		category: "performance",
+		status: "pending",
+		createdAt: new Date().toISOString(),
+		...overrides,
+	};
+}
+
+async function seedStrategyFile(dir: string, recs: StrategyRecommendation[]): Promise<void> {
+	const { join: pathJoin } = await import("node:path");
+	await writeFile(
+		pathJoin(dir, "strategy.json"),
+		JSON.stringify({ recommendations: recs }, null, 2),
+	);
+}
+
+describe("GET /api/strategy", () => {
+	it("returns empty array when strategy.json is missing", async () => {
+		const res = await dispatch("/api/strategy");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns recommendations from strategy.json", async () => {
+		await seedStrategyFile(legioDir, [makeRec()]);
+		const res = await dispatch("/api/strategy");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ id: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.id).toBe("rec-001");
+	});
+
+	it("returns multiple recommendations", async () => {
+		await seedStrategyFile(legioDir, [
+			makeRec({ id: "rec-001" }),
+			makeRec({ id: "rec-002", title: "Refactor auth", priority: "critical" }),
+		]);
+		const res = await dispatch("/api/strategy");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ id: string }>;
+		expect(body.length).toBe(2);
+	});
+});
+
+describe("POST /api/strategy/:id/approve", () => {
+	it("returns 404 when strategy.json is missing", async () => {
+		const res = await dispatchPost("/api/strategy/rec-001/approve", {});
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("strategy.json");
+	});
+
+	it("returns 404 for unknown recommendation ID", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001" })]);
+		const res = await dispatchPost("/api/strategy/unknown-id/approve", {});
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("unknown-id");
+	});
+
+	it("returns 409 for already approved recommendation", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001", status: "approved" })]);
+		const res = await dispatchPost("/api/strategy/rec-001/approve", {});
+		expect(res.status).toBe(409);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("approved");
+	});
+
+	it("returns 409 for already dismissed recommendation", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001", status: "dismissed" })]);
+		const res = await dispatchPost("/api/strategy/rec-001/approve", {});
+		expect(res.status).toBe(409);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("dismissed");
+	});
+
+	it("approves a pending recommendation and returns issueId", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001", status: "pending" })]);
+		const res = await dispatchPost("/api/strategy/rec-001/approve", {});
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as {
+			recommendation: { id: string; status: string };
+			issueId: string;
+		};
+		expect(body.recommendation.id).toBe("rec-001");
+		expect(body.recommendation.status).toBe("approved");
+		expect(body.issueId).toBe("bead-test-001");
+		// Verify the file was updated on disk
+		const updated = JSON.parse(readFileSync(join(legioDir, "strategy.json"), "utf-8")) as {
+			recommendations: Array<{ status: string }>;
+		};
+		expect(updated.recommendations[0]?.status).toBe("approved");
+	});
+});
+
+describe("POST /api/strategy/:id/dismiss", () => {
+	it("returns 404 when strategy.json is missing", async () => {
+		const res = await dispatchPost("/api/strategy/rec-001/dismiss", {});
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("strategy.json");
+	});
+
+	it("returns 404 for unknown recommendation ID", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001" })]);
+		const res = await dispatchPost("/api/strategy/unknown-id/dismiss", {});
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("unknown-id");
+	});
+
+	it("dismisses a pending recommendation", async () => {
+		await seedStrategyFile(legioDir, [makeRec({ id: "rec-001", status: "pending" })]);
+		const res = await dispatchPost("/api/strategy/rec-001/dismiss", {});
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { id: string; status: string };
+		expect(body.id).toBe("rec-001");
+		expect(body.status).toBe("dismissed");
+		// Verify the file was updated on disk
+		const updated = JSON.parse(readFileSync(join(legioDir, "strategy.json"), "utf-8")) as {
+			recommendations: Array<{ status: string }>;
+		};
+		expect(updated.recommendations[0]?.status).toBe("dismissed");
 	});
 });
