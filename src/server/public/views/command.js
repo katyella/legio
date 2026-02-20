@@ -630,13 +630,10 @@ function CoordinatorChat({ mail }) {
 								No coordinator messages yet
 							</div>
 						`
-						: allMessages.map((msg) => {
+						: groupedMessages.map((msg) => {
 								const isFromUser = msg.from === "you";
 								const isSending = msg.status === "sending";
 								const isCommand = isFromUser && (msg.body ?? "").startsWith("/");
-
-								const isFromUser = item.from === "you";
-								const isSending = item.status === "sending";
 
 								// Agent lifecycle events → compact centered inline card
 								if (msg._isAgentActivity) {
@@ -653,21 +650,21 @@ function CoordinatorChat({ mail }) {
 								}
 
 								// Protocol messages → compact one-liner
-								if (isActivityMessage(item)) {
+								if (isActivityMessage(msg)) {
 									return html`
 										<div
-											key=${item.id}
+											key=${msg.id}
 											class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
 										>
 											<span
 												class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0"
 											>
-												${item.type}
+												${msg.type}
 											</span>
 											<span class="flex-1 truncate min-w-0">
-												${item.subject || item.body || ""}
+												${msg.subject || msg.body || ""}
 											</span>
-											<span class="shrink-0">${timeAgo(item.createdAt)}</span>
+											<span class="shrink-0">${timeAgo(msg.createdAt)}</span>
 										</div>
 									`;
 								}
@@ -675,7 +672,7 @@ function CoordinatorChat({ mail }) {
 								// Conversational messages (left for coord/agents, right for user)
 								return html`
 									<div
-										key=${item.id}
+										key=${msg.id}
 										class=${`flex ${isFromUser ? "justify-end" : "justify-start"}`}
 									>
 										<div
@@ -689,12 +686,12 @@ function CoordinatorChat({ mail }) {
 										>
 											<div class="flex items-center gap-1 mb-1">
 												<span class="text-xs text-[#999]">
-													${isFromUser ? "You" : (item.from || "unknown")}
+													${isFromUser ? "You" : (msg.from || "unknown")}
 												</span>
 												<span class="text-xs text-[#555]">
 													${isSending
 														? "\u00b7 sending\u2026"
-														: `\u00b7 ${timeAgo(item.createdAt)}`}
+														: `\u00b7 ${timeAgo(msg.createdAt)}`}
 												</span>
 											</div>
 											<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
