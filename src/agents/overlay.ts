@@ -191,6 +191,10 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 		"{{CONSTRAINTS}}": formatConstraints(config),
 		"{{SPEC_INSTRUCTION}}": specInstruction,
 		"{{BASE_DEFINITION}}": config.baseDefinition,
+		// MUST come after {{BASE_DEFINITION}}: {{CANONICAL_ROOT}} appears inside base definition
+		// content (e.g. agents/cto.md), not in the template itself. Only present in `result`
+		// after the base definition is expanded.
+		"{{CANONICAL_ROOT}}": config.canonicalRoot ?? "",
 	};
 
 	let result = template;

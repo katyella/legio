@@ -261,6 +261,8 @@ export interface OverlayConfig {
 	baseDefinition: string;
 	/** Pre-fetched mulch expertise output to embed directly in the overlay. */
 	mulchExpertise?: string;
+	/** Absolute path to the canonical project root (for agents that need to write outside their worktree). */
+	canonicalRoot?: string;
 }
 
 // === Merge Queue ===

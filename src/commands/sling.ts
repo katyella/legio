@@ -411,6 +411,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			capability,
 			baseDefinition,
 			mulchExpertise,
+			canonicalRoot: config.project.root,
 		};
 
 		try {

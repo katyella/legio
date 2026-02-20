@@ -358,6 +358,25 @@ describe("generateOverlay", () => {
 
 		expect(output).not.toContain("{{WORKTREE_PATH}}");
 	});
+
+	test("replaces CANONICAL_ROOT inside base definition content", async () => {
+		const baseDef = "Write output to {{CANONICAL_ROOT}}/.legio/strategy.json";
+		const config = makeConfig({
+			baseDefinition: baseDef,
+			canonicalRoot: "/projects/my-app",
+		});
+		const output = await generateOverlay(config);
+
+		expect(output).toContain("/projects/my-app/.legio/strategy.json");
+		expect(output).not.toContain("{{CANONICAL_ROOT}}");
+	});
+
+	test("no unreplaced CANONICAL_ROOT placeholder when not used in base definition", async () => {
+		const config = makeConfig({ canonicalRoot: "/projects/my-app" });
+		const output = await generateOverlay(config);
+
+		expect(output).not.toContain("{{CANONICAL_ROOT}}");
+	});
 });
 
 describe("writeOverlay", () => {
@@ -438,9 +457,9 @@ describe("writeOverlay", () => {
 
 		const config = makeConfig({ agentName: "rogue-agent" });
 
-		expect(async () => {
+		await expect(async () => {
 			await writeOverlay(fakeProjectRoot, config, fakeProjectRoot);
-		}).toThrow(AgentError);
+		}).rejects.toThrow(AgentError);
 	});
 
 	test("error message mentions canonical project root when guard triggers", async () => {
