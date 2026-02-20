@@ -179,7 +179,7 @@ Arguments:
   <task-id>                  Beads task ID to assign
 
 Options:
-  --capability <type>        Agent type: builder | scout | reviewer | lead | merger (default: builder)
+  --capability <type>        Agent type: builder | scout | reviewer | lead | merger | cto (default: builder)
   --name <name>              Unique agent name (required)
   --spec <path>              Path to task spec file
   --files <f1,f2,...>        Exclusive file scope (comma-separated)

@@ -277,6 +277,14 @@ function buildAgentManifest(): AgentManifest {
 			canSpawn: false,
 			constraints: ["read-only", "no-worktree"],
 		},
+		cto: {
+			file: "cto.md",
+			model: "opus",
+			tools: ["Read", "Glob", "Grep", "Bash"],
+			capabilities: ["strategy", "analyze", "advise"],
+			canSpawn: false,
+			constraints: ["read-only"],
+		},
 	};
 
 	// Build capability index: map each capability to agent names that declare it
@@ -481,7 +489,7 @@ export const LEGIO_GITIGNORE = `# Wildcard+whitelist: ignore everything, whiteli
  */
 export async function writeLegioGitignore(legioPath: string): Promise<void> {
 	const gitignorePath = join(legioPath, ".gitignore");
-	await writeFile(gitignorePath, OVERSTORY_GITIGNORE);
+	await writeFile(gitignorePath, LEGIO_GITIGNORE);
 }
 
 /**
@@ -568,7 +576,7 @@ export async function initCommand(args: string[]): Promise<void> {
 		if (!fileName.endsWith(".md")) continue;
 		const content = await readFile(join(legioAgentsDir, fileName), "utf-8");
 		await writeFile(join(agentDefsTarget, fileName), content);
-		printCreated(`${OVERSTORY_DIR}/agent-defs/${fileName}`);
+		printCreated(`${LEGIO_DIR}/agent-defs/${fileName}`);
 	}
 
 	// 4. Write config.yaml
@@ -580,19 +588,19 @@ export async function initCommand(args: string[]): Promise<void> {
 	const configYaml = serializeConfigToYaml(config);
 	const configPath = join(legioPath, "config.yaml");
 	await writeFile(configPath, configYaml);
-	printCreated(`${OVERSTORY_DIR}/config.yaml`);
+	printCreated(`${LEGIO_DIR}/config.yaml`);
 
 	// 5. Write agent-manifest.json
 	const manifest = buildAgentManifest();
 	const manifestPath = join(legioPath, "agent-manifest.json");
 	await writeFile(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`);
-	printCreated(`${OVERSTORY_DIR}/agent-manifest.json`);
+	printCreated(`${LEGIO_DIR}/agent-manifest.json`);
 
 	// 6. Write hooks.json
 	const hooksContent = buildHooksJson();
 	const hooksPath = join(legioPath, "hooks.json");
 	await writeFile(hooksPath, hooksContent);
-	printCreated(`${OVERSTORY_DIR}/hooks.json`);
+	printCreated(`${LEGIO_DIR}/hooks.json`);
 
 	// 7. Write .legio/.gitignore for runtime state
 	await writeLegioGitignore(legioPath);
