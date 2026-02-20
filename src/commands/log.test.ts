@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { access, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,6 +46,7 @@ describe("logCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "log-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
@@ -118,33 +119,22 @@ describe("logCommand", () => {
 	test("missing event with only flags throws ValidationError", async () => {
 		// The code finds first non-flag arg. Passing only flags should trigger "Event is required"
 		// Note: the implementation checks for undefined event
-		await expect(async () => {
-			await logCommand([]);
-		}).toThrow(ValidationError);
-
-		await expect(async () => {
-			await logCommand([]);
-		}).toThrow("Event is required");
+		await expect(logCommand([])).rejects.toThrow(ValidationError);
+		await expect(logCommand([])).rejects.toThrow("Event is required");
 	});
 
 	test("invalid event name throws ValidationError", async () => {
-		expect(async () => {
-			await logCommand(["invalid-event", "--agent", "test-agent"]);
-		}).toThrow(ValidationError);
-
-		expect(async () => {
-			await logCommand(["invalid-event", "--agent", "test-agent"]);
-		}).toThrow("Invalid event");
+		await expect(
+			logCommand(["invalid-event", "--agent", "test-agent"]),
+		).rejects.toThrow(ValidationError);
+		await expect(
+			logCommand(["invalid-event", "--agent", "test-agent"]),
+		).rejects.toThrow("Invalid event");
 	});
 
 	test("missing --agent flag throws ValidationError", async () => {
-		expect(async () => {
-			await logCommand(["tool-start"]);
-		}).toThrow(ValidationError);
-
-		expect(async () => {
-			await logCommand(["tool-start"]);
-		}).toThrow("--agent is required");
+		await expect(logCommand(["tool-start"])).rejects.toThrow(ValidationError);
+		await expect(logCommand(["tool-start"])).rejects.toThrow("--agent is required");
 	});
 
 	test("tool-start creates log directory structure", async () => {
@@ -1160,6 +1150,73 @@ describe("logCommand", () => {
 		expect(mail?.body).toContain("10 tool calls");
 		expect(mail?.body).toContain("pattern"); // At least 1 pattern insight
 	});
+
+	test("tool-start creates agent-busy file", async () => {
+		await logCommand(["tool-start", "--agent", "busy-agent", "--tool-name", "Read"]);
+
+		const busyFilePath = join(tempDir, ".legio", "agent-busy", "busy-agent");
+		const busyFile = fileAccessor(busyFilePath);
+		expect(await busyFile.exists()).toBe(true);
+	});
+
+	test("tool-end removes agent-busy file", async () => {
+		await logCommand(["tool-start", "--agent", "busy-remove-agent", "--tool-name", "Edit"]);
+
+		const busyFilePath = join(tempDir, ".legio", "agent-busy", "busy-remove-agent");
+		expect(await fileAccessor(busyFilePath).exists()).toBe(true);
+
+		await logCommand(["tool-end", "--agent", "busy-remove-agent", "--tool-name", "Edit"]);
+		expect(await fileAccessor(busyFilePath).exists()).toBe(false);
+	});
+
+	test("tool-end does not crash when agent-busy file does not exist", async () => {
+		// No tool-start first, so no busy file exists
+		await expect(
+			logCommand(["tool-end", "--agent", "no-busy-file-agent", "--tool-name", "Read"]),
+		).resolves.toBeUndefined();
+	});
+
+	test("session-end for lead does not fail when direct coordinator nudge fails (no tmux)", async () => {
+		// Create sessions.db with a lead agent
+		const dbPath = join(tempDir, ".legio", "sessions.db");
+		const session: AgentSession = {
+			id: "session-lead-direct-nudge",
+			agentName: "lead-direct-nudge-test",
+			capability: "lead",
+			worktreePath: tempDir,
+			branchName: "lead-direct-nudge-branch",
+			beadId: "bead-lead-dn",
+			tmuxSession: "legio-lead-direct-nudge-test",
+			state: "working",
+			pid: 55557,
+			parentAgent: null,
+			depth: 0,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		};
+		const store = createSessionStore(dbPath);
+		store.upsert(session);
+		store.close();
+
+		// Should not throw — nudgeAgent will fail silently (no coordinator tmux session in test env)
+		await expect(
+			logCommand(["session-end", "--agent", "lead-direct-nudge-test"]),
+		).resolves.toBeUndefined();
+
+		// Agent should be completed
+		const readStore = createSessionStore(dbPath);
+		const updatedSession = readStore.getByName("lead-direct-nudge-test");
+		readStore.close();
+		expect(updatedSession?.state).toBe("completed");
+
+		// Pending-nudge marker should still be written (backward compat)
+		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
+		expect(await fileAccessor(markerPath).exists()).toBe(true);
+	});
+
 });
 
 /**
@@ -1175,6 +1232,7 @@ describe("logCommand --stdin integration", () => {
 	beforeEach(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "log-stdin-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
@@ -1195,7 +1253,7 @@ describe("logCommand --stdin integration", () => {
 		stdinJson: Record<string, unknown>,
 	): Promise<{ exitCode: number; stdout: string; stderr: string }> {
 		// Inline script that calls logCommand with --stdin and reads from stdin
-		const scriptPath = join(tempDir, "_run-log.ts");
+		const scriptPath = join(tempDir, "_run-log.mts");
 		const scriptContent = `
 import { logCommand } from "${join(import.meta.dirname, "log.ts").replace(/\\/g, "/")}";
 const args = process.argv.slice(2);
@@ -1208,7 +1266,7 @@ try {
 `;
 		await writeFile(scriptPath, scriptContent);
 
-		const proc = spawn("bun", ["run", scriptPath, event, "--agent", agentName, "--stdin"], {
+		const proc = spawn("tsx", [scriptPath, event, "--agent", agentName, "--stdin"], {
 			cwd: tempDir,
 			stdio: ["pipe", "pipe", "pipe"],
 		});
@@ -1389,18 +1447,9 @@ try {
 
 	test("tool-start with --stdin handles empty stdin gracefully", async () => {
 		// Send empty JSON object — should still work (falls back to "unknown" tool name)
-		const scriptPath = join(tempDir, "_run-log-empty.ts");
+		const scriptPath = join(tempDir, "_run-log-empty.mts");
 		const scriptContent = `
 import { logCommand } from "${join(import.meta.dirname, "log.ts").replace(/\\/g, "/")}";
-import { spawn } from "node:child_process";
-/** Test helper: create a file accessor for checking existence and reading content. */
-function fileAccessor(path: string) {
-	return {
-		exists: () => access(path).then(() => true, () => false),
-		text: () => readFile(path, "utf-8"),
-	};
-}
-
 
 try {
 	await logCommand(["tool-start", "--agent", "empty-stdin-agent", "--stdin"]);
@@ -1411,7 +1460,7 @@ try {
 `;
 		await writeFile(scriptPath, scriptContent);
 
-		const proc2 = spawn("bun", ["run", scriptPath], {
+		const proc2 = spawn("tsx", [scriptPath], {
 			cwd: tempDir,
 			stdio: ["pipe", "pipe", "pipe"],
 		});

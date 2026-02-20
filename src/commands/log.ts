@@ -431,6 +431,16 @@ export async function logCommand(args: string[]): Promise<void> {
 			logger.toolStart(toolName, toolInput ?? {});
 			updateLastActivity(config.project.root, agentName);
 
+			// Track busy state: create .legio/agent-busy/{agentName}
+			try {
+				const agentBusyDir = join(config.project.root, ".legio", "agent-busy");
+				const { mkdir: mkdirBusy } = await import("node:fs/promises");
+				await mkdirBusy(agentBusyDir, { recursive: true });
+				await writeFile(join(agentBusyDir, agentName), new Date().toISOString());
+			} catch {
+				// Non-fatal: busy tracking should not break hook execution
+			}
+
 			// When --stdin is used, also write to EventStore for structured observability
 			if (useStdin) {
 				try {
@@ -461,6 +471,14 @@ export async function logCommand(args: string[]): Promise<void> {
 			// Backward compatibility: always write to per-agent log files
 			logger.toolEnd(toolName, 0);
 			updateLastActivity(config.project.root, agentName);
+
+			// Clear busy state: remove .legio/agent-busy/{agentName}
+			try {
+				const { unlink: unlinkBusy } = await import("node:fs/promises");
+				await unlinkBusy(join(config.project.root, ".legio", "agent-busy", agentName));
+			} catch {
+				// Non-fatal: file may not exist if tool-start was not logged
+			}
 
 			// When --stdin is used, write to EventStore and correlate with tool-start
 			if (useStdin) {
@@ -579,6 +597,14 @@ export async function logCommand(args: string[]): Promise<void> {
 						await writeFile(markerPath, `${JSON.stringify(marker, null, "\t")}\n`);
 					} catch {
 						// Non-fatal: nudge failure should not break session-end
+					}
+					// Direct tmux nudge to coordinator (fire-and-forget)
+					try {
+						const { nudgeAgent } = await import("./nudge.ts");
+						const nudgeMsg = `[auto-nudge from ${agentName}] Lead ${agentName} completed — check mail for merge_ready/worker_done`;
+						await nudgeAgent(config.project.root, "coordinator", nudgeMsg, true);
+					} catch {
+						// Non-fatal: direct nudge failure should not break session-end
 					}
 				}
 
