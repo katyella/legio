@@ -5,7 +5,7 @@
 
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
-import { timeAgo } from "../lib/utils.js";
+import { isActivityMessage, timeAgo } from "../lib/utils.js";
 import { appState } from "../lib/state.js";
 import { ChatView } from "./chat.js";
 
@@ -175,8 +175,11 @@ function CoordinatorChat({ mail }) {
 	const [input, setInput] = useState("");
 	const [sending, setSending] = useState(false);
 	const [sendError, setSendError] = useState("");
+	const [pendingMessages, setPendingMessages] = useState([]);
+	const [thinking, setThinking] = useState(false);
 	const feedRef = useRef(null);
 	const isNearBottomRef = useRef(true);
+	const prevFromCoordCountRef = useRef(0);
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
@@ -192,6 +195,36 @@ function CoordinatorChat({ mail }) {
 				m.to === "coordinator",
 		)
 		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+	// Count of messages FROM coordinator — used to detect coordinator responses
+	const fromCoordCount = coordMessages.filter(
+		(m) => m.from === "orchestrator" || m.from === "coordinator",
+	).length;
+
+	// Detect new coordinator responses → clear thinking + matched pending messages
+	useEffect(() => {
+		if (fromCoordCount > prevFromCoordCountRef.current) {
+			setThinking(false);
+			setPendingMessages((prev) =>
+				prev.filter(
+					(pm) =>
+						!coordMessages.some(
+							(rm) =>
+								rm.body === pm.body &&
+								Math.abs(
+									new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
+								) < 60000,
+						),
+				),
+			);
+		}
+		prevFromCoordCountRef.current = fromCoordCount;
+	}, [fromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// Merge pending messages into the conversation feed, sorted oldest first
+	const allMessages = [...coordMessages, ...pendingMessages].sort(
+		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+	);
 
 	// Auto-scroll to bottom when near bottom
 	useEffect(() => {
@@ -212,6 +245,19 @@ function CoordinatorChat({ mail }) {
 		if (!text || sending) return;
 		setSendError("");
 		setSending(true);
+
+		// Optimistic: show user message immediately before the POST completes
+		const pendingId = `pending-${Date.now()}`;
+		const pending = {
+			id: pendingId,
+			from: "you",
+			to: "coordinator",
+			body: text,
+			createdAt: new Date().toISOString(),
+			status: "sending",
+		};
+		setPendingMessages((prev) => [...prev, pending]);
+
 		try {
 			await postJson("/api/terminal/send", { agent: "coordinator", text });
 			try {
@@ -225,8 +271,15 @@ function CoordinatorChat({ mail }) {
 				// intentionally ignored
 			}
 			setInput("");
+			setThinking(true);
+			// Mark pending as sent (removes "sending…" label)
+			setPendingMessages((prev) =>
+				prev.map((m) => (m.id === pendingId ? { ...m, status: "sent" } : m)),
+			);
 		} catch (err) {
 			setSendError(err.message || "Send failed");
+			// Remove the pending message on send failure
+			setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
 		} finally {
 			setSending(false);
 		}
@@ -257,50 +310,78 @@ function CoordinatorChat({ mail }) {
 				onScroll=${handleFeedScroll}
 			>
 				${
-					coordMessages.length === 0
+					allMessages.length === 0
 						? html`
 							<div class="flex items-center justify-center h-full text-[#666] text-sm">
 								No coordinator messages yet
 							</div>
 						`
-						: coordMessages.map((msg) => {
-								const isFromCoord =
-									msg.from === "orchestrator" || msg.from === "coordinator";
+						: allMessages.map((msg) => {
+								const isFromUser = msg.from === "you";
+								const isSending = msg.status === "sending";
+
+								// Protocol messages → compact one-liner
+								if (isActivityMessage(msg)) {
+									return html`
+										<div
+											key=${msg.id}
+											class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
+										>
+											<span
+												class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0"
+											>
+												${msg.type}
+											</span>
+											<span class="flex-1 truncate min-w-0">
+												${msg.subject || msg.body || ""}
+											</span>
+											<span class="shrink-0">${timeAgo(msg.createdAt)}</span>
+										</div>
+									`;
+								}
+
+								// Conversational messages (left for coord/agents, right for user)
 								return html`
 									<div
 										key=${msg.id}
-										class=${`flex ${isFromCoord ? "justify-start" : "justify-end"}`}
+										class=${`flex ${isFromUser ? "justify-end" : "justify-start"}`}
 									>
 										<div
 											class=${
 												"max-w-[85%] rounded px-3 py-2 text-sm " +
-												(isFromCoord
-													? "bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]"
-													: "bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30")
+												(isFromUser
+													? "bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30" +
+														(isSending ? " opacity-70" : "")
+													: "bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]")
 											}
 										>
-											<div class="flex items-center gap-1 mb-1 flex-wrap">
-												<span class="text-xs font-mono text-[#999]">${msg.from}</span>
-												<span class="text-xs text-[#555]">\u2192</span>
-												<span class="text-xs font-mono text-[#999]">${msg.to}</span>
-												<span class="ml-auto text-xs text-[#555] shrink-0">
-													${timeAgo(msg.createdAt)}
+											<div class="flex items-center gap-1 mb-1">
+												<span class="text-xs text-[#999]">
+													${isFromUser ? "You" : (msg.from || "unknown")}
+												</span>
+												<span class="text-xs text-[#555]">
+													${isSending
+														? "\u00b7 sending\u2026"
+														: `\u00b7 ${timeAgo(msg.createdAt)}`}
 												</span>
 											</div>
-											${
-												msg.subject
-													? html`<div class="text-xs text-[#999] mb-1 italic">
-															${msg.subject}
-														</div>`
-													: null
-											}
-											<div class="text-[#e5e5e5] whitespace-pre-wrap break-words text-sm">
+											<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
 												${msg.body || ""}
 											</div>
 										</div>
 									</div>
 								`;
 							})
+				}
+				${
+					thinking
+						? html`
+							<div class="flex items-center gap-2 px-3 py-2 text-sm text-[#666]">
+								<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
+								<span>Thinking...</span>
+							</div>
+						`
+						: null
 				}
 			</div>
 
