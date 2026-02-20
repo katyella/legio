@@ -18,6 +18,7 @@ import { fetchJson } from './lib/api.js';
 import { timeAgo } from './lib/utils.js';
 import { AutopilotView } from './views/autopilot.js';
 import { SetupView } from './views/setup.js';
+import { StrategyView } from './views/strategy.js';
 
 // ===== Initial Data Fetch =====
 
@@ -73,6 +74,7 @@ function Router({ view, param }) {
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'terminal':  return html`<${TerminalView} />`;
 		case 'autopilot': return html`<${AutopilotView} />`;
+		case 'strategy':  return html`<${StrategyView} />`;
 		default:          return html`<${CommandView} />`;
 	}
 }
@@ -86,6 +88,7 @@ const NAV_LINKS = [
 	{ href: '#events',    label: 'Events',    view: 'events' },
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
 	{ href: '#issues',    label: 'Issues',    view: 'issues' },
+	{ href: '#strategy',  label: 'Strategy',  view: 'strategy' },
 	{ href: '#terminal',  label: 'Terminal',  view: 'terminal' },
 	{ href: '#autopilot', label: 'Autopilot', view: 'autopilot' },
 ];
