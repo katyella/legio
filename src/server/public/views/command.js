@@ -1,14 +1,18 @@
 // Legio Web UI — CommandView component
 // Two-panel mission-control interface:
 //   - Left: Coordinator chat input + recent coordinator messages (~55%)
-//   - Right: Tab switcher — Activity (default) and Messages (ChatView) tabs (~45%)
+//   - Right: Collapsible agent roster with inline mail/events (~45%)
 
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
-import { isActivityMessage, timeAgo } from "../lib/utils.js";
+import {
+	agentColor,
+	isActivityMessage,
+	stateColor,
+	stateIcon,
+	timeAgo,
+} from "../lib/utils.js";
 import { agentActivityLog, appState } from "../lib/state.js";
-import { ChatView } from "./chat.js";
-import { ActivityCard } from "../components/message-bubble.js";
 
 // Type badge Tailwind classes for ActivityTimeline
 const TYPE_COLORS = {
@@ -50,114 +54,184 @@ function typeBadgeClass(type) {
 	return TYPE_COLORS[type] ?? "bg-[#333] text-[#999]";
 }
 
-// ===== ActivityTimeline =====
+// ===== AgentRoster =====
 
-function ActivityTimeline({ events, loading, error }) {
-	const [typeFilter, setTypeFilter] = useState("");
-	const [agentFilter, setAgentFilter] = useState("");
-	const [expandedIds, setExpandedIds] = useState(() => new Set());
+const STATE_ORDER = { working: 0, booting: 1, stalled: 2, zombie: 3, completed: 4 };
 
-	const inputClass =
-		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
-		" placeholder-[#666] outline-none focus:border-[#E64415]";
+function AgentRoster({ agents, mail, events }) {
+	const [expandedAgent, setExpandedAgent] = useState(null);
 
-	const allTypes = [...new Set(events.map((e) => e.type).filter(Boolean))].sort();
-
-	const filtered = events.filter((ev) => {
-		if (typeFilter && ev.type !== typeFilter) return false;
-		if (agentFilter && !(ev.agent ?? "").toLowerCase().includes(agentFilter.toLowerCase()))
-			return false;
-		return true;
+	const sorted = [...agents].sort((a, b) => {
+		const ao = STATE_ORDER[a.state] ?? 99;
+		const bo = STATE_ORDER[b.state] ?? 99;
+		if (ao !== bo) return ao - bo;
+		return (a.agentName ?? "").localeCompare(b.agentName ?? "");
 	});
 
-	const toggleExpand = useCallback((id) => {
-		setExpandedIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(id)) next.delete(id);
-			else next.add(id);
-			return next;
-		});
+	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting").length;
+
+	const toggleExpand = useCallback((name) => {
+		setExpandedAgent((prev) => (prev === name ? null : name));
 	}, []);
 
 	return html`
 		<div class="flex flex-col h-full min-h-0">
-			<!-- Filter bar -->
-			<div
-				class="flex items-center gap-2 px-3 py-2 border-b border-[#2a2a2a] shrink-0 flex-wrap"
-			>
-				<select
-					value=${typeFilter}
-					onChange=${(e) => setTypeFilter(e.target.value)}
-					class="bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5] outline-none"
-				>
-					<option value="">All types</option>
-					${allTypes.map((t) => html`<option key=${t} value=${t}>${t}</option>`)}
-				</select>
-				<input
-					type="text"
-					placeholder="Filter by agent..."
-					value=${agentFilter}
-					onInput=${(e) => setAgentFilter(e.target.value)}
-					class=${`${inputClass} flex-1 min-w-0`}
-				/>
-				${loading ? html`<span class="text-xs text-[#555] shrink-0">Refreshing\u2026</span>` : null}
+			<!-- Header -->
+			<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0">
+				<span class="text-sm font-medium text-[#e5e5e5]">Agents</span>
+				<span class="ml-2 text-xs text-[#555]">${activeCount} active / ${agents.length} total</span>
 			</div>
 
-			<!-- Event list -->
+			<!-- Agent list -->
 			<div class="flex-1 overflow-y-auto min-h-0 p-2">
-				${error ? html`<div class="text-red-400 text-sm px-2 py-3">${error}</div>` : null}
 				${
-					!error && filtered.length === 0
+					sorted.length === 0
 						? html`
 							<div class="flex items-center justify-center h-full text-[#666] text-sm">
-								No activity recorded yet
+								No agents yet
 							</div>
 						`
-						: filtered.map((ev) => {
-								const isExpanded = expandedIds.has(ev.id);
-								const hasDetail = ev.detail != null && ev.detail !== "";
-								const badgeClass = typeBadgeClass(ev.type);
-								const ts = ev.createdAt ?? ev.timestamp ?? null;
+						: sorted.map((agent) => {
+								const isExpanded = expandedAgent === agent.agentName;
+								const colors = agentColor(agent.capability);
+								const icon = stateIcon(agent.state);
+								const iconColor = stateColor(agent.state);
+
+								// Filter mail for this agent
+								const agentMail = mail
+									.filter((m) => m.from === agent.agentName || m.to === agent.agentName)
+									.sort(
+										(a, b) =>
+											new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+									)
+									.slice(0, 5);
+
+								// Filter events for this agent
+								const agentEvents = events
+									.filter((e) => e.agent === agent.agentName)
+									.slice(0, 5);
 
 								return html`
 									<div
-										key=${ev.id}
-										class=${
-											"mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] px-3 py-2" +
-											(hasDetail ? " cursor-pointer hover:border-[#3a3a3a]" : "")
-										}
-										onClick=${hasDetail ? () => toggleExpand(ev.id) : undefined}
+										key=${agent.agentName}
+										class="mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden"
 									>
-										<div class="flex items-center gap-2 flex-wrap min-w-0">
-											<span
-												class=${`text-xs px-1.5 py-0.5 rounded font-mono shrink-0 ${badgeClass}`}
-											>
-												${ev.type || "unknown"}
+										<!-- Row -->
+										<div
+											class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:border-[#3a3a3a] hover:bg-[#222]"
+											onClick=${() => toggleExpand(agent.agentName)}
+										>
+											<span class="text-base leading-none flex-shrink-0">${colors.avatar}</span>
+											<span class=${`text-xs leading-none flex-shrink-0 ${iconColor}`}>${icon}</span>
+											<span class="text-sm text-[#e5e5e5] truncate flex-1 min-w-0">
+												${agent.agentName}
 											</span>
 											${
-												ev.agent
-													? html`<span class="text-xs text-[#999] shrink-0">${ev.agent}</span>`
-													: null
-											}
-											<span class="flex-1 text-sm text-[#e5e5e5] truncate min-w-0">
-												${ev.summary || ""}
-											</span>
-											<span class="text-xs text-[#555] shrink-0">${timeAgo(ts)}</span>
-											${
-												hasDetail
-													? html`<span class="text-xs text-[#555] shrink-0">
-															${isExpanded ? "\u25B2" : "\u25BC"}
+												agent.beadId
+													? html`<span class="text-xs font-mono text-[#666] flex-shrink-0">
+															${agent.beadId}
 														</span>`
 													: null
 											}
+											<span class="text-xs text-[#444] flex-shrink-0">
+												${isExpanded ? "\u25B2" : "\u25BC"}
+											</span>
 										</div>
+
+										<!-- Expanded detail -->
 										${
-											isExpanded && hasDetail
+											isExpanded
 												? html`
-													<pre
-														class="mt-2 text-xs text-[#999] whitespace-pre-wrap break-all border-t border-[#2a2a2a] pt-2 font-mono"
-													>
-${typeof ev.detail === "string" ? ev.detail : JSON.stringify(ev.detail, null, 2)}</pre>
+													<div class="border-t border-[#2a2a2a] px-3 py-2 text-xs">
+														<!-- Meta badges -->
+														<div class="flex flex-wrap gap-1.5 mb-2">
+															<span
+																class=${`px-1.5 py-0.5 rounded font-mono ${colors.bg} ${colors.text} border ${colors.border}`}
+															>
+																${agent.capability || "unknown"}
+															</span>
+															<span
+																class=${`px-1.5 py-0.5 rounded font-mono ${iconColor}`}
+															>
+																${icon} ${agent.state}
+															</span>
+															${
+																agent.beadId
+																	? html`<span class="font-mono text-[#666]">${agent.beadId}</span>`
+																	: null
+															}
+															${
+																agent.startedAt
+																	? html`<span class="text-[#555]">started ${timeAgo(agent.startedAt)}</span>`
+																	: null
+															}
+														</div>
+
+														<!-- Recent Mail -->
+														<div class="mb-2">
+															<div class="text-[#555] mb-1">Recent Mail</div>
+															${
+																agentMail.length === 0
+																	? null
+																	: agentMail.map(
+																			(m) => html`
+																				<div
+																					key=${m.id}
+																					class="flex items-center gap-1.5 py-0.5 border-b border-[#1f1f1f]"
+																				>
+																					<span class="text-[#444] flex-shrink-0">
+																						${m.from === agent.agentName ? "\u2192" : "\u2190"}
+																					</span>
+																					<span class="text-[#666] flex-shrink-0 truncate max-w-[6rem]">
+																						${m.from === agent.agentName ? m.to : m.from}
+																					</span>
+																					<span class="flex-1 truncate text-[#999] min-w-0">
+																						${m.subject || m.body || ""}
+																					</span>
+																					<span class="text-[#444] flex-shrink-0 ml-auto">
+																						${timeAgo(m.createdAt)}
+																					</span>
+																				</div>
+																			`,
+																		)
+															}
+														</div>
+
+														<!-- Recent Events -->
+														<div>
+															<div class="text-[#555] mb-1">Recent Events</div>
+															${
+																agentEvents.length === 0
+																	? null
+																	: agentEvents.map(
+																			(ev) => html`
+																				<div
+																					key=${ev.id}
+																					class="flex items-center gap-1.5 py-0.5 border-b border-[#1f1f1f]"
+																				>
+																					<span
+																						class=${`px-1 rounded font-mono flex-shrink-0 ${typeBadgeClass(ev.type)}`}
+																					>
+																						${ev.type || "unknown"}
+																					</span>
+																					<span class="flex-1 truncate text-[#999] min-w-0">
+																						${ev.summary || ""}
+																					</span>
+																					<span class="text-[#444] flex-shrink-0 ml-auto">
+																						${timeAgo(ev.createdAt)}
+																					</span>
+																				</div>
+																			`,
+																		)
+															}
+														</div>
+
+														${
+															agentMail.length === 0 && agentEvents.length === 0
+																? html`<div class="text-[#444] text-center py-1">No recent activity</div>`
+																: null
+														}
+													</div>
 												`
 												: null
 										}
@@ -329,9 +403,18 @@ function CoordinatorChat({ mail }) {
 								const isFromUser = msg.from === "you";
 								const isSending = msg.status === "sending";
 
-								// Agent lifecycle events → compact centered ActivityCard
+								// Agent lifecycle events → compact centered inline card
 								if (msg._isAgentActivity) {
-									return html`<${ActivityCard} key=${msg.id} event=${msg} capability=${msg.capability} />`;
+									const colors = agentColor(msg.capability);
+									const ts = msg.timestamp || msg.createdAt;
+									return html`
+										<div key=${msg.id}
+											class="mx-auto max-w-[70%] flex items-center gap-1.5 px-3 py-1 mb-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
+											<span class="text-xs leading-none flex-shrink-0">${colors.avatar}</span>
+											<span class="text-xs text-[#666] truncate">${msg.summary || msg.type || ""}</span>
+											<span class="text-xs text-[#444] flex-shrink-0 ml-auto">${timeAgo(ts)}</span>
+										</div>
+									`;
 								}
 
 								// Protocol messages → compact one-liner
@@ -431,17 +514,13 @@ const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
 
 export function CommandView() {
 	const [activityEvents, setActivityEvents] = useState([]);
-	const [activityLoading, setActivityLoading] = useState(false);
-	const [activityError, setActivityError] = useState("");
 	const [mail, setMail] = useState([]);
-	const [activeTab, setActiveTab] = useState("activity");
 
-	// Poll event store every 5 seconds and merge with mail for the activity timeline
+	// Poll event store every 5 seconds
 	useEffect(() => {
 		let cancelled = false;
 
 		async function fetchActivity() {
-			setActivityLoading(true);
 			try {
 				const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 				const data = await fetchJson(`/api/events?since=${encodeURIComponent(since)}&limit=200`);
@@ -458,12 +537,9 @@ export function CommandView() {
 							createdAt: e.createdAt,
 						}));
 					setActivityEvents(filteredEvents);
-					setActivityError("");
 				}
-			} catch (err) {
-				if (!cancelled) setActivityError(err.message || "Failed to load activity");
-			} finally {
-				if (!cancelled) setActivityLoading(false);
+			} catch (_err) {
+				// non-fatal
 			}
 		}
 
@@ -496,31 +572,7 @@ export function CommandView() {
 		};
 	}, []);
 
-	// Merge events and mail into unified timeline (newest first)
-	const mailEvents = mail.map((m) => ({
-		id: `mail-${m.id}`,
-		type: "mail",
-		agent: m.from,
-		summary: `${m.from} \u2192 ${m.to}: ${m.subject}`,
-		detail: m.body,
-		createdAt: m.createdAt,
-	}));
-
-	const unifiedTimeline = [...activityEvents, ...mailEvents].sort(
-		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-	);
-
-	const chatState = {
-		mail,
-		agents: appState.agents.value,
-		issues: appState.issues.value,
-	};
-
-	const tabClass = (tab) =>
-		"px-3 py-2 text-sm border-b-2 -mb-px cursor-pointer bg-transparent border-t-0 border-l-0 border-r-0 " +
-		(activeTab === tab
-			? "border-[#E64415] text-[#e5e5e5]"
-			: "border-transparent text-[#666] hover:text-[#999]");
+	const agents = appState.agents.value;
 
 	return html`
 		<div class="flex h-full bg-[#0f0f0f] min-h-0">
@@ -532,30 +584,9 @@ export function CommandView() {
 				<${CoordinatorChat} mail=${mail} />
 			</div>
 
-			<!-- Right panel with tab switcher (~45%) -->
+			<!-- Agent Roster (right, ~45%) -->
 			<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 45 1 0%">
-				<!-- Tab bar -->
-				<div class="flex border-b border-[#2a2a2a] shrink-0 px-1">
-					<button class=${tabClass("activity")} onClick=${() => setActiveTab("activity")}>
-						Activity
-					</button>
-					<button class=${tabClass("messages")} onClick=${() => setActiveTab("messages")}>
-						Messages
-					</button>
-				</div>
-
-				<!-- Tab content -->
-				<div class="flex-1 min-h-0 overflow-hidden">
-					${
-						activeTab === "activity"
-							? html`<${ActivityTimeline}
-									events=${unifiedTimeline}
-									loading=${activityLoading}
-									error=${activityError}
-								/>`
-							: html`<${ChatView} state=${chatState} />`
-					}
-				</div>
+				<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
 			</div>
 		</div>
 	`;
