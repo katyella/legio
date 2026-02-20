@@ -9,7 +9,7 @@ Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a
 - **Runtime:** Node (runs TypeScript directly, no build step)
 - **Language:** TypeScript with strict mode (`noUncheckedIndexedAccess`, no `any`)
 - **Linting:** Biome (formatter + linter in one tool)
-- **Dev dependencies:** `@types/bun`, `typescript`, `@biomejs/biome`
+- **Dev dependencies:** `better-sqlite3`, `@types/better-sqlite3`, `@types/bun`, `typescript`, `@biomejs/biome`, `vitest`
 
 
 ## Architecture
@@ -92,8 +92,8 @@ legio/                        # This repo (the legio tool itself)
       lifecycle.ts                # Session handoff (checkpoint/resume/complete)
       checkpoint.ts               # Session checkpoint save/load/clear
     worktree/
-      manager.ts                  # Create/list/cleanup git worktrees via Bun.spawn
-      tmux.ts                     # Tmux session management via Bun.spawn
+      manager.ts                  # Create/list/cleanup git worktrees via node:child_process spawn
+      tmux.ts                     # Tmux session management via node:child_process spawn
     sessions/
       store.ts                    # SQLite SessionStore + RunStore (agent lifecycle, runs)
       compat.ts                   # Migration bridge from sessions.json to sessions.db
@@ -106,7 +106,7 @@ legio/                        # This repo (the legio tool itself)
       client.ts                   # bd CLI wrapper (--json parsing)
       molecules.ts                # Molecule management helpers
     mail/
-      store.ts                    # SQLite mail storage (bun:sqlite, WAL mode)
+      store.ts                    # SQLite mail storage (better-sqlite3, WAL mode)
       client.ts                   # Mail operations (send/check/list/read/reply)
       broadcast.ts                # Group address resolution (@all, @builders, etc.)
     mulch/
@@ -188,7 +188,7 @@ target-project/
 ### Dependencies
 
 
-- External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `Bun.spawn`, never as npm imports
+- External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports
 - Dev dependencies are limited to types and tooling
 
 ### File Organization
@@ -201,30 +201,36 @@ target-project/
 
 ### Subprocess Execution
 
-All external commands run through `Bun.spawn`. Capture stdout/stderr, check exit codes, throw typed errors on failure.
+All external commands run through `node:child_process` `spawn`. Capture stdout/stderr, check exit codes, throw typed errors on failure.
 
 ```typescript
-const proc = Bun.spawn(["git", "worktree", "add", path, "-b", branch], {
+import { spawn } from "node:child_process";
+
+const proc = spawn("git", ["worktree", "add", path, "-b", branch], {
   cwd: repoRoot,
-  stdout: "pipe",
-  stderr: "pipe",
+  stdio: ["pipe", "pipe", "pipe"],
 });
-const exitCode = await proc.exited;
+
+let stderr = "";
+proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+
+const exitCode = await new Promise<number>((resolve) => {
+  proc.on("close", (code) => resolve(code ?? 1));
+});
 if (exitCode !== 0) {
-  const stderr = await new Response(proc.stderr).text();
   throw new WorktreeError(`Failed to create worktree: ${stderr}`);
 }
 ```
 
 ### SQLite
 
-All SQLite uses `bun:sqlite` (synchronous API). Always enable WAL mode and busy timeout for concurrent access:
+All SQLite uses `better-sqlite3` (synchronous API). Always enable WAL mode and busy timeout for concurrent access:
 
 ```typescript
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 const db = new Database(dbPath);
-db.exec("PRAGMA journal_mode=WAL");
-db.exec("PRAGMA busy_timeout=5000");
+db.pragma("journal_mode=WAL");
+db.pragma("busy_timeout=5000");
 ```
 
 ## CLI Command Reference
@@ -441,11 +447,11 @@ legio clean                         Wipe runtime state (nuclear cleanup)
 
 ## Testing
 
-- **Framework:** `bun test` (built-in, Jest-compatible API)
+- **Framework:** vitest (Jest-compatible API)
 - **Test location:** Tests colocated with source files (e.g., `src/config.test.ts`, `src/mail/store.test.ts`)
 - **Naming:** `{module}.test.ts` matching the source file name
-- **Run tests:** `bun test`
-- **Run single test:** `bun test src/config.test.ts`
+- **Run tests:** `vitest run`
+- **Run single test:** `vitest run src/config.test.ts`
 
 ### Philosophy: Never mock what you can use for real
 
@@ -453,7 +459,7 @@ Prefer real implementations over mocks. Mocks are a last resort, not a default.
 
 **Use real implementations for:**
 - **Filesystem:** Use temp directories (`mkdtemp`) for file I/O tests
-- **SQLite:** Use temp files or `:memory:` databases for `bun:sqlite` tests
+- **SQLite:** Use temp files or `:memory:` databases for `better-sqlite3` tests
 - **Git:** Use real git repos in temp directories for worktree/merge tests
 - **CLI tools:** Use real `bd` CLI for beads-client tests (when available)
 
@@ -503,7 +509,7 @@ Expertise records live in `.mulch/`. Legio wraps `mulch` via `src/mulch/client.t
 Run all three before committing:
 
 ```bash
-bun test                              # Tests pass
+vitest run                            # Tests pass
 biome check .                         # Linting + formatting clean
 tsc --noEmit                          # Type checking passes
 ```
@@ -511,7 +517,7 @@ tsc --noEmit                          # Type checking passes
 Or use the package.json scripts:
 
 ```bash
-bun run test                          # bun test
+bun run test                          # vitest run
 bun run lint                          # biome check .
 bun run typecheck                     # tsc --noEmit
 ```
@@ -521,7 +527,7 @@ bun run typecheck                     # tsc --noEmit
 When ending a work session, you MUST:
 
 1. File issues for remaining work (`bd create`)
-2. Run quality gates (if code changed): `bun test && biome check . && tsc --noEmit`
+2. Run quality gates (if code changed): `vitest run && biome check . && tsc --noEmit`
 3. Update issue status: close finished work, update in-progress items
 4. Push to remote (MANDATORY):
    ```bash
