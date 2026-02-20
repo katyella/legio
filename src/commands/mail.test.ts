@@ -1298,4 +1298,291 @@ describe("mailCommand", () => {
 			expect(stderrOutput).toBe("");
 		});
 	});
+
+	describe("smart push delivery (agent-busy)", () => {
+		/** Find a nudge event recorded by nudgeAgent in the EventStore. */
+		async function findNudgeEvent(eventsDbPath: string): Promise<StoredEvent | undefined> {
+			const eventStore = createEventStore(eventsDbPath);
+			try {
+				const events = eventStore.getTimeline({ since: "2000-01-01T00:00:00Z" });
+				return events.find((e) => {
+					if (e.eventType !== "custom" || !e.data) return false;
+					const data = JSON.parse(e.data) as { type?: string };
+					return data.type === "nudge";
+				});
+			} finally {
+				eventStore.close();
+			}
+		}
+
+		test("urgent message to idle agent (no busy marker) triggers direct nudge", async () => {
+			// No agent-busy marker written = recipient is idle
+			await mailCommand([
+				"send",
+				"--to",
+				"builder-1",
+				"--subject",
+				"Fix NOW",
+				"--body",
+				"Production is down",
+				"--priority",
+				"urgent",
+			]);
+
+			// Pending marker should still be written (always)
+			const markerPath = join(tempDir, ".legio", "pending-nudges", "builder-1.json");
+			{
+				let exists = false;
+				try {
+					await access(markerPath);
+					exists = true;
+				} catch {}
+				expect(exists).toBe(true);
+			}
+
+			// nudgeAgent was called: EventStore has a nudge event
+			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
+			expect(nudgeEvent).toBeDefined();
+			expect(nudgeEvent?.eventType).toBe("custom");
+			const data = JSON.parse(nudgeEvent?.data ?? "{}") as { type: string; delivered: boolean };
+			expect(data.type).toBe("nudge");
+		});
+
+		test("urgent message to busy agent (busy marker present) skips direct nudge", async () => {
+			// Write agent-busy marker = recipient is busy
+			const busyDir = join(tempDir, ".legio", "agent-busy");
+			await mkdir(busyDir, { recursive: true });
+			await writeFile(join(busyDir, "builder-1"), "busy");
+
+			await mailCommand([
+				"send",
+				"--to",
+				"builder-1",
+				"--subject",
+				"Fix NOW",
+				"--body",
+				"Production is down",
+				"--priority",
+				"urgent",
+			]);
+
+			// Pending marker should still be written (always)
+			const markerPath = join(tempDir, ".legio", "pending-nudges", "builder-1.json");
+			{
+				let exists = false;
+				try {
+					await access(markerPath);
+					exists = true;
+				} catch {}
+				expect(exists).toBe(true);
+			}
+
+			// nudgeAgent was NOT called: no nudge event in EventStore
+			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
+			expect(nudgeEvent).toBeUndefined();
+		});
+
+		test("worker_done to idle agent triggers direct nudge", async () => {
+			// No busy marker = idle
+			await mailCommand([
+				"send",
+				"--to",
+				"orchestrator",
+				"--subject",
+				"Task complete",
+				"--body",
+				"Builder finished",
+				"--type",
+				"worker_done",
+				"--from",
+				"builder-1",
+			]);
+
+			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
+			expect(nudgeEvent).toBeDefined();
+		});
+
+		test("worker_done to busy agent skips direct nudge", async () => {
+			// Write agent-busy marker
+			const busyDir = join(tempDir, ".legio", "agent-busy");
+			await mkdir(busyDir, { recursive: true });
+			await writeFile(join(busyDir, "orchestrator"), "busy");
+
+			await mailCommand([
+				"send",
+				"--to",
+				"orchestrator",
+				"--subject",
+				"Task complete",
+				"--body",
+				"Builder finished",
+				"--type",
+				"worker_done",
+				"--from",
+				"builder-1",
+			]);
+
+			// No nudge event in EventStore
+			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
+			expect(nudgeEvent).toBeUndefined();
+		});
+
+		test("normal priority message never triggers direct nudge regardless of busy state", async () => {
+			// No busy marker = idle, but normal priority means no nudge at all
+			await mailCommand([
+				"send",
+				"--to",
+				"builder-1",
+				"--subject",
+				"FYI",
+				"--body",
+				"Just a note",
+			]);
+
+			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
+			expect(nudgeEvent).toBeUndefined();
+		});
+
+		test("busy marker is per-agent: idle agent gets direct nudge, busy agent does not", async () => {
+			// Make builder-1 busy, leave scout-1 idle
+			const busyDir = join(tempDir, ".legio", "agent-busy");
+			await mkdir(busyDir, { recursive: true });
+			await writeFile(join(busyDir, "builder-1"), "busy");
+
+			// Send urgent to idle scout-1 (no busy marker)
+			await mailCommand([
+				"send",
+				"--to",
+				"scout-1",
+				"--subject",
+				"Urgent scout task",
+				"--body",
+				"Explore this",
+				"--priority",
+				"urgent",
+			]);
+
+			// scout-1 is idle → nudge event recorded
+			const eventsDbPath = join(tempDir, ".legio", "events.db");
+			const eventStore = createEventStore(eventsDbPath);
+			let events: StoredEvent[] = [];
+			try {
+				events = eventStore.getTimeline({ since: "2000-01-01T00:00:00Z" });
+			} finally {
+				eventStore.close();
+			}
+			const nudgeEvents = events.filter((e) => {
+				if (e.eventType !== "custom" || !e.data) return false;
+				const data = JSON.parse(e.data) as { type?: string };
+				return data.type === "nudge";
+			});
+			expect(nudgeEvents.length).toBe(1); // Only one nudge (scout-1)
+		});
+
+		test("broadcast urgent to idle agents triggers direct nudge for each idle recipient", async () => {
+			const { createSessionStore } = await import("../sessions/store.ts");
+			const sessionsDbPath = join(tempDir, ".legio", "sessions.db");
+			const sessionStore = createSessionStore(sessionsDbPath);
+			const sessions = [
+				{
+					id: "session-orchestrator",
+					agentName: "orchestrator",
+					capability: "coordinator" as const,
+					worktreePath: "/worktrees/orchestrator",
+					branchName: "main",
+					beadId: "bead-001",
+					tmuxSession: "legio-fake-orchestrator",
+					state: "working" as const,
+					pid: 12345,
+					parentAgent: null,
+					depth: 0,
+					runId: "run-001",
+					startedAt: new Date().toISOString(),
+					lastActivity: new Date().toISOString(),
+					escalationLevel: 0,
+					stalledSince: null,
+				},
+				{
+					id: "session-builder-1",
+					agentName: "builder-1",
+					capability: "builder" as const,
+					worktreePath: "/worktrees/builder-1",
+					branchName: "builder-1",
+					beadId: "bead-002",
+					tmuxSession: "legio-fake-builder-1",
+					state: "working" as const,
+					pid: 12346,
+					parentAgent: "orchestrator",
+					depth: 1,
+					runId: "run-001",
+					startedAt: new Date().toISOString(),
+					lastActivity: new Date().toISOString(),
+					escalationLevel: 0,
+					stalledSince: null,
+				},
+				{
+					id: "session-builder-2",
+					agentName: "builder-2",
+					capability: "builder" as const,
+					worktreePath: "/worktrees/builder-2",
+					branchName: "builder-2",
+					beadId: "bead-003",
+					tmuxSession: "legio-fake-builder-2",
+					state: "working" as const,
+					pid: 12347,
+					parentAgent: "orchestrator",
+					depth: 1,
+					runId: "run-001",
+					startedAt: new Date().toISOString(),
+					lastActivity: new Date().toISOString(),
+					escalationLevel: 0,
+					stalledSince: null,
+				},
+			];
+			for (const session of sessions) {
+				sessionStore.upsert(session);
+			}
+			sessionStore.close();
+
+			// Make builder-1 busy, builder-2 idle
+			const busyDir = join(tempDir, ".legio", "agent-busy");
+			await mkdir(busyDir, { recursive: true });
+			await writeFile(join(busyDir, "builder-1"), "busy");
+
+			await mailCommand([
+				"send",
+				"--to",
+				"@builders",
+				"--subject",
+				"Urgent broadcast",
+				"--body",
+				"Do this now",
+				"--priority",
+				"urgent",
+			]);
+
+			// Pending markers for both builders
+			const nudgesDir = join(tempDir, ".legio", "pending-nudges");
+			const nudgeFiles = await readdir(nudgesDir);
+			expect(nudgeFiles).toContain("builder-1.json");
+			expect(nudgeFiles).toContain("builder-2.json");
+
+			// Only builder-2 (idle) gets a direct nudge event
+			const eventsDbPath = join(tempDir, ".legio", "events.db");
+			const eventStore = createEventStore(eventsDbPath);
+			let events: StoredEvent[] = [];
+			try {
+				events = eventStore.getTimeline({ since: "2000-01-01T00:00:00Z" });
+			} finally {
+				eventStore.close();
+			}
+			const nudgeEvents = events.filter((e) => {
+				if (e.eventType !== "custom" || !e.data) return false;
+				const data = JSON.parse(e.data) as { type?: string };
+				return data.type === "nudge";
+			});
+			// Only 1 nudge (builder-2 is idle, builder-1 is busy)
+			expect(nudgeEvents.length).toBe(1);
+		});
+	});
 });

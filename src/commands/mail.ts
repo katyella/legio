@@ -17,6 +17,7 @@ import { createMailStore } from "../mail/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { MailMessage, MailMessageType } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
+import { nudgeAgent } from "./nudge.ts";
 
 /**
  * Protocol message types that require immediate recipient attention.
@@ -112,6 +113,23 @@ function openStore(cwd: string) {
 /** Directory where pending nudge markers are stored. */
 function pendingNudgeDir(cwd: string): string {
 	return join(cwd, ".legio", "pending-nudges");
+}
+
+/**
+ * Check if an agent is idle (not actively executing a tool).
+ *
+ * An agent is considered idle when `.legio/agent-busy/{agentName}` does NOT exist.
+ * The busy marker is written by hooks during active tool execution and removed when idle.
+ * Idle agents can receive a direct tmux nudge; busy agents only get the pending marker.
+ */
+async function isAgentIdle(cwd: string, agentName: string): Promise<boolean> {
+	const busyPath = join(cwd, ".legio", "agent-busy", agentName);
+	try {
+		await access(busyPath);
+		return false; // busy marker present — agent is actively working
+	} catch {
+		return true; // no busy marker — agent is idle
+	}
 }
 
 /** Shape of a pending nudge marker file. */
@@ -377,6 +395,17 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 							subject,
 							messageId: id,
 						});
+						// Smart push: if recipient is idle, also deliver direct tmux nudge
+						if (await isAgentIdle(cwd, recipient)) {
+							await nudgeAgent(
+								cwd,
+								recipient,
+								`[mail from ${from}] ${nudgeReason}: ${subject}`,
+								true,
+							).catch(() => {
+								/* non-fatal: pending marker is the reliable path */
+							});
+						}
 					}
 				}
 			} finally {
@@ -465,6 +494,17 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 				subject,
 				messageId: id,
 			});
+			// Smart push: if recipient is idle, also deliver direct tmux nudge
+			if (await isAgentIdle(cwd, to)) {
+				await nudgeAgent(
+					cwd,
+					to,
+					`[mail from ${from}] ${nudgeReason}: ${subject}`,
+					true,
+				).catch(() => {
+					/* non-fatal: pending marker is the reliable path */
+				});
+			}
 			if (!hasFlag(args, "--json")) {
 				process.stdout.write(
 					`📢 Queued nudge for "${to}" (${nudgeReason}, delivered on next prompt)\n`,
