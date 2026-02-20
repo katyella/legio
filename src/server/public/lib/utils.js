@@ -214,3 +214,96 @@ export const ACTIVITY_MAIL_TYPES = new Set([
 export function isActivityMessage(msg) {
 	return ACTIVITY_MAIL_TYPES.has(msg?.type);
 }
+
+/**
+ * Group consecutive same-type activity messages within 30s into group objects.
+ * Non-activity messages (_isAgentActivity, pending, conversational) pass through
+ * unchanged and break any active group.
+ * Single activity messages with no same-type neighbors within 30s pass through unchanged.
+ *
+ * @param {Array} messages - sorted oldest-first
+ * @returns {Array} Array of Message or GroupedActivity objects
+ */
+export function groupActivityMessages(messages) {
+	const result = [];
+	let i = 0;
+
+	while (i < messages.length) {
+		const msg = messages[i];
+
+		// Non-groupable: _isAgentActivity, pending (has status field), or not an activity type
+		const isGroupable = isActivityMessage(msg) && !msg._isAgentActivity && msg.status == null;
+
+		if (!isGroupable) {
+			result.push(msg);
+			i++;
+			continue;
+		}
+
+		// Scan forward for consecutive same-type activity messages within 30s each
+		const type = msg.type;
+		let j = i + 1;
+
+		while (j < messages.length) {
+			const next = messages[j];
+			const nextGroupable =
+				isActivityMessage(next) && !next._isAgentActivity && next.status == null;
+			if (!nextGroupable) break;
+			if (next.type !== type) break;
+			const timeDiff =
+				new Date(next.createdAt).getTime() - new Date(messages[j - 1].createdAt).getTime();
+			if (timeDiff > 30000) break;
+			j++;
+		}
+
+		const group = messages.slice(i, j);
+
+		if (group.length === 1) {
+			// Solo activity message — pass through unchanged
+			result.push(msg);
+		} else {
+			const firstTimestamp = group[0].createdAt;
+			const lastTimestamp = group[group.length - 1].createdAt;
+			result.push({
+				_isGroup: true,
+				type,
+				children: group,
+				count: group.length,
+				firstTimestamp,
+				lastTimestamp,
+				id: `group-${type}-${firstTimestamp}`,
+			});
+		}
+
+		i = j;
+	}
+
+	return result;
+}
+
+/**
+ * Generate a human-readable summary label for a grouped activity.
+ * @param {{ count: number, type: string }} group
+ * @returns {string}
+ */
+export function groupSummaryLabel(group) {
+	const { count, type } = group;
+	switch (type) {
+		case "dispatch":
+			return `${count} agents dispatched`;
+		case "worker_done":
+			return `${count} agents completed`;
+		case "merge_ready":
+			return `${count} branches ready to merge`;
+		case "merged":
+			return `${count} branches merged`;
+		case "merge_failed":
+			return `${count} merges failed`;
+		case "health_check":
+			return `${count} health checks`;
+		case "assign":
+			return `${count} tasks assigned`;
+		default:
+			return `${count} ${type} events`;
+	}
+}
