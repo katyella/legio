@@ -20,6 +20,7 @@ const AGENT_DEF_FILES = [
 	"supervisor.md",
 	"coordinator.md",
 	"monitor.md",
+	"cto.md",
 ];
 
 /** Resolve the source agents directory (same logic as init.ts). */
@@ -46,7 +47,7 @@ describe("initCommand: agent-defs deployment", () => {
 		await cleanupTempDir(tempDir);
 	});
 
-	test("creates .legio/agent-defs/ with all 8 agent definition files", async () => {
+	test("creates .legio/agent-defs/ with all 9 agent definition files", async () => {
 		await initCommand([]);
 
 		const agentDefsDir = join(tempDir, ".legio", "agent-defs");
@@ -181,7 +182,7 @@ describe("initCommand: .legio/.gitignore", () => {
 
 		// Verify the file was overwritten with the new wildcard+whitelist format
 		const restored = await readFile(gitignorePath, "utf-8");
-		expect(restored).toBe(OVERSTORY_GITIGNORE);
+		expect(restored).toBe(LEGIO_GITIGNORE);
 		expect(restored).toContain("*\n");
 		expect(restored).toContain("!.gitignore\n");
 	});
