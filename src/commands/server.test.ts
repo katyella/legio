@@ -214,7 +214,7 @@ describe("serverCommand start --daemon", () => {
 
 		let spawnCmd: string | undefined;
 		const deps: ServerDeps = {
-			_isProcessRunning: () => false,
+			_isProcessRunning: (pid) => pid === fakePid,
 			_spawn: (cmd, args, opts) => {
 				spawnCalled = true;
 				spawnCmd = cmd;
@@ -222,6 +222,7 @@ describe("serverCommand start --daemon", () => {
 				spawnEnv = opts.env as NodeJS.ProcessEnv;
 				return { pid: fakePid, unref: () => {} };
 			},
+			_sleep: async () => {},
 		};
 
 		let output = "";
@@ -263,8 +264,9 @@ describe("serverCommand start --daemon", () => {
 
 		const fakePid = 55556;
 		const deps: ServerDeps = {
-			_isProcessRunning: () => false,
+			_isProcessRunning: (pid) => pid === fakePid,
 			_spawn: () => ({ pid: fakePid, unref: () => {} }),
+			_sleep: async () => {},
 		};
 
 		const originalWrite = process.stdout.write;
@@ -279,6 +281,47 @@ describe("serverCommand start --daemon", () => {
 		// PID file should now have the new daemon's PID
 		const pid = await readServerPid(tempDir);
 		expect(pid).toBe(fakePid);
+	});
+
+	it("reports failure and cleans up PID when daemon exits immediately (port conflict)", async () => {
+		const fakePid = 55558;
+		const deps: ServerDeps = {
+			_isProcessRunning: () => false,
+			_spawn: () => ({ pid: fakePid, unref: () => {} }),
+			_sleep: async () => {},
+		};
+
+		const originalExit = process.exit;
+		let exitCode: number | undefined;
+		process.exit = vi.fn((code?: string | number | null | undefined) => {
+			exitCode = typeof code === "number" ? code : 1;
+			throw new Error("process.exit called");
+		}) as never;
+
+		let stderrOutput = "";
+		const originalStderr = process.stderr.write;
+		process.stderr.write = vi.fn((chunk: unknown) => {
+			stderrOutput += String(chunk);
+			return true;
+		}) as typeof process.stderr.write;
+
+		const originalStdout = process.stdout.write;
+		process.stdout.write = vi.fn(() => true) as typeof process.stdout.write;
+
+		try {
+			await expect(serverCommand(["start", "--daemon"], deps)).rejects.toThrow(
+				"process.exit called",
+			);
+			expect(exitCode).toBe(1);
+			expect(stderrOutput).toContain("exited immediately");
+		} finally {
+			process.exit = originalExit;
+			process.stderr.write = originalStderr;
+			process.stdout.write = originalStdout;
+		}
+
+		const pid = await readServerPid(tempDir);
+		expect(pid).toBeNull();
 	});
 });
 

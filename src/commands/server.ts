@@ -26,6 +26,7 @@ function hasFlag(args: string[], flag: string): boolean {
 export interface ServerDeps {
 	_isProcessRunning?: (pid: number) => boolean;
 	_spawn?: (cmd: string, args: string[], opts: SpawnOptions) => { pid?: number; unref: () => void };
+	_sleep?: (ms: number) => Promise<void>;
 }
 
 const SERVER_HELP = `legio server <subcommand>
@@ -184,6 +185,19 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 
 		if (child.pid !== undefined) {
 			await writeServerPid(projectRoot, child.pid);
+
+			// Wait for daemon to attempt port binding, then verify it survived
+			const sleep = deps._sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+			await sleep(500);
+
+			if (!checkRunning(child.pid)) {
+				await removeServerPid(projectRoot);
+				process.stderr.write(
+					"Daemon process exited immediately — port may already be in use\n",
+				);
+				process.exit(1);
+			}
+
 			process.stdout.write(
 				`Server started as daemon (PID ${child.pid}) at http://${host}:${port}\n`,
 			);
@@ -192,11 +206,6 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 			process.exit(1);
 		}
 		return;
-	}
-
-	// When running as the daemon child, write our own PID to the PID file
-	if (process.env.LEGIO_SERVER_DAEMON === "1") {
-		await writeServerPid(projectRoot, process.pid);
 	}
 
 	// Import the server module dynamically to avoid circular deps
