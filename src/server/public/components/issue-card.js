@@ -1,10 +1,7 @@
 // IssueCard — reusable kanban card component
 // Used by views/issues.js
 
-import { h } from "https://esm.sh/preact@10";
-import htm from "https://esm.sh/htm@3";
-
-const html = htm.bind(h);
+import { h, html } from "../lib/preact-setup.js";
 
 // Maps priority number → left border color (hex, for inline style)
 const priorityBorderColors = {
