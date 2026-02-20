@@ -170,6 +170,43 @@ ${typeof ev.detail === "string" ? ev.detail : JSON.stringify(ev.detail, null, 2)
 	`;
 }
 
+// ===== buildProgressNarration =====
+
+function buildProgressNarration(agents) {
+	if (!agents || agents.length === 0) return "Thinking\u2026";
+
+	const booting = agents.filter((a) => a.state === "booting");
+	const working = agents.filter((a) => a.state === "working");
+	const completed = agents.filter(
+		(a) => a.state === "completed" || a.state === "done",
+	);
+
+	const total = agents.length;
+
+	if (completed.length === total) return "Done.";
+
+	if (booting.length === total) {
+		return `Spawning ${total} agent${total === 1 ? "" : "s"}\u2026`;
+	}
+
+	const parts = [];
+	if (working.length > 0) {
+		parts.push(`${working.length}/${total} agent${total === 1 ? "" : "s"} working`);
+	}
+	if (booting.length > 0) {
+		parts.push(`${booting.length} booting`);
+	}
+	if (completed.length > 0) {
+		const last = completed[completed.length - 1];
+		const name = last.agentName ?? last.name ?? "agent";
+		parts.push(`${name} completed`);
+	}
+
+	if (parts.length > 0) return parts.join(", ") + "\u2026";
+
+	return "Thinking\u2026";
+}
+
 // ===== CoordinatorChat =====
 
 function CoordinatorChat({ mail }) {
@@ -392,7 +429,7 @@ function CoordinatorChat({ mail }) {
 						? html`
 							<div class="flex items-center gap-2 px-3 py-2 text-sm text-[#666]">
 								<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
-								<span>Thinking...</span>
+								<span>${buildProgressNarration(appState.agents.value)}</span>
 							</div>
 						`
 						: null
