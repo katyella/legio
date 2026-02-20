@@ -1,7 +1,7 @@
 // IssueCard — reusable kanban card component
 // Used by views/issues.js
 
-import { html } from "../lib/preact-setup.js";
+import { h, html } from "../lib/preact-setup.js";
 
 // Maps priority number → left border color (hex, for inline style)
 const priorityBorderColors = {
