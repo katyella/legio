@@ -1,7 +1,7 @@
 /**
  * Tests for the session compat shim (JSON -> SQLite migration).
  *
- * Uses real filesystem and bun:sqlite. No mocks.
+ * Uses real filesystem and better-sqlite3. No mocks.
  * Tests file-based migration behavior, so temp files are required (not :memory:).
  */
 

@@ -3,7 +3,7 @@
  *
  * Wraps the low-level MailStore with higher-level operations:
  * send, check, checkInject (hook format), list, markRead, reply.
- * Synchronous by design (bun:sqlite is sync, ~1-5ms per query).
+ * Synchronous by design (better-sqlite3 is sync, ~1-5ms per query).
  */
 
 import { MailError } from "../errors.ts";

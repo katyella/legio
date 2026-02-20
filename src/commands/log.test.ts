@@ -24,7 +24,7 @@ import { autoRecordExpertise, logCommand } from "./log.ts";
 /**
  * Tests for `legio log` command.
  *
- * Uses real filesystem (temp dirs) and real bun:sqlite to test logging behavior.
+ * Uses real filesystem (temp dirs) and real better-sqlite3 to test logging behavior.
  * Captures process.stdout.write to verify help text output.
  */
 

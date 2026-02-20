@@ -1,7 +1,7 @@
 /**
  * Tests for EventStore (SQLite-backed event observability storage).
  *
- * Uses real bun:sqlite with :memory: databases. No mocks.
+ * Uses real better-sqlite3 with :memory: databases. No mocks.
  * Philosophy: "never mock what you can use for real".
  */
 
