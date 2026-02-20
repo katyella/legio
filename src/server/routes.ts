@@ -499,6 +499,14 @@ export async function handleApiRequest(
 		}
 	}
 
+	if (path === "/api/coordinator/status") {
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "coordinator");
+		return jsonResponse({
+			state: tmuxSession ? "running" : "stopped",
+			tmuxSession: tmuxSession ?? undefined,
+		});
+	}
+
 	if (path === "/api/config") {
 		try {
 			const config = await loadConfig(projectRoot);

@@ -497,6 +497,97 @@ describe("GET /api/agents/:name", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Coordinator status route
+// ---------------------------------------------------------------------------
+
+describe("GET /api/coordinator/status", () => {
+	it("returns stopped when no sessions.db and no orchestrator-tmux.json", async () => {
+		const res = await dispatch("/api/coordinator/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { state: string; tmuxSession?: string };
+		expect(body.state).toBe("stopped");
+		expect(body.tmuxSession).toBeUndefined();
+	});
+
+	it("returns running when coordinator session exists with working state", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-coord-001",
+			agentName: "coordinator",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/coordinator",
+			branchName: "main",
+			beadId: "coord-task",
+			tmuxSession: "legio-test-coordinator",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { state: string; tmuxSession?: string };
+		expect(body.state).toBe("running");
+		expect(body.tmuxSession).toBe("legio-test-coordinator");
+	});
+
+	it("returns stopped when coordinator session is in zombie state", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-coord-002",
+			agentName: "coordinator",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/coordinator",
+			branchName: "main",
+			beadId: "coord-task",
+			tmuxSession: "legio-test-coordinator",
+			state: "zombie",
+			pid: null,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { state: string; tmuxSession?: string };
+		// zombie state → resolveTerminalSession returns null → stopped
+		// (unless orchestrator-tmux.json exists, which it doesn't here)
+		expect(body.state).toBe("stopped");
+	});
+
+	it("returns running when coordinator session state is completed but orchestrator-tmux.json exists", async () => {
+		// Write orchestrator-tmux.json as fallback
+		await writeFile(
+			join(projectRoot, ".legio", "orchestrator-tmux.json"),
+			JSON.stringify({ tmuxSession: "legio-orchestrator-fallback" }),
+		);
+		// No sessions.db — falls back to orchestrator-tmux.json
+		const res = await dispatch("/api/coordinator/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { state: string; tmuxSession?: string };
+		expect(body.state).toBe("running");
+		expect(body.tmuxSession).toBe("legio-orchestrator-fallback");
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Mail routes
 // ---------------------------------------------------------------------------
 
