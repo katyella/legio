@@ -6,8 +6,9 @@
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import { isActivityMessage, timeAgo } from "../lib/utils.js";
-import { appState } from "../lib/state.js";
+import { agentActivityLog, appState } from "../lib/state.js";
 import { ChatView } from "./chat.js";
+import { ActivityCard } from "../components/message-bubble.js";
 
 // Type badge Tailwind classes for ActivityTimeline
 const TYPE_COLORS = {
@@ -221,8 +222,16 @@ function CoordinatorChat({ mail }) {
 		prevFromCoordCountRef.current = fromCoordCount;
 	}, [fromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Merge pending messages into the conversation feed, sorted oldest first
-	const allMessages = [...coordMessages, ...pendingMessages].sort(
+	// Transform agent activity log entries into feed-compatible objects
+	const activityEntries = agentActivityLog.value.map((event, i) => ({
+		...event,
+		id: `activity-${i}-${event.timestamp}`,
+		createdAt: event.timestamp,
+		_isAgentActivity: true,
+	}));
+
+	// Merge pending messages and agent activity into the conversation feed, sorted oldest first
+	const allMessages = [...coordMessages, ...pendingMessages, ...activityEntries].sort(
 		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
 	);
 
@@ -319,6 +328,11 @@ function CoordinatorChat({ mail }) {
 						: allMessages.map((msg) => {
 								const isFromUser = msg.from === "you";
 								const isSending = msg.status === "sending";
+
+								// Agent lifecycle events → compact centered ActivityCard
+								if (msg._isAgentActivity) {
+									return html`<${ActivityCard} key=${msg.id} event=${msg} capability=${msg.capability} />`;
+								}
 
 								// Protocol messages → compact one-liner
 								if (isActivityMessage(msg)) {
