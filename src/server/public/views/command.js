@@ -5,7 +5,7 @@
 
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
-import { isActivityMessage, timeAgo } from "../lib/utils.js";
+import { groupActivityMessages, groupSummaryLabel, isActivityMessage, timeAgo } from "../lib/utils.js";
 import { agentActivityLog, appState } from "../lib/state.js";
 import { ChatView } from "./chat.js";
 import { ActivityCard } from "../components/message-bubble.js";
@@ -181,6 +181,7 @@ function CoordinatorChat({ mail }) {
 	const feedRef = useRef(null);
 	const isNearBottomRef = useRef(true);
 	const prevFromCoordCountRef = useRef(0);
+	const [expandedGroups, setExpandedGroups] = useState(() => new Set());
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
@@ -234,6 +235,7 @@ function CoordinatorChat({ mail }) {
 	const allMessages = [...coordMessages, ...pendingMessages, ...activityEntries].sort(
 		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
 	);
+	const groupedMessages = groupActivityMessages(allMessages);
 
 	// Auto-scroll to bottom when near bottom
 	useEffect(() => {
@@ -304,6 +306,15 @@ function CoordinatorChat({ mail }) {
 		[handleSend],
 	);
 
+	const toggleGroup = useCallback((groupId) => {
+		setExpandedGroups((prev) => {
+			const next = new Set(prev);
+			if (next.has(groupId)) next.delete(groupId);
+			else next.add(groupId);
+			return next;
+		});
+	}, []);
+
 	return html`
 		<div class="flex flex-col h-full min-h-0">
 			<!-- Header -->
@@ -319,37 +330,90 @@ function CoordinatorChat({ mail }) {
 				onScroll=${handleFeedScroll}
 			>
 				${
-					allMessages.length === 0
+					groupedMessages.length === 0
 						? html`
 							<div class="flex items-center justify-center h-full text-[#666] text-sm">
 								No coordinator messages yet
 							</div>
 						`
-						: allMessages.map((msg) => {
-								const isFromUser = msg.from === "you";
-								const isSending = msg.status === "sending";
+						: groupedMessages.map((item) => {
+								// Grouped protocol messages → collapsible summary row
+								if (item._isGroup) {
+									const isExpanded = expandedGroups.has(item.id);
+									return html`
+										<div
+											key=${item.id}
+											class="rounded border border-[#2a2a2a] bg-[#1a1a1a] cursor-pointer hover:border-[#3a3a3a]"
+											onClick=${() => toggleGroup(item.id)}
+										>
+											<div class="flex items-center gap-2 px-2 py-1 text-xs text-[#666]">
+												<span
+													class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0"
+												>
+													${item.type}
+												</span>
+												<span class="flex-1 truncate min-w-0">
+													${groupSummaryLabel(item)}
+												</span>
+												<span class="shrink-0">${timeAgo(item.lastTimestamp)}</span>
+												<span class="text-xs text-[#555] shrink-0">
+													${isExpanded ? "\u25B2" : "\u25BC"}
+												</span>
+											</div>
+											${
+												isExpanded
+													? html`
+														<div class="ml-4 border-l border-[#2a2a2a] pl-2">
+															${item.children.map(
+																(child) => html`
+																	<div
+																		key=${child.id}
+																		class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
+																	>
+																		<span
+																			class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0"
+																		>
+																			${child.type}
+																		</span>
+																		<span class="flex-1 truncate min-w-0">
+																			${child.subject || child.body || ""}
+																		</span>
+																		<span class="shrink-0">${timeAgo(child.createdAt)}</span>
+																	</div>
+																`,
+															)}
+														</div>
+													`
+													: null
+											}
+										</div>
+									`;
+								}
+
+								const isFromUser = item.from === "you";
+								const isSending = item.status === "sending";
 
 								// Agent lifecycle events → compact centered ActivityCard
-								if (msg._isAgentActivity) {
-									return html`<${ActivityCard} key=${msg.id} event=${msg} capability=${msg.capability} />`;
+								if (item._isAgentActivity) {
+									return html`<${ActivityCard} key=${item.id} event=${item} capability=${item.capability} />`;
 								}
 
 								// Protocol messages → compact one-liner
-								if (isActivityMessage(msg)) {
+								if (isActivityMessage(item)) {
 									return html`
 										<div
-											key=${msg.id}
+											key=${item.id}
 											class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
 										>
 											<span
 												class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0"
 											>
-												${msg.type}
+												${item.type}
 											</span>
 											<span class="flex-1 truncate min-w-0">
-												${msg.subject || msg.body || ""}
+												${item.subject || item.body || ""}
 											</span>
-											<span class="shrink-0">${timeAgo(msg.createdAt)}</span>
+											<span class="shrink-0">${timeAgo(item.createdAt)}</span>
 										</div>
 									`;
 								}
@@ -357,7 +421,7 @@ function CoordinatorChat({ mail }) {
 								// Conversational messages (left for coord/agents, right for user)
 								return html`
 									<div
-										key=${msg.id}
+										key=${item.id}
 										class=${`flex ${isFromUser ? "justify-end" : "justify-start"}`}
 									>
 										<div
@@ -371,16 +435,16 @@ function CoordinatorChat({ mail }) {
 										>
 											<div class="flex items-center gap-1 mb-1">
 												<span class="text-xs text-[#999]">
-													${isFromUser ? "You" : (msg.from || "unknown")}
+													${isFromUser ? "You" : (item.from || "unknown")}
 												</span>
 												<span class="text-xs text-[#555]">
 													${isSending
 														? "\u00b7 sending\u2026"
-														: `\u00b7 ${timeAgo(msg.createdAt)}`}
+														: `\u00b7 ${timeAgo(item.createdAt)}`}
 												</span>
 											</div>
 											<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
-												${msg.body || ""}
+												${item.body || ""}
 											</div>
 										</div>
 									</div>
