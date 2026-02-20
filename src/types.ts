@@ -709,3 +709,27 @@ export interface AutopilotState {
 	actions: AutopilotAction[]; // Most recent actions (capped at maxActionsLog)
 	config: AutopilotConfig;
 }
+
+// ---------------------------------------------------------------------------
+// Strategy Recommendations (CTO output)
+// ---------------------------------------------------------------------------
+
+export type StrategyPriority = "critical" | "high" | "medium" | "low";
+export type StrategyEffort = "XS" | "S" | "M" | "L" | "XL";
+export type StrategyStatus = "pending" | "approved" | "dismissed";
+
+export interface StrategyRecommendation {
+	id: string;
+	title: string;
+	priority: StrategyPriority;
+	effort: StrategyEffort;
+	rationale: string;
+	suggestedFiles: string[];
+	category: string;
+	status: StrategyStatus;
+	createdAt: string;
+}
+
+export interface StrategyFile {
+	recommendations: StrategyRecommendation[];
+}

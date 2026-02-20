@@ -8,7 +8,7 @@
 
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AutopilotInstance } from "../autopilot/daemon.ts";
 import { createBeadsClient } from "../beads/client.ts";
@@ -17,14 +17,14 @@ import { gatherStatus } from "../commands/status.ts";
 import { loadConfig } from "../config.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
-import { createAuditStore } from "./audit-store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
-import type { EventLevel, MailMessage, MergeEntry, RunStatus } from "../types.ts";
+import type { EventLevel, MailMessage, MergeEntry, RunStatus, StrategyFile } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { sendKeys } from "../worktree/tmux.ts";
+import { createAuditStore } from "./audit-store.ts";
 
 // ---------------------------------------------------------------------------
 // File helpers
@@ -376,6 +376,88 @@ export async function handleApiRequest(
 				resolve(jsonResponse({ success: false, error: err.message }));
 			});
 		});
+	}
+
+	// -------------------------------------------------------------------------
+	// Strategy — POST routes (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	{
+		const params = matchRoute(path, "/api/strategy/:id/approve");
+		if (request.method === "POST" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing recommendation ID", 400);
+
+			const strategyPath = join(legioDir, "strategy.json");
+			if (!(await fileExists(strategyPath))) {
+				return errorResponse("No strategy.json found", 404);
+			}
+
+			try {
+				const raw = await readFile(strategyPath, "utf-8");
+				const data = JSON.parse(raw) as StrategyFile;
+				const rec = data.recommendations.find((r) => r.id === id);
+				if (!rec) return errorResponse(`Recommendation not found: ${id}`, 404);
+				if (rec.status !== "pending") {
+					return errorResponse(`Recommendation already ${rec.status}`, 409);
+				}
+
+				const client = createBeadsClient(projectRoot);
+				const priorityNum =
+					rec.priority === "critical"
+						? 0
+						: rec.priority === "high"
+							? 1
+							: rec.priority === "medium"
+								? 2
+								: 3;
+				const issueId = await client.create(rec.title, {
+					description: rec.rationale,
+					priority: priorityNum,
+				});
+
+				rec.status = "approved";
+				await writeFile(strategyPath, JSON.stringify(data, null, 2));
+
+				return jsonResponse({ recommendation: rec, issueId });
+			} catch (err) {
+				return errorResponse(
+					`Failed to approve recommendation: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+	}
+
+	{
+		const params = matchRoute(path, "/api/strategy/:id/dismiss");
+		if (request.method === "POST" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing recommendation ID", 400);
+
+			const strategyPath = join(legioDir, "strategy.json");
+			if (!(await fileExists(strategyPath))) {
+				return errorResponse("No strategy.json found", 404);
+			}
+
+			try {
+				const raw = await readFile(strategyPath, "utf-8");
+				const data = JSON.parse(raw) as StrategyFile;
+				const rec = data.recommendations.find((r) => r.id === id);
+				if (!rec) return errorResponse(`Recommendation not found: ${id}`, 404);
+				if (rec.status !== "pending") {
+					return errorResponse(`Recommendation already ${rec.status}`, 409);
+				}
+
+				rec.status = "dismissed";
+				await writeFile(strategyPath, JSON.stringify(data, null, 2));
+
+				return jsonResponse(rec);
+			} catch (err) {
+				return errorResponse(
+					`Failed to dismiss recommendation: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
 	}
 
 	// Only handle GET requests for all other routes
@@ -937,6 +1019,26 @@ export async function handleApiRequest(
 			return jsonResponse(store.getAll({ since, until, agent, type, source, limit }));
 		} finally {
 			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Strategy
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/strategy") {
+		const strategyPath = join(legioDir, "strategy.json");
+		if (!(await fileExists(strategyPath))) {
+			return jsonResponse([]);
+		}
+		try {
+			const raw = await readFile(strategyPath, "utf-8");
+			const data = JSON.parse(raw) as StrategyFile;
+			return jsonResponse(data.recommendations ?? []);
+		} catch (err) {
+			return errorResponse(
+				`Failed to read strategy.json: ${err instanceof Error ? err.message : String(err)}`,
+			);
 		}
 	}
 
