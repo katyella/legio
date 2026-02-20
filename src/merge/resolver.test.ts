@@ -11,13 +11,13 @@
  * operations run for real while claude is intercepted.
  */
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { ChildProcess } from "node:child_process";
 import * as cp from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import { MergeError } from "../errors.ts";
 import type { MulchClient } from "../mulch/client.ts";
 import {
@@ -33,6 +33,7 @@ import {
 	createMergeResolver,
 	looksLikeProse,
 	parseConflictPatterns,
+	resolveJsonlConflict,
 } from "./resolver.ts";
 
 /**
@@ -1289,6 +1290,162 @@ describe("createMergeResolver", () => {
 				// Verify historical context was included in the prompt
 				expect(capturedPrompt).toContain("Historical context");
 				expect(capturedPrompt).toContain("ai-resolve");
+			} finally {
+				await cleanupTempDir(repoDir);
+			}
+		});
+	});
+});
+
+/**
+ * Set up a JSONL conflict: a file with a shared record on base, then diverge —
+ * feature branch adds an incoming record, base branch adds a canonical record.
+ * When feature-branch is merged into base, git produces conflict markers in the file.
+ */
+async function setupJsonlConflict(dir: string, baseBranch: string): Promise<void> {
+	const shared =
+		'{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"shared record"}';
+	await commitFile(dir, "expertise/data.jsonl", `${shared}\n`);
+
+	// Feature branch: add incoming record
+	await runGitInDir(dir, ["checkout", "-b", "feature-branch"]);
+	const incoming =
+		'{"id":"mx-003","recorded_at":"2026-01-03T00:00:00Z","description":"incoming only"}';
+	await commitFile(dir, "expertise/data.jsonl", `${shared}\n${incoming}\n`);
+
+	// Base branch: add canonical record (diverges from same ancestor)
+	await runGitInDir(dir, ["checkout", baseBranch]);
+	const canonical =
+		'{"id":"mx-002","recorded_at":"2026-01-02T00:00:00Z","description":"canonical only"}';
+	await commitFile(dir, "expertise/data.jsonl", `${shared}\n${canonical}\n`);
+}
+
+describe("resolveJsonlConflict", () => {
+	test("unions both sides and deduplicates by id", () => {
+		const r1 = '{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"shared"}';
+		const r2 = '{"id":"mx-002","recorded_at":"2026-01-02T00:00:00Z","description":"canonical"}';
+		const r3old =
+			'{"id":"mx-003","recorded_at":"2026-01-03T00:00:00Z","description":"older version"}';
+		const r3new =
+			'{"id":"mx-003","recorded_at":"2026-01-04T00:00:00Z","description":"newer version"}';
+		const r4 = '{"id":"mx-004","recorded_at":"2026-01-05T00:00:00Z","description":"incoming"}';
+
+		const content = [
+			r1,
+			"<<<<<<< HEAD",
+			r2,
+			r3old,
+			"=======",
+			r3new,
+			r4,
+			">>>>>>> feature-branch",
+			"",
+		].join("\n");
+
+		const result = resolveJsonlConflict(content);
+		expect(result).not.toBeNull();
+		expect(result).toContain('"mx-001"');
+		expect(result).toContain('"mx-002"');
+		expect(result).toContain('"mx-003"');
+		expect(result).toContain('"mx-004"');
+		// Newer version of mx-003 should be kept, older discarded
+		expect(result).toContain("newer version");
+		expect(result).not.toContain("older version");
+		// All 4 unique IDs present exactly once
+		expect((result?.match(/"mx-001"/g) ?? []).length).toBe(1);
+		expect((result?.match(/"mx-003"/g) ?? []).length).toBe(1);
+	});
+
+	test("sorts output by recorded_at ascending", () => {
+		const r3 = '{"id":"mx-003","recorded_at":"2026-01-03T00:00:00Z","description":"c"}';
+		const r1 = '{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"a"}';
+		const r2 = '{"id":"mx-002","recorded_at":"2026-01-02T00:00:00Z","description":"b"}';
+
+		// Conflict block: HEAD has r3, incoming has r1 (out of order), r2 is non-conflict
+		const content = ["<<<<<<< HEAD", r3, "=======", r1, ">>>>>>> feature-branch", r2, ""].join(
+			"\n",
+		);
+
+		const result = resolveJsonlConflict(content);
+		expect(result).not.toBeNull();
+
+		const lines = (result ?? "").trim().split("\n");
+		expect(lines.length).toBe(3);
+		// Should be sorted ascending by recorded_at: mx-001, mx-002, mx-003
+		expect(lines[0]).toContain('"mx-001"');
+		expect(lines[1]).toContain('"mx-002"');
+		expect(lines[2]).toContain('"mx-003"');
+	});
+
+	test("returns null for content without conflict markers", () => {
+		const content =
+			'{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"no conflict"}\n';
+		expect(resolveJsonlConflict(content)).toBeNull();
+	});
+
+	test("returns null for invalid JSON lines in conflict", () => {
+		const content = [
+			"<<<<<<< HEAD",
+			"not valid json at all",
+			"=======",
+			'{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"ok"}',
+			">>>>>>> feature-branch",
+			"",
+		].join("\n");
+
+		expect(resolveJsonlConflict(content)).toBeNull();
+	});
+
+	test("appends records without id field at the end", () => {
+		const withId = '{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"has id"}';
+		const noId = '{"recorded_at":"2026-01-02T00:00:00Z","description":"no id field"}';
+
+		const content = [
+			"<<<<<<< HEAD",
+			withId,
+			"=======",
+			noId,
+			">>>>>>> feature-branch",
+			"",
+		].join("\n");
+
+		const result = resolveJsonlConflict(content);
+		expect(result).not.toBeNull();
+
+		const lines = (result ?? "").trim().split("\n");
+		expect(lines.length).toBe(2);
+		// id-bearing record first, no-id record appended at the end
+		expect(lines[0]).toContain('"mx-001"');
+		expect(lines[1]).toContain("no id field");
+	});
+
+	describe("integration: auto-resolves .jsonl conflicts with union strategy", () => {
+		test("resolver uses union strategy for .jsonl files", async () => {
+			const repoDir = await createTempGitRepo();
+			try {
+				const defaultBranch = await getDefaultBranch(repoDir);
+				await setupJsonlConflict(repoDir, defaultBranch);
+
+				const entry = makeTestEntry({
+					branchName: "feature-branch",
+					filesModified: ["expertise/data.jsonl"],
+				});
+
+				const resolver = createMergeResolver({
+					aiResolveEnabled: false,
+					reimagineEnabled: false,
+				});
+
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+
+				expect(result.success).toBe(true);
+				expect(result.tier).toBe("auto-resolve");
+
+				// Resolved file should contain all three unique records
+				const content = await readFile(join(repoDir, "expertise/data.jsonl"), "utf-8");
+				expect(content).toContain('"mx-001"');
+				expect(content).toContain('"mx-002"');
+				expect(content).toContain('"mx-003"');
 			} finally {
 				await cleanupTempDir(repoDir);
 			}
