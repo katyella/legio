@@ -27,8 +27,7 @@
 		"legio": "./src/index.ts"
 	},
 	"scripts": {
-		"test": "bun test src/",
-		"test:vitest": "vitest run src/mail src/sessions src/events src/metrics src/merge",
+		"test": "vitest run",
 		"test:server": "vitest run src/server/",
 		"test:e2e": "playwright test",
 		"start": "tsx src/index.ts",
