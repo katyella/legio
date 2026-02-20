@@ -188,6 +188,26 @@ describe("createServer", () => {
 			server.stop(true);
 		}
 	});
+
+	it("rejects when port is already in use (EADDRINUSE)", async () => {
+		// Use 127.0.0.1 explicitly to avoid IPv4/IPv6 ambiguity: on macOS, 'localhost'
+		// may resolve to ::1 for one call and 127.0.0.1 for another, causing both servers
+		// to bind to different addresses and not conflict.
+		const server1 = await createServer(
+			{ port: 0, host: "127.0.0.1", root: tempDir, noAutopilot: true },
+			{ _autopilot: makeMockAutopilot() },
+		);
+		try {
+			await expect(
+				createServer(
+					{ port: server1.port, host: "127.0.0.1", root: tempDir, noAutopilot: true },
+					{ _autopilot: makeMockAutopilot() },
+				),
+			).rejects.toThrow();
+		} finally {
+			server1.stop(true);
+		}
+	});
 });
 
 describe("autopilot auto-start", () => {
@@ -282,7 +302,9 @@ describe("coordinator auto-start", () => {
 		);
 		await new Promise((r) => setTimeout(r, 20));
 		try {
-			expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("Failed to start coordinator"));
+			expect(stderrSpy).toHaveBeenCalledWith(
+				expect.stringContaining("Failed to start coordinator"),
+			);
 		} finally {
 			server.stop(true);
 			stderrSpy.mockRestore();
