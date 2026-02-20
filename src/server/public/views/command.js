@@ -812,6 +812,114 @@ function CoordinatorChat({ mail }) {
 	`;
 }
 
+// ===== CoordinatorBar =====
+
+function CoordinatorBar() {
+	const [coordStatus, setCoordStatus] = useState(null); // null = unknown, true = running, false = stopped
+	const [loading, setLoading] = useState(false); // start/stop in-flight
+	const [error, setError] = useState(null);
+
+	const poll = useCallback(async (cancelled) => {
+		try {
+			const data = await fetchJson("/api/coordinator/status");
+			if (!cancelled) {
+				setCoordStatus(data?.running === true);
+			}
+		} catch (_err) {
+			// non-fatal — leave status as unknown
+		}
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		poll(cancelled);
+		const interval = setInterval(() => poll(cancelled), 5000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [poll]);
+
+	// Auto-clear error after 5s
+	useEffect(() => {
+		if (!error) return;
+		const timer = setTimeout(() => setError(null), 5000);
+		return () => clearTimeout(timer);
+	}, [error]);
+
+	const handleStart = useCallback(async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			await postJson("/api/coordinator/start", {});
+			await poll(false);
+		} catch (err) {
+			setError(err?.message ?? "Failed to start coordinator");
+		} finally {
+			setLoading(false);
+		}
+	}, [poll]);
+
+	const handleStop = useCallback(async () => {
+		setLoading(true);
+		setError(null);
+		try {
+			await postJson("/api/coordinator/stop", {});
+			await poll(false);
+		} catch (err) {
+			setError(err?.message ?? "Failed to stop coordinator");
+		} finally {
+			setLoading(false);
+		}
+	}, [poll]);
+
+	const handleSpawn = useCallback(() => {
+		if (appState.showSpawnDialog) appState.showSpawnDialog.value = true;
+	}, []);
+
+	const isRunning = coordStatus === true;
+	const isStopped = coordStatus === false;
+	const isUnknown = coordStatus === null;
+
+	const dotColor = isRunning ? "bg-green-500" : isStopped ? "bg-[#666]" : "bg-[#666]";
+	const statusText = isRunning ? "Running" : isStopped ? "Stopped" : "Unknown";
+
+	return html`
+		<div class="flex items-center gap-3 px-3 py-2 bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0">
+			<div class="flex items-center gap-2">
+				<span class="text-xs text-[#666] uppercase tracking-wide">Coordinator</span>
+				<div class="flex items-center gap-1">
+					<div class="w-2 h-2 rounded-full ${dotColor}"></div>
+					<span class="text-sm text-[#e5e5e5]">${statusText}</span>
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				<button
+					onClick=${handleStart}
+					disabled=${loading || isRunning}
+					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+				>
+					${loading && !isRunning ? "\u2026" : "Start"}
+				</button>
+				<button
+					onClick=${handleStop}
+					disabled=${loading || isStopped || isUnknown}
+					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+				>
+					${loading && isRunning ? "\u2026" : "Stop"}
+				</button>
+				<button
+					onClick=${handleSpawn}
+					class="bg-[#E64415] hover:bg-[#cc3d12] text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+				>
+					Spawn Agent
+				</button>
+			</div>
+			${error ? html`<span class="text-xs text-red-400">${error}</span>` : null}
+		</div>
+	`;
+}
+
 // ===== CommandView =====
 
 const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
@@ -879,18 +987,21 @@ export function CommandView() {
 	const agents = appState.agents.value;
 
 	return html`
-		<div class="flex h-full bg-[#0f0f0f] min-h-0">
-			<!-- Coordinator Chat (left, ~55%) -->
-			<div
-				class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
-				style="flex: 55 1 0%"
-			>
-				<${CoordinatorChat} mail=${mail} />
-			</div>
+		<div class="flex flex-col h-full bg-[#0f0f0f] min-h-0">
+			<${CoordinatorBar} />
+			<div class="flex flex-1 min-h-0">
+				<!-- Coordinator Chat (left, ~55%) -->
+				<div
+					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
+					style="flex: 55 1 0%"
+				>
+					<${CoordinatorChat} mail=${mail} />
+				</div>
 
-			<!-- Agent Roster (right, ~45%) -->
-			<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 45 1 0%">
-				<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
+				<!-- Agent Roster (right, ~45%) -->
+				<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 45 1 0%">
+					<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
+				</div>
 			</div>
 		</div>
 	`;
