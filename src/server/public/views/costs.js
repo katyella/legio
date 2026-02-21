@@ -335,22 +335,21 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 	// When timeWindow changes, fetch filtered data from all 3 endpoints
 	useEffect(() => {
-		if (timeWindow === null) {
-			// All time: reset to initial prop data, clear model/date data
-			setFilteredMetrics(null);
-			setModelData([]);
-			setDateData([]);
-			return;
-		}
+		const sinceIso =
+			timeWindow !== null ? new Date(Date.now() - timeWindow).toISOString() : null;
+		const enc = sinceIso ? encodeURIComponent(sinceIso) : null;
 
-		const since = new Date(Date.now() - timeWindow).toISOString();
-		const enc = encodeURIComponent(since);
+		const metricsUrl = enc
+			? `/api/metrics?since=${enc}&limit=1000`
+			: "/api/metrics?limit=1000";
+		const modelUrl = enc ? `/api/metrics/by-model?since=${enc}` : "/api/metrics/by-model";
+		const dateUrl = enc ? `/api/metrics/by-date?since=${enc}` : "/api/metrics/by-date";
 
 		setLoading(true);
 		Promise.all([
-			fetchJson(`/api/metrics?since=${enc}&limit=1000`).catch(() => []),
-			fetchJson(`/api/metrics/by-model?since=${enc}`).catch(() => []),
-			fetchJson(`/api/metrics/by-date?since=${enc}`).catch(() => []),
+			fetchJson(metricsUrl).catch(() => []),
+			fetchJson(modelUrl).catch(() => []),
+			fetchJson(dateUrl).catch(() => []),
 		]).then(([metrics, byModel, byDate]) => {
 			setFilteredMetrics(Array.isArray(metrics) ? metrics : []);
 			setModelData(Array.isArray(byModel) ? byModel : []);
@@ -359,10 +358,12 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 		});
 	}, [timeWindow]);
 
-	// Use filteredMetrics if a time window is selected, otherwise fall back to initial prop
-	const safeMetrics = Array.isArray(filteredMetrics ?? initialMetrics)
-		? (filteredMetrics ?? initialMetrics)
-		: [];
+	// Use filteredMetrics (always fetched), fall back to initialMetrics before first fetch completes
+	const safeMetrics = Array.isArray(filteredMetrics)
+		? filteredMetrics
+		: Array.isArray(initialMetrics)
+			? initialMetrics
+			: [];
 	const safeSnapshots = snapshots || [];
 
 	// Compute overall totals
@@ -484,7 +485,7 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 					${loading ? html`<span class="text-xs text-gray-500">Loading...</span>` : null}
 					<select
 						class="text-sm bg-surface border border-border rounded-sm px-3 py-1.5 text-gray-300 focus:outline-none focus:border-blue-500"
-						value=${timeWindow}
+						value=${String(timeWindow)}
 						onChange=${(e) => {
 							const val = e.target.value;
 							setTimeWindow(val === "null" ? null : Number(val));
@@ -521,8 +522,8 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 				/>
 			</div>
 
-			<!-- Model Usage Breakdown (only when time window is selected and data available) -->
-			${timeWindow !== null
+			<!-- Model Usage Breakdown (show when data available) -->
+			${modelData.length > 0
 				? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Model Usage</div>
@@ -537,8 +538,8 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 				<${AgentBarChart} metrics=${safeMetrics} />
 			</div>
 
-			<!-- Date Chart (only when time window is selected and data available) -->
-			${timeWindow !== null && dateData.length > 0
+			<!-- Date Chart (show when data available) -->
+			${dateData.length > 0
 				? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Daily Cost Trend</div>
