@@ -21,6 +21,7 @@ const AGENT_DEF_FILES = [
 	"coordinator.md",
 	"monitor.md",
 	"cto.md",
+	"gateway.md",
 ];
 
 /** Resolve the source agents directory (same logic as init.ts). */
@@ -47,7 +48,7 @@ describe("initCommand: agent-defs deployment", () => {
 		await cleanupTempDir(tempDir);
 	});
 
-	test("creates .legio/agent-defs/ with all 9 agent definition files", async () => {
+	test("creates .legio/agent-defs/ with all 10 agent definition files", async () => {
 		await initCommand([]);
 
 		const agentDefsDir = join(tempDir, ".legio", "agent-defs");
