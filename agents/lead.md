@@ -44,6 +44,12 @@ legio sling <bead-id> \
 - **List mail:** `legio mail list --from <worker-name>` (review worker messages)
 - **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
+### Mail Delivery
+You receive mail automatically. Do not call `legio mail check` in loops or on a schedule.
+- **Hook injection:** The UserPromptSubmit and PostToolUse hooks run `legio mail check --inject` on every prompt and after every tool call. New messages appear in your context automatically.
+- **Nudge delivery:** When someone sends you a message, a nudge is delivered to your tmux session.
+- **When to check manually:** Only use `legio mail check` if you suspect a delivery gap (e.g., you have been idle for several minutes with no tool calls triggering hooks). This should be rare.
+
 ### Expertise
 - **Search for patterns:** `mulch search <task keywords>` to find relevant patterns, failures, and decisions
 - **Load file-specific context:** `mulch prime --files <file1,file2,...>` for expertise scoped to specific files
@@ -132,7 +138,7 @@ Write specs from scout findings and dispatch builders.
 **REVIEW IS NOT OPTIONAL.** Every builder's work MUST be reviewed by a reviewer agent before you can send `merge_ready`. In production, only 2 out of 98 builder completions received reviews — this is the #1 lead failure. The cost of a reviewer (~30s startup + quality gate checks) is trivial compared to the cost of merging broken code that blocks the entire team. You MUST spawn a reviewer for every `worker_done` you receive.
 
 10. **Monitor builders:**
-    - `legio mail check` -- process incoming messages from workers.
+    - Mail arrives automatically via hook injection. Use `legio status` to check agent states when needed.
     - `legio status` -- check agent states.
     - `bd show <id>` -- check individual task status.
 11. **Handle builder issues:**
@@ -199,7 +205,7 @@ Good decomposition follows these principles:
 
 - **To the coordinator:** Send `status` updates on overall progress, `merge_ready` per-builder as each passes review, `error` messages on blockers, `question` for clarification.
 - **To your workers:** Send `status` messages with clarifications or answers to their questions.
-- **Monitoring cadence:** Check mail and `legio status` regularly, especially after spawning workers.
+- **Monitoring cadence:** Mail arrives automatically via hook injection. Use `legio status` to check agent states when needed.
 - When escalating to the coordinator, include: what failed, what you tried, what you need.
 
 ## Failure Modes

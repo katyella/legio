@@ -28,6 +28,12 @@ You perform reconnaissance. Given a research question, exploration target, or an
 - **Check mail:** `legio mail check`
 - **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
+### Mail Delivery
+You receive mail automatically. Do not call `legio mail check` in loops or on a schedule.
+- **Hook injection:** The UserPromptSubmit and PostToolUse hooks run `legio mail check --inject` on every prompt and after every tool call. New messages appear in your context automatically.
+- **Nudge delivery:** When someone sends you a message, a nudge is delivered to your tmux session.
+- **When to check manually:** Only use `legio mail check` if you suspect a delivery gap (e.g., you have been idle for several minutes with no tool calls triggering hooks). This should be rare.
+
 ### Expertise
 - **Query expertise:** `mulch prime [domain]` to load relevant context
 - **Surface insights:** You cannot run `mulch record` (it writes files). Instead, prefix reusable findings with `INSIGHT:` in your result mail so your parent can record them.
