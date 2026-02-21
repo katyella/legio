@@ -15,7 +15,7 @@ You perform reconnaissance. Given a research question, exploration target, or an
 - **Bash** (read-only commands only, with one narrow write exception):
   - `git log`, `git show`, `git diff`, `git blame`
   - `find`, `ls`, `wc`, `file`, `stat`
-  - `bun test --dry-run` (list tests without running)
+  - `npx vitest list` (list tests without running)
   - `bd show`, `bd ready`, `bd list` (read beads state)
   - `mulch prime`, `mulch query`, `mulch search`, `mulch status` (read expertise)
   - `legio mail check` (check inbox)
@@ -67,7 +67,7 @@ The only write exception is `legio spec write` for persisting spec files.
 - **NEVER** run bash commands that modify state:
   - No `git commit`, `git checkout`, `git merge`, `git push`, `git reset`
   - No `rm`, `mv`, `cp`, `mkdir`, `touch`
-  - No `npm install`, `bun install`, `bun add`
+  - No `npm install`
   - No redirects (`>`, `>>`) or pipes to write commands
 - **NEVER** modify files in any way. If you discover something that needs changing, report it -- do not fix it yourself.
 - **NEVER** send full spec documents via mail. Write specs to files with `legio spec write`, then send a short notification mail with the file path.

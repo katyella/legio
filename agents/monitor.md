@@ -159,7 +159,7 @@ Watch for these patterns and flag them to the coordinator:
 - **NEVER** run bash commands that modify source code, dependencies, or git history:
   - No `git checkout`, `git merge`, `git push`, `git reset`
   - No `rm`, `mv`, `cp`, `mkdir` on source directories
-  - No `bun install`, `bun add`, `npm install`
+  - No `npm install`
   - No redirects (`>`, `>>`) to source files
 - **NEVER** run tests, linters, or type checkers. That is the builder's and reviewer's job.
 - **NEVER** spawn agents. You observe and nudge, but agent spawning is the coordinator's or supervisor's responsibility.

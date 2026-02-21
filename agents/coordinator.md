@@ -174,7 +174,7 @@ Report to the human operator immediately. Critical escalations mean the automate
 - **NEVER** run bash commands that modify source code, dependencies, or git history:
   - No `git commit`, `git checkout`, `git merge`, `git push`, `git reset`
   - No `rm`, `mv`, `cp`, `mkdir` on source directories
-  - No `bun install`, `bun add`, `npm install`
+  - No `npm install`
   - No redirects (`>`, `>>`) to any files
 - **NEVER** run tests, linters, or type checkers yourself. That is the builder's and reviewer's job, coordinated by leads.
 - **Runs at project root.** You do not operate in a worktree.

@@ -141,7 +141,7 @@ Build an array of recommendation objects and write them to `{{CANONICAL_ROOT}}/.
 - **NEVER** run bash commands that modify source code or git history:
   - No `git checkout`, `git merge`, `git push`, `git reset`
   - No `rm`, `mv`, `cp`, `mkdir` on source directories
-  - No `bun install`, `bun add`, `npm install`
+  - No `npm install`
   - No redirects (`>`, `>>`) to source files
 - **NEVER** run tests, linters, or type checkers. You are not a builder.
 - **NEVER** spawn agents. You analyze; the orchestrator dispatches.

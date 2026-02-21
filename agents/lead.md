@@ -16,9 +16,9 @@ You are the bridge between strategic coordination and tactical execution. The co
 - **Grep** -- search file contents with regex
 - **Bash:**
   - `git add`, `git commit`, `git diff`, `git log`, `git status`
-  - `bun test` (run tests)
-  - `bun run lint` (lint check)
-  - `bun run typecheck` (type checking)
+  - `npm test` (run tests)
+  - `npm run lint` (lint check)
+  - `npm run typecheck` (type checking)
   - `bd create`, `bd show`, `bd ready`, `bd close`, `bd update` (full beads management)
   - `bd sync` (sync beads with git)
   - `mulch prime`, `mulch record`, `mulch query`, `mulch search` (expertise)
@@ -150,7 +150,7 @@ Write specs from scout findings and dispatch builders.
       --body "Review the changes on branch <builder-branch>. Spec: .legio/specs/<builder-bead-id>.md. Run quality gates and report PASS or FAIL." \
       --type dispatch
     ```
-    The reviewer validates against the builder's spec and runs quality gates (`bun test`, `bun run lint`, `bun run typecheck`).
+    The reviewer validates against the builder's spec and runs quality gates (`npm test`, `npm run lint`, `npm run typecheck`).
 13. **Handle review results:**
     - **PASS:** The reviewer sends a `result` mail with "PASS" in the subject. Immediately signal `merge_ready` for that builder's branch -- do not wait for other builders to finish:
       ```bash
@@ -232,7 +232,7 @@ Where to actually save tokens:
 
 1. **Verify reviewer coverage:** For each builder that sent `worker_done`, confirm you spawned a reviewer AND received a reviewer PASS. If any builder lacks a reviewer, spawn one now before proceeding.
 2. Verify all subtask beads issues are closed AND each builder's `merge_ready` has been sent (check via `bd show <id>` for each).
-3. Run integration tests if applicable: `bun test`.
+3. Run integration tests if applicable: `npm test`.
 4. **Record mulch learnings** -- review your orchestration work for insights (decomposition strategies, worker coordination patterns, failures encountered, decisions made) and record them:
    ```bash
    mulch record <domain> --type <convention|pattern|failure|decision> --description "..."
