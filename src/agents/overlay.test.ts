@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
 import type { OverlayConfig } from "../types.ts";
 import { generateOverlay, isCanonicalRoot, writeOverlay } from "./overlay.ts";
@@ -211,8 +211,8 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("bun test");
-		expect(output).toContain("bun run lint");
+		expect(output).toContain("npm test");
+		expect(output).toContain("npm run lint");
 		expect(output).toContain("Commit");
 	});
 
@@ -221,8 +221,8 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("bun test");
-		expect(output).toContain("bun run lint");
+		expect(output).toContain("npm test");
+		expect(output).toContain("npm run lint");
 	});
 
 	test("merger capability includes full quality gates section", async () => {
@@ -230,7 +230,7 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("bun test");
+		expect(output).toContain("npm test");
 	});
 
 	test("scout capability gets read-only completion section instead of quality gates", async () => {
@@ -241,8 +241,8 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("bun test");
-		expect(output).not.toContain("bun run lint");
+		expect(output).not.toContain("npm test");
+		expect(output).not.toContain("npm run lint");
 	});
 
 	test("reviewer capability gets read-only completion section instead of quality gates", async () => {
@@ -253,8 +253,8 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("bun test");
-		expect(output).not.toContain("bun run lint");
+		expect(output).not.toContain("npm test");
+		expect(output).not.toContain("npm run lint");
 	});
 
 	test("scout completion section includes bd close and mail send", async () => {
@@ -397,7 +397,9 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -422,7 +424,9 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, "/nonexistent-canonical-root");
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -491,7 +495,9 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, fakeProjectRoot);
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -509,7 +515,9 @@ describe("writeOverlay", () => {
 
 		// Verify CLAUDE.md was NOT written
 		const claudeMdPath = join(fakeProjectRoot, ".claude", "CLAUDE.md");
-		const exists = await access(claudeMdPath).then(() => true).catch(() => false);
+		const exists = await access(claudeMdPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(false);
 	});
 
@@ -522,10 +530,7 @@ describe("writeOverlay", () => {
 		const worktreePath = join(fakeProjectRoot, ".legio", "worktrees", "dogfood-agent");
 		await mkdir(join(worktreePath, ".legio"), { recursive: true });
 		// Simulate tracked .legio/config.yaml appearing in the worktree checkout
-		await writeFile(
-			join(worktreePath, ".legio", "config.yaml"),
-			"project:\n  name: legio\n",
-		);
+		await writeFile(join(worktreePath, ".legio", "config.yaml"), "project:\n  name: legio\n");
 
 		const config = makeConfig({ agentName: "dogfood-agent" });
 
@@ -533,7 +538,9 @@ describe("writeOverlay", () => {
 		await writeOverlay(worktreePath, config, fakeProjectRoot);
 
 		const outputPath = join(worktreePath, ".claude", "CLAUDE.md");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 });
@@ -548,9 +555,9 @@ describe("isCanonicalRoot", () => {
 	});
 
 	test("returns false when dir differs from canonicalRoot", () => {
-		expect(
-			isCanonicalRoot("/projects/my-app/.legio/worktrees/agent-1", "/projects/my-app"),
-		).toBe(false);
+		expect(isCanonicalRoot("/projects/my-app/.legio/worktrees/agent-1", "/projects/my-app")).toBe(
+			false,
+		);
 	});
 
 	test("returns false for worktree even when it contains .legio/config.yaml (dogfooding)", () => {

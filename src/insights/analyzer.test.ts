@@ -180,7 +180,7 @@ describe("analyzeSessionInsights", () => {
 				sessionId: "session-1",
 				eventType: "tool_start",
 				toolName: "Bash",
-				toolArgs: JSON.stringify({ command: "bun test" }),
+				toolArgs: JSON.stringify({ command: "npm test" }),
 				toolDurationMs: null,
 				level: "error",
 				data: "Test failed",

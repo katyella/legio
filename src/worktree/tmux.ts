@@ -45,15 +45,15 @@ async function runCommand(
 /**
  * Detect the directory containing the legio binary.
  *
- * Checks process.argv[0] first (the bun/node executable path won't help,
- * but process.argv[1] is the script path for `bun run`), then falls back
+ * Checks process.argv[0] first (the node executable path won't help,
+ * but process.argv[1] is the script path for `npm run`), then falls back
  * to `which legio` to find it on the current PATH.
  *
  * Returns null if detection fails.
  */
 async function detectLegioBinDir(): Promise<string | null> {
 	// process.argv[1] is the script entry point (e.g., /path/to/legio/src/index.ts)
-	// The legio binary (bun link) resolves to a bin dir
+	// The legio binary resolves to a bin dir
 	// Try `which legio` for the most reliable result
 	try {
 		const result = await runCommand(["which", "legio"]);
@@ -68,12 +68,12 @@ async function detectLegioBinDir(): Promise<string | null> {
 	}
 
 	// Fallback: if process.argv[1] points to legio's own entry point (src/index.ts),
-	// derive the bin dir from the bun binary that's running it
+	// derive the bin dir from the node binary that's running it
 	const scriptPath = process.argv[1];
 	if (scriptPath?.includes("legio")) {
-		const bunPath = process.argv[0];
-		if (bunPath) {
-			return dirname(resolve(bunPath));
+		const nodePath = process.argv[0];
+		if (nodePath) {
+			return dirname(resolve(nodePath));
 		}
 	}
 
@@ -352,7 +352,7 @@ function sendSignal(pid: number, signal: "SIGTERM" | "SIGKILL"): void {
  * Before killing the tmux session, walks the descendant process tree from the
  * pane PID, sends SIGTERM to all descendants (deepest-first), waits a grace
  * period, then sends SIGKILL to survivors. This ensures child processes
- * (git, bun test, biome, etc.) are properly cleaned up rather than being
+ * (git, npm test, biome, etc.) are properly cleaned up rather than being
  * orphaned or reparented to init.
  *
  * @param name - Session name to kill
