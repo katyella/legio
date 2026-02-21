@@ -15,7 +15,7 @@ Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a
 
 ## How It Works
 
-CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator agent manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health and an autopilot daemon automates merges and cleanup.
+CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator agent manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
 
 ```
 Coordinator (persistent orchestrator at project root)
@@ -43,7 +43,6 @@ Coordinator (persistent orchestrator at project root)
 - **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
 - **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
 - **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
-- **Autopilot**: Mechanical daemon that auto-processes `merge_ready` mail, merges completed branches, and optionally cleans worktrees
 - **Web UI**: Browser-based dashboard with real-time WebSocket updates — agent monitoring, mail, terminal access, cost tracking, and setup wizard
 - **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
 - **Task Groups**: Batch coordination with auto-close when all member issues complete
@@ -132,7 +131,6 @@ Legio includes a browser-based dashboard for real-time fleet monitoring. Start i
 | **Inspect** | Deep per-agent inspection |
 | **Costs** | Token usage and cost breakdown |
 | **Terminal** | Interactive tmux pane capture and text send |
-| **Autopilot** | Autopilot daemon control and status |
 | **Setup** | Interactive initialization wizard |
 
 **Tech:** Preact + HTM + Tailwind CSS, WebSocket for real-time updates, zero build step.
@@ -183,7 +181,7 @@ legio agents discover               Discover agents by capability/state/parent
   --json                                 JSON output
 ```
 
-### Server & Autopilot
+### Server
 
 ```
 legio server start                  Start the web UI server
@@ -193,11 +191,6 @@ legio server start                  Start the web UI server
   --daemon                               Run as background process
 legio server stop                   Stop the server daemon
 legio server status                 Show server state
-
-legio autopilot start               Start the autopilot daemon
-legio autopilot stop                Stop the autopilot daemon
-legio autopilot status              Show autopilot state (ticks, actions, config)
-  --port <n>  --host <addr>  --json
 ```
 
 ### Coordination Agents
@@ -360,9 +353,6 @@ When the server is running, a full REST API is available at `http://localhost:41
 | `GET /api/merge-queue` | Merge queue status |
 | `POST /api/terminal/send` | Send keys to tmux pane |
 | `GET /api/terminal/capture` | Capture pane output |
-| `POST /api/autopilot/start` | Start autopilot |
-| `POST /api/autopilot/stop` | Stop autopilot |
-| `GET /api/autopilot/status` | Autopilot state |
 | `POST /api/setup/init` | Initialize legio from UI |
 | `GET /api/setup/status` | Setup status |
 | `GET /api/audit` | Query audit trail |
@@ -433,7 +423,6 @@ legio/
       up.ts                       Bootstrap full stack
       down.ts                     Shutdown full stack
       server.ts                   Web UI server lifecycle
-      autopilot.ts                Autopilot daemon control
       agents.ts                   Agent discovery and querying
       coordinator.ts              Persistent orchestrator lifecycle
       supervisor.ts               Team lead management
@@ -472,8 +461,6 @@ legio/
         views/                    UI views (command, chat, dashboard, etc.)
         components/               Reusable UI components
         lib/                      Client-side state, API, WebSocket
-    autopilot/                    Autopilot daemon (auto-merge, cleanup)
-      daemon.ts                   Polling-based automation
     agents/                       Agent lifecycle management
       manifest.ts                 Agent registry (load + query)
       overlay.ts                  Dynamic CLAUDE.md overlay generator
@@ -493,6 +480,7 @@ legio/
     mulch/                        mulch CLI wrapper
     e2e/                          End-to-end lifecycle tests
   agents/                         Base agent definitions (.md, 8 roles)
+
   templates/                      Templates for overlays and hooks
 ```
 

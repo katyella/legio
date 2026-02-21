@@ -21,7 +21,6 @@ function handleSnapshot(d) {
 	if (d.errors !== undefined) appState.errors.value = d.errors;
 	if (d.config !== undefined) appState.config.value = d.config;
 	if (d.status !== undefined) appState.status.value = d.status;
-	if (d.autopilot !== undefined) appState.autopilot.value = d.autopilot;
 	setLastUpdated();
 }
 
