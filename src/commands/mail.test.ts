@@ -1686,11 +1686,11 @@ describe("mailCommand", () => {
 			}
 		});
 
-		test("handleList with --audience both runs without error and filters messages", async () => {
+		test("handleList with --audience human runs without error and filters messages", async () => {
 			output = "";
-			// Existing messages (seeded in beforeEach) have no audience field set.
-			// Filtering by "both" will exclude them (undefined !== "both").
-			await mailCommand(["list", "--audience", "both"]);
+			// Seeded messages default to audience "both" (status type → non-protocol → "both").
+			// Filtering by "human" excludes them since none were sent with audience "human".
+			await mailCommand(["list", "--audience", "human"]);
 
 			// No messages match the audience filter
 			expect(output).toContain("No messages found");

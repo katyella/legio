@@ -169,7 +169,7 @@ export interface MailMessage {
 	body: string;
 	priority: "low" | "normal" | "high" | "urgent";
 	type: MailMessageType;
-	audience: MailAudience; // Who should see this message
+	audience: MailAudience; // Intended audience: "human", "agent", or "both"
 	threadId: string | null; // Conversation threading
 	payload: string | null; // JSON-encoded structured data for protocol messages
 	read: boolean;

@@ -35,6 +35,7 @@ import type { OverlayConfig } from "../types.ts";
 const EXPECTED_AGENT_DEFS = [
 	"builder.md",
 	"coordinator.md",
+	"cto.md",
 	"lead.md",
 	"merger.md",
 	"monitor.md",
@@ -86,7 +87,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		// .gitignore exists
 		expect(await fileExists(join(legioDir, ".gitignore"))).toBe(true);
 
-		// agent-defs/ contains all 8 agent definition files
+		// agent-defs/ contains all 9 agent definition files
 		const agentDefsDir = join(legioDir, "agent-defs");
 		const agentDefFiles = (await readdir(agentDefsDir)).filter((f) => f.endsWith(".md")).sort();
 		expect(agentDefFiles).toEqual(EXPECTED_AGENT_DEFS);
@@ -118,7 +119,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		expect(config.project.name).toBeTruthy();
 	});
 
-	test("manifest loads successfully with all 8 agents", async () => {
+	test("manifest loads successfully with all 9 agents", async () => {
 		await initCommand([]);
 
 		const manifestPath = join(tempDir, ".legio", "agent-manifest.json");
@@ -127,11 +128,12 @@ describe("E2E: init→sling lifecycle on external project", () => {
 
 		const manifest = await loader.load();
 
-		// All 8 agents present
+		// All 9 agents present
 		const agentNames = Object.keys(manifest.agents).sort();
 		expect(agentNames).toEqual([
 			"builder",
 			"coordinator",
+			"cto",
 			"lead",
 			"merger",
 			"monitor",

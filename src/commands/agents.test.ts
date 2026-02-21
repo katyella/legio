@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {mkdtemp, rm, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSessionStore } from "../sessions/store.ts";
@@ -34,6 +34,7 @@ No file scope restrictions. You may modify any file in the worktree.
 
 Some expertise here.
 `;
+		await mkdir(join(tempDir, ".claude"), { recursive: true });
 		await writeFile(overlayPath, content);
 		const scope = await extractFileScope(tempDir);
 		expect(scope).toEqual([]);
@@ -55,6 +56,7 @@ These files are yours to modify:
 
 Some expertise here.
 `;
+		await mkdir(join(tempDir, ".claude"), { recursive: true });
 		await writeFile(overlayPath, content);
 		const scope = await extractFileScope(tempDir);
 		expect(scope).toEqual([
@@ -76,6 +78,7 @@ describe("discoverAgents", () => {
 	beforeEach(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "legio-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 		await writeFile(join(legioDir, ".gitkeep"), "");
 		dbPath = join(legioDir, "sessions.db");
 	});
@@ -243,6 +246,7 @@ describe("agentsCommand", () => {
 	beforeEach(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "legio-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 
 		// Create config.yaml
 		const configContent = `project:

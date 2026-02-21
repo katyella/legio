@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {mkdtemp, rm, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ValidationError } from "../errors.ts";
@@ -34,6 +34,7 @@ describe("doctorCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "doctor-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,

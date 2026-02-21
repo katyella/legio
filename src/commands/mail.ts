@@ -33,7 +33,6 @@ const AUTO_NUDGE_TYPES: ReadonlySet<MailMessageType> = new Set([
 
 /** Valid audience values for mail messages. */
 const VALID_AUDIENCES = ["human", "agent", "both"] as const;
-type MailAudience = (typeof VALID_AUDIENCES)[number];
 
 /**
  * Protocol message types that default to audience 'agent'.
@@ -331,11 +330,9 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	const from = getFlag(args, "--agent") ?? getFlag(args, "--from") ?? "orchestrator";
 	const rawPayload = getFlag(args, "--payload");
 	const VALID_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
-	const VALID_AUDIENCES = ["human", "agent", "both"] as const;
 
 	const rawType = getFlag(args, "--type") ?? "status";
 	const rawPriority = getFlag(args, "--priority") ?? "normal";
-	const rawAudience = getFlag(args, "--audience");
 
 	if (!MAIL_MESSAGE_TYPES.includes(rawType as MailMessage["type"])) {
 		throw new ValidationError(
@@ -349,16 +346,9 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			{ field: "priority", value: rawPriority },
 		);
 	}
-	if (rawAudience !== undefined && !VALID_AUDIENCES.includes(rawAudience as MailAudience)) {
-		throw new ValidationError(
-			`Invalid --audience "${rawAudience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
-			{ field: "audience", value: rawAudience },
-		);
-	}
 
 	const type = rawType as MailMessage["type"];
 	const priority = rawPriority as MailMessage["priority"];
-	const audience = rawAudience as MailAudience | undefined;
 
 	// Parse --audience flag (optional, auto-derived from type if not specified)
 	const rawAudience = getFlag(args, "--audience");
@@ -701,9 +691,7 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 				const store = openStore(cwd);
 				try {
 					const allUnread = store.getUnread(agent);
-					const filtered = allUnread.filter(
-						(m) => (m as unknown as Record<string, unknown>).audience === audience,
-					);
+					const filtered = allUnread.filter((m) => m.audience === audience);
 					for (const msg of filtered) {
 						store.markRead(msg.id);
 					}
@@ -727,9 +715,7 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 		} else {
 			let messages = client.check(agent);
 			if (audience !== undefined) {
-				messages = messages.filter(
-					(m) => (m as unknown as Record<string, unknown>).audience === audience,
-				);
+				messages = messages.filter((m) => m.audience === audience);
 			}
 
 			if (json) {
@@ -772,12 +758,7 @@ function handleList(args: string[], cwd: string): void {
 
 	const client = openClient(cwd);
 	try {
-		let messages = client.list({ from, to, unread });
-		if (audience !== undefined) {
-			messages = messages.filter(
-				(m) => (m as unknown as Record<string, unknown>).audience === audience,
-			);
-		}
+		const messages = client.list({ from, to, unread, audience });
 
 		if (json) {
 			process.stdout.write(`${JSON.stringify(messages)}\n`);

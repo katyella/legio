@@ -18,8 +18,12 @@ let stdoutOutput: string;
 let _stderrOutput: string;
 let originalStdoutWrite: typeof process.stdout.write;
 let originalStderrWrite: typeof process.stderr.write;
+let originalIsTTY: boolean | undefined;
 
 beforeEach(async () => {
+	// Force stdin.isTTY so readStdin() returns immediately instead of blocking
+	originalIsTTY = process.stdin.isTTY;
+	process.stdin.isTTY = true;
 	tempDir = await createTempGitRepo();
 	legioDir = join(tempDir, ".legio");
 	await mkdir(legioDir, { recursive: true });
@@ -49,6 +53,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	process.stdin.isTTY = originalIsTTY as true;
 	process.chdir(originalCwd);
 	process.stdout.write = originalStdoutWrite;
 	process.stderr.write = originalStderrWrite;

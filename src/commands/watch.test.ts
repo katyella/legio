@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {access, mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
+import {access, mkdir, mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { watchCommand } from "./watch.ts";
@@ -51,6 +51,7 @@ describe("watchCommand", () => {
 		// Create temp dir with .legio/config.yaml structure
 		tempDir = await mkdtemp(join(tmpdir(), "watch-test-"));
 		const legioDir = join(tempDir, ".legio");
+		await mkdir(legioDir, { recursive: true });
 		await writeFile(
 			join(legioDir, "config.yaml"),
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,

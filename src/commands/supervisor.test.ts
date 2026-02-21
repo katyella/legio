@@ -154,26 +154,26 @@ describe("supervisorCommand", () => {
 	});
 
 	test("unknown subcommand throws ValidationError with bad value in message", async () => {
-		expect(async () => {
-			await supervisorCommand(["invalid-subcommand"]);
-		}).toThrow(/invalid-subcommand/);
+		await expect(
+			supervisorCommand(["invalid-subcommand"]),
+		).rejects.toThrow(/invalid-subcommand/);
 	});
 
 	test("start without --task throws ValidationError", async () => {
-		expect(async () => {
-			await supervisorCommand(["start", "--name", "supervisor-1"]);
-		}).toThrow(/--task/);
+		await expect(
+			supervisorCommand(["start", "--name", "supervisor-1"]),
+		).rejects.toThrow(/--task/);
 	});
 
 	test("start without --name throws ValidationError", async () => {
-		expect(async () => {
-			await supervisorCommand(["start", "--task", "task-1"]);
-		}).toThrow(/--name/);
+		await expect(
+			supervisorCommand(["start", "--task", "task-1"]),
+		).rejects.toThrow(/--name/);
 	});
 
 	test("stop without --name throws ValidationError", async () => {
-		expect(async () => {
-			await supervisorCommand(["stop"]);
-		}).toThrow(/--name/);
+		await expect(
+			supervisorCommand(["stop"]),
+		).rejects.toThrow(/--name/);
 	});
 });

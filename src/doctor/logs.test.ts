@@ -120,9 +120,11 @@ describe("checkLogs", () => {
 		const agentDir = join(logsDir, "test-agent", "session-1");
 		await mkdir(agentDir, { recursive: true });
 
-		// Create a large log file (> 500MB threshold)
-		const largeContent = "x".repeat(600 * 1024 * 1024); // 600MB
-		await writeFile(join(agentDir, "session.log"), largeContent);
+		// Create a sparse file > 500MB threshold using truncate (avoids allocating 600MB in memory)
+		const { open } = await import("node:fs/promises");
+		const fh = await open(join(agentDir, "session.log"), "w");
+		await fh.truncate(600 * 1024 * 1024); // 600MB sparse file
+		await fh.close();
 
 		const checks = await checkLogs(mockConfig, legioDir);
 
