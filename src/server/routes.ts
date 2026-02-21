@@ -745,6 +745,55 @@ export async function handleApiRequest(
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Gateway — POST routes (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/gateway/start") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+		const result = await runLegio(["gateway", "start", "--no-attach", "--json"], projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "gateway_start", data: result.data });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
+	}
+
+	if (request.method === "POST" && path === "/api/gateway/stop") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+		const result = await runLegio(["gateway", "stop", "--json"], projectRoot);
+		if (result.ok) {
+			wsManager?.broadcastEvent({ type: "gateway_stop", data: result.data });
+			return jsonResponse(result.data);
+		}
+		return errorResponse(result.error);
+	}
+
+	if (request.method === "POST" && path === "/api/gateway/chat") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const text = typeof parsed.text === "string" ? parsed.text.trim() : null;
+		if (!text) return errorResponse("Missing or empty required field: text", 400);
+
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "gateway");
+		if (!tmuxSession) {
+			return errorResponse("Gateway is not running", 404);
+		}
+
+		try {
+			await sendKeys(tmuxSession, text);
+		} catch (err) {
+			return errorResponse(
+				`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		return jsonResponse({ ok: true, sent: text });
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
@@ -786,6 +835,14 @@ export async function handleApiRequest(
 
 	if (path === "/api/coordinator/status") {
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "coordinator");
+		return jsonResponse({
+			running: tmuxSession !== null,
+			tmuxSession: tmuxSession ?? undefined,
+		});
+	}
+
+	if (path === "/api/gateway/status") {
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "gateway");
 		return jsonResponse({
 			running: tmuxSession !== null,
 			tmuxSession: tmuxSession ?? undefined,
