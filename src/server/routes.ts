@@ -1101,11 +1101,13 @@ export async function handleApiRequest(
 
 	if (path === "/api/issues") {
 		const statusParam = url.searchParams.get("status") ?? undefined;
+		const allParam = url.searchParams.get("all");
+		const all = allParam !== "false"; // default true
 		const limitStr = url.searchParams.get("limit");
 		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
 		try {
 			const client = createBeadsClient(projectRoot);
-			const issues = await client.list({ status: statusParam, limit });
+			const issues = await client.list({ status: statusParam, limit, all });
 			return jsonResponse(issues);
 		} catch {
 			return jsonResponse([]);

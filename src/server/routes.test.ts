@@ -121,10 +121,27 @@ vi.mock("bun:sqlite", async () => {
 // list/ready return [] (keeps existing /api/issues tests passing).
 // show throws (existing /api/issues/:id test expects 404 on error).
 // create returns a predictable issue ID for strategy approve tests.
+// list returns a closed issue fixture when all=true to verify all-statuses behavior.
 vi.mock("../beads/client.ts", () => ({
 	createBeadsClient: () => ({
 		ready: async () => [],
-		list: async () => [],
+		list: async (options?: { status?: string; limit?: number; all?: boolean }) => {
+			// Return a closed issue fixture when all is true
+			if (options?.all) {
+				return [
+					{
+						id: "bead-closed-001",
+						title: "Closed issue",
+						status: "closed",
+						priority: 3,
+						type: "task",
+						closedAt: "2026-01-01T00:00:00.000Z",
+						closeReason: "Done",
+					},
+				];
+			}
+			return [];
+		},
 		show: async (id: string) => {
 			throw new Error(`bd not available: ${id}`);
 		},
@@ -1503,6 +1520,32 @@ describe("GET /api/issues", () => {
 		const res = await dispatch("/api/issues", { status: "open" });
 		expect(res.status).toBe(200);
 		expect(Array.isArray(await json(res))).toBe(true);
+	});
+
+	it("defaults to returning all statuses (all=true)", async () => {
+		const res = await dispatch("/api/issues");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ status: string }>;
+		// Mock returns a closed issue when all=true
+		expect(body.length).toBe(1);
+		expect(body[0]?.status).toBe("closed");
+	});
+
+	it("returns closedAt and closeReason fields on closed issues", async () => {
+		const res = await dispatch("/api/issues");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ closedAt?: string; closeReason?: string }>;
+		expect(body[0]?.closedAt).toBe("2026-01-01T00:00:00.000Z");
+		expect(body[0]?.closeReason).toBe("Done");
+	});
+
+	it("passes all=false to client when ?all=false query param is set", async () => {
+		const res = await dispatch("/api/issues", { all: "false" });
+		expect(res.status).toBe(200);
+		const body = await json(res);
+		expect(Array.isArray(body)).toBe(true);
+		// Mock returns [] when all is false
+		expect((body as unknown[]).length).toBe(0);
 	});
 });
 

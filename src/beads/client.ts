@@ -23,6 +23,8 @@ export interface BeadIssue {
 	description?: string;
 	blocks?: string[];
 	blockedBy?: string[];
+	closedAt?: string;
+	closeReason?: string;
 }
 
 export interface BeadsClient {
@@ -45,7 +47,7 @@ export interface BeadsClient {
 	close(id: string, reason?: string): Promise<void>;
 
 	/** List issues with optional filters. */
-	list(options?: { status?: string; limit?: number }): Promise<BeadIssue[]>;
+	list(options?: { status?: string; limit?: number; all?: boolean }): Promise<BeadIssue[]>;
 }
 
 /**
@@ -109,6 +111,8 @@ interface RawBeadIssue {
 	description?: string;
 	blocks?: string[];
 	blockedBy?: string[];
+	closed_at?: string;
+	close_reason?: string;
 }
 
 /**
@@ -126,6 +130,8 @@ function normalizeIssue(raw: RawBeadIssue): BeadIssue {
 		description: raw.description,
 		blocks: raw.blocks,
 		blockedBy: raw.blockedBy,
+		closedAt: raw.closed_at,
+		closeReason: raw.close_reason,
 	};
 }
 
@@ -204,6 +210,9 @@ export function createBeadsClient(cwd: string): BeadsClient {
 			}
 			if (options?.limit !== undefined) {
 				args.push("--limit", String(options.limit));
+			}
+			if (options?.all) {
+				args.push("--all");
 			}
 			const { stdout } = await runBd(args, "list");
 			const raw = parseJsonOutput<RawBeadIssue[]>(stdout, "list");
