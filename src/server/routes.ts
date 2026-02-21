@@ -266,9 +266,11 @@ export async function handleApiRequest(
 
 		const threadId = typeof obj.threadId === "string" ? obj.threadId : null;
 
-		const audienceRaw = typeof obj.audience === "string" ? obj.audience : "both";
+		const isHumanSender = obj.from === "orchestrator" || obj.from === "coordinator";
+		const audienceDefault = isHumanSender ? "both" : "agent";
+		const audienceRaw = typeof obj.audience === "string" ? obj.audience : audienceDefault;
 		const validAudiences: readonly string[] = ["human", "agent", "both"];
-		const audience = (validAudiences.includes(audienceRaw) ? audienceRaw : "both") as MailAudience;
+		const audience = (validAudiences.includes(audienceRaw) ? audienceRaw : audienceDefault) as MailAudience;
 
 		const dbPath = join(legioDir, "mail.db");
 		const store = createMailStore(dbPath);
