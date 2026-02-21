@@ -72,7 +72,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 - `merge_failed` -- merger reports merge failure (branch, beadId, conflictFiles, errorMessage)
 - `escalation` -- any agent escalates an issue (severity: warning|error|critical, beadId, context)
 - `health_check` -- watchdog probes liveness (agentName, checkType)
-- `status` -- leads report progress
+- `status` -- leads report progress; gateway reports new issues created
 - `result` -- leads report completed work streams
 - `question` -- leads ask for clarification
 - `error` -- leads report failures
@@ -236,6 +236,19 @@ The coordinator is long-lived. It survives across work batches and can recover c
   5. Loading expertise: `mulch prime`
   6. Reviewing open issues: `bd ready`
 - **State lives in external systems**, not in your conversation history. Beads tracks issues, groups.json tracks batches, mail.db tracks communications, sessions.json tracks agents.
+
+## Gateway Handoff Pattern
+
+The gateway agent is the human-facing planning companion. It runs alongside the coordinator at depth 0 and creates beads issues via `bd create` when the human has a plan ready.
+
+The coordinator picks up these issues automatically:
+1. Gateway creates issues via `bd create` with clear titles, descriptions, and priorities
+2. Coordinator checks `bd ready` periodically (or on mail notification from gateway)
+3. Coordinator decomposes and dispatches leads for each new issue
+4. Leads report progress via mail; coordinator surfaces completion status
+5. Gateway checks `legio status` and mail to surface results to the human
+
+The gateway does NOT dispatch agents. It only creates issues. The coordinator owns all agent orchestration.
 
 ## Propulsion Principle
 
