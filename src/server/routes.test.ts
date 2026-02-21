@@ -187,6 +187,7 @@ function seedMailDb(dbPath: string): void {
 		type: "status",
 		priority: "normal",
 		threadId: "thread-1",
+		audience: "both",
 	});
 	store.insert({
 		id: "msg-bbb222",
@@ -197,6 +198,7 @@ function seedMailDb(dbPath: string): void {
 		type: "result",
 		priority: "high",
 		threadId: "thread-1",
+		audience: "human",
 	});
 	store.insert({
 		id: "msg-ccc333",
@@ -207,6 +209,7 @@ function seedMailDb(dbPath: string): void {
 		type: "status",
 		priority: "normal",
 		threadId: null,
+		audience: "agent",
 	});
 	// mark first two as read
 	store.markRead("msg-aaa111");
@@ -614,6 +617,32 @@ describe("GET /api/mail", () => {
 		expect(body.every((m) => m.from === "agent1")).toBe(true);
 		expect(body.length).toBe(2);
 	});
+
+	it("filters by ?audience=human returns only human-audience messages", async () => {
+		seedMailDb(join(legioDir, "mail.db"));
+		const res = await dispatch("/api/mail", { audience: "human" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ audience: string }>;
+		expect(body.length).toBe(1);
+		expect(body.every((m) => m.audience === "human")).toBe(true);
+	});
+
+	it("filters by ?audience=agent returns only agent-audience messages", async () => {
+		seedMailDb(join(legioDir, "mail.db"));
+		const res = await dispatch("/api/mail", { audience: "agent" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ audience: string }>;
+		expect(body.length).toBe(1);
+		expect(body.every((m) => m.audience === "agent")).toBe(true);
+	});
+
+	it("returns all messages when no audience param (backward compat)", async () => {
+		seedMailDb(join(legioDir, "mail.db"));
+		const res = await dispatch("/api/mail");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(3);
+	});
 });
 
 describe("GET /api/mail/unread", () => {
@@ -864,6 +893,44 @@ describe("POST /api/mail/send", () => {
 		);
 		expect(res.status).toBe(405);
 	});
+
+	it("accepts audience field and persists it", async () => {
+		const res = await dispatchPost("/api/mail/send", {
+			from: "agent1",
+			to: "agent2",
+			subject: "Human message",
+			body: "For humans only",
+			audience: "human",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { audience: string };
+		expect(body.audience).toBe("human");
+	});
+
+	it("defaults audience to 'both' when not provided", async () => {
+		const res = await dispatchPost("/api/mail/send", {
+			from: "agent1",
+			to: "agent2",
+			subject: "Default audience",
+			body: "No audience specified",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { audience: string };
+		expect(body.audience).toBe("both");
+	});
+
+	it("falls back to 'both' audience for invalid audience value", async () => {
+		const res = await dispatchPost("/api/mail/send", {
+			from: "agent1",
+			to: "agent2",
+			subject: "Bad audience",
+			body: "Invalid audience value",
+			audience: "invalid_audience_xyz",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { audience: string };
+		expect(body.audience).toBe("both");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -945,6 +1012,22 @@ describe("GET /api/mail/conversations", () => {
 		const res = await dispatch("/api/mail/conversations", { agent: "nobody" });
 		const body = (await json(res)) as unknown[];
 		expect(body.length).toBe(0);
+	});
+
+	it("filters conversations by ?audience=human to only include human-audience messages", async () => {
+		seedMailDb(join(legioDir, "mail.db"));
+		const res = await dispatch("/api/mail/conversations", { audience: "human" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{
+			participants: [string, string];
+			messageCount: number;
+		}>;
+		// Only msg-bbb222 has audience="human" (agent2→agent1)
+		// So only the agent1<->agent2 conversation appears, with 1 message
+		expect(body.length).toBe(1);
+		expect(body[0]?.messageCount).toBe(1);
+		expect(body[0]?.participants).toContain("agent1");
+		expect(body[0]?.participants).toContain("agent2");
 	});
 
 	it("sorts conversations by most recent message first", async () => {
