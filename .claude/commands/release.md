@@ -7,7 +7,7 @@ Prepare a release by updating docs and bumping the version.
 - Run `git log --oneline` to find the last version tag/release commit
 - Run `git diff --stat <last-release>..HEAD` to see all changed files
 - Read the commit messages to understand what was added, fixed, and changed
-- Run `bun test` to get the current test count, file count, and expect() count
+- Run `npm test` to get the current test count, file count, and expect() count
 
 ### 2. Determine version bump
 

@@ -14,5 +14,5 @@
 
 - [ ] `biome check .` passes
 - [ ] `tsc --noEmit` passes
-- [ ] `bun test` passes
+- [ ] `npm test` passes
 - [ ] Manual verification (if applicable)

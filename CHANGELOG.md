@@ -327,7 +327,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - mulch CLI wrapper for structured expertise management
 - Multi-format logging with secret redaction
 - SQLite metrics storage for session analytics
-- Full test suite using `bun test`
+- Full test suite using `npm test`
 - Biome configuration for formatting and linting
 - TypeScript strict mode with `noUncheckedIndexedAccess`
 

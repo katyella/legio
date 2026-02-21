@@ -12,11 +12,11 @@ Thanks for your interest in contributing to Legio! This guide covers everything 
    ```
 3. **Install** dependencies:
    ```bash
-   bun install
+   npm install
    ```
 4. **Link** the CLI for local development:
    ```bash
-   bun link
+   npm link
    ```
 5. **Create a branch** for your work:
    ```bash
@@ -36,19 +36,19 @@ Use descriptive branch names with a category prefix:
 ## Build & Test Commands
 
 ```bash
-bun test                           # Run all tests
-bun test src/config.test.ts        # Run a single test file
-biome check .                      # Lint + format check
-biome check --write .              # Auto-fix lint + format issues
-tsc --noEmit                       # Type check
-bun test && biome check . && tsc --noEmit  # All quality gates
+npm test                                    # Run all tests
+npx vitest run src/config.test.ts          # Run a single test file
+biome check .                               # Lint + format check
+biome check --write .                       # Auto-fix lint + format issues
+tsc --noEmit                                # Type check
+npm test && biome check . && tsc --noEmit  # All quality gates
 ```
 
 Always run all three quality gates before submitting a PR.
 
 ## TypeScript Conventions
 
-Legio is a strict TypeScript project that runs directly on Bun (no build step).
+Legio is a strict TypeScript project that runs on Node.js via `tsx` (no build step).
 
 ### Strict Mode
 
@@ -59,14 +59,13 @@ Legio is a strict TypeScript project that runs directly on Bun (no build step).
 
 ### Zero Runtime Dependencies
 
-This is a hard rule. Use only Bun built-in APIs:
+This is a hard rule. Use only Node.js built-in APIs:
 
-- `bun:sqlite` for databases
-- `Bun.spawn` for subprocesses
-- `Bun.file` for file I/O
-- `Bun.write` for writes
+- `better-sqlite3` for databases (only allowed runtime dependency)
+- `node:child_process` `spawn` for subprocesses
+- `node:fs/promises` for file I/O
 
-External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `Bun.spawn`, never as npm imports.
+External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports.
 
 ### File Organization
 
@@ -98,7 +97,7 @@ Example test structure:
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, it, expect } from "bun:test";
+import { afterEach, beforeEach, describe, it, expect } from "vitest";
 
 describe("my-feature", () => {
   let testDir: string;

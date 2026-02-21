@@ -7,7 +7,7 @@
  * for errors.
  *
  * NOTE: This file overrides the `serverUrl` fixture locally to add a SIGKILL
- * fallback after 5s. The bun server does not exit cleanly on SIGTERM, causing
+ * fallback after 5s. The server does not exit cleanly on SIGTERM, causing
  * fixture teardown to hang indefinitely. This override is limited to this
  * file and does not modify fixtures.ts.
  */
@@ -41,12 +41,12 @@ async function waitForServer(url: string, timeout = 15_000): Promise<void> {
 
 /**
  * Override serverUrl to use SIGKILL fallback after 5s.
- * The bun server ignores SIGTERM, causing the base fixture teardown to hang.
+ * The server ignores SIGTERM, causing the base fixture teardown to hang.
  */
 const test = baseTest.extend<{ serverUrl: string }>({
 	serverUrl: async ({ projectDir }, use) => {
 		const serverEntry = join(REPO_ROOT, "src", "index.ts");
-		const proc = spawn("bun", [serverEntry, "server", "start", "--port", String(E2E_PORT)], {
+		const proc = spawn("tsx", [serverEntry, "server", "start", "--port", String(E2E_PORT)], {
 			cwd: projectDir,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: { ...process.env },
