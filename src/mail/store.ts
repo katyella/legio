@@ -8,12 +8,15 @@
 
 import Database from "better-sqlite3";
 import { MailError } from "../errors.ts";
-import type { MailMessage } from "../types.ts";
+import type { MailAudience, MailMessage } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 
 export interface MailStore {
 	insert(
-		message: Omit<MailMessage, "read" | "createdAt" | "payload"> & { payload?: string | null },
+		message: Omit<MailMessage, "read" | "createdAt" | "payload" | "audience"> & {
+			payload?: string | null;
+			audience?: MailAudience;
+		},
 	): MailMessage;
 	getUnread(agentName: string): MailMessage[];
 	getAll(filters?: { from?: string; to?: string; unread?: boolean }): MailMessage[];
@@ -34,6 +37,7 @@ interface MessageRow {
 	body: string;
 	type: string;
 	priority: string;
+	audience: string;
 	thread_id: string | null;
 	payload: string | null;
 	read: number;
@@ -51,6 +55,7 @@ CREATE TABLE IF NOT EXISTS messages (
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'status' ${TYPE_CHECK},
+  audience TEXT NOT NULL DEFAULT 'agent' CHECK(audience IN ('human','agent','both')),
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
@@ -61,10 +66,11 @@ CREATE TABLE IF NOT EXISTS messages (
 /**
  * Migrate an existing messages table to the current schema.
  *
- * Handles two migration paths:
+ * Handles migration paths:
  * 1. Tables without CHECK constraints → recreate with constraints
  * 2. Tables without payload column → add payload column
  * 3. Tables with old CHECK constraints (missing protocol types) → recreate with new types
+ * 4. Tables without audience column → add audience column (ALTER TABLE)
  *
  * SQLite does not support ALTER TABLE ADD CONSTRAINT, so constraint changes
  * require recreating the table.
@@ -81,15 +87,25 @@ function migrateSchema(db: InstanceType<typeof Database>): void {
 	const hasCheckConstraints = row.sql.includes("CHECK");
 	const hasPayloadColumn = row.sql.includes("payload");
 	const hasProtocolTypes = row.sql.includes("worker_done");
+	const hasAudienceColumn = row.sql.includes("audience");
 
 	// If schema is fully up to date, nothing to do
-	if (hasCheckConstraints && hasPayloadColumn && hasProtocolTypes) {
+	if (hasCheckConstraints && hasPayloadColumn && hasProtocolTypes && hasAudienceColumn) {
+		return;
+	}
+
+	// If has CHECK + payload + protocol types but missing audience → add audience column only
+	if (hasCheckConstraints && hasPayloadColumn && hasProtocolTypes && !hasAudienceColumn) {
+		db.exec("ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'agent'");
 		return;
 	}
 
 	// If only missing the payload column (has correct CHECK constraints), use ALTER TABLE
 	if (hasCheckConstraints && hasProtocolTypes && !hasPayloadColumn) {
 		db.exec("ALTER TABLE messages ADD COLUMN payload TEXT");
+		if (!hasAudienceColumn) {
+			db.exec("ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'agent'");
+		}
 		return;
 	}
 
@@ -106,6 +122,7 @@ CREATE TABLE messages (
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'status' CHECK(type IN (${validTypes})),
+  audience TEXT NOT NULL DEFAULT 'agent' CHECK(audience IN ('human','agent','both')),
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
@@ -116,9 +133,10 @@ CREATE TABLE messages (
 		const oldHasPayload = row.sql.includes("payload");
 		const payloadSelect = oldHasPayload ? "payload" : "NULL";
 		db.exec(`
-INSERT INTO messages (id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, read, created_at)
+INSERT INTO messages (id, from_agent, to_agent, subject, body, type, audience, priority, thread_id, payload, read, created_at)
 SELECT id, from_agent, to_agent, subject, body,
   CASE WHEN type IN (${validTypes}) THEN type ELSE 'status' END,
+  'agent',
   CASE WHEN priority IN ('low','normal','high','urgent') THEN priority ELSE 'normal' END,
   thread_id, ${payloadSelect}, read, created_at
 FROM messages_old`);
@@ -158,6 +176,7 @@ function rowToMessage(row: MessageRow): MailMessage {
 		subject: row.subject,
 		body: row.body,
 		type: row.type as MailMessage["type"],
+		audience: row.audience as MailAudience,
 		priority: row.priority as MailMessage["priority"],
 		threadId: row.thread_id,
 		payload: row.payload,
@@ -193,9 +212,9 @@ export function createMailStore(dbPath: string): MailStore {
 	// Prepare statements for all queries
 	const insertStmt = db.prepare(`
 		INSERT INTO messages
-			(id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, read, created_at)
+			(id, from_agent, to_agent, subject, body, type, audience, priority, thread_id, payload, read, created_at)
 		VALUES
-			($id, $from_agent, $to_agent, $subject, $body, $type, $priority, $thread_id, $payload, $read, $created_at)
+			($id, $from_agent, $to_agent, $subject, $body, $type, $audience, $priority, $thread_id, $payload, $read, $created_at)
 	`);
 
 	const getByIdStmt = db.prepare(`
@@ -244,13 +263,15 @@ export function createMailStore(dbPath: string): MailStore {
 
 	return {
 		insert(
-			message: Omit<MailMessage, "read" | "createdAt" | "payload"> & {
+			message: Omit<MailMessage, "read" | "createdAt" | "payload" | "audience"> & {
 				payload?: string | null;
+				audience?: MailAudience;
 			},
 		): MailMessage {
 			const id = message.id || `msg-${randomId()}`;
 			const createdAt = new Date().toISOString();
 			const payload = message.payload ?? null;
+			const audience = message.audience ?? "agent";
 
 			try {
 				insertStmt.run({
@@ -260,6 +281,7 @@ export function createMailStore(dbPath: string): MailStore {
 					subject: message.subject,
 					body: message.body,
 					type: message.type,
+					audience,
 					priority: message.priority,
 					thread_id: message.threadId,
 					payload,
@@ -277,6 +299,7 @@ export function createMailStore(dbPath: string): MailStore {
 				...message,
 				id,
 				payload,
+				audience,
 				read: false,
 				createdAt,
 			};

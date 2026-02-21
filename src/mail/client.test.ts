@@ -24,6 +24,48 @@ describe("createMailClient", () => {
 	});
 
 	describe("send", () => {
+		describe("audience defaults", () => {
+			test("defaults audience to both for semantic types", () => {
+				const id = client.send({
+					from: "agent-a",
+					to: "orchestrator",
+					subject: "Update",
+					body: "Done",
+					type: "status",
+				});
+
+				const msg = store.getById(id);
+				expect(msg?.audience).toBe("both");
+			});
+
+			test("defaults audience to agent for protocol types", () => {
+				const id = client.send({
+					from: "builder-1",
+					to: "lead-1",
+					subject: "Task done",
+					body: "All complete",
+					type: "worker_done",
+				});
+
+				const msg = store.getById(id);
+				expect(msg?.audience).toBe("agent");
+			});
+
+			test("uses explicit audience when provided", () => {
+				const id = client.send({
+					from: "agent-a",
+					to: "orchestrator",
+					subject: "UI message",
+					body: "For dashboard only",
+					type: "status",
+					audience: "human",
+				});
+
+				const msg = store.getById(id);
+				expect(msg?.audience).toBe("human");
+			});
+		});
+
 		test("returns a message ID", () => {
 			const id = client.send({
 				from: "agent-a",
@@ -593,9 +635,67 @@ describe("createMailClient", () => {
 			// Third-party reply goes to original sender
 			expect(replyMsg?.to).toBe("agent-a");
 		});
+
+		test("preserves audience from original message in reply", () => {
+			const originalId = client.send({
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "UI-only message",
+				body: "Dashboard content",
+				type: "status",
+				audience: "human",
+			});
+
+			const replyId = client.reply(originalId, "Acknowledged", "orchestrator");
+
+			const replyMsg = store.getById(replyId);
+			expect(replyMsg).not.toBeNull();
+			expect(replyMsg?.audience).toBe("human");
+		});
 	});
 
 	describe("sendProtocol", () => {
+		describe("audience defaults", () => {
+			test("defaults audience to agent for protocol messages", () => {
+				const id = client.sendProtocol({
+					from: "builder-1",
+					to: "lead-1",
+					subject: "Task complete",
+					body: "Done",
+					type: "worker_done",
+					payload: {
+						beadId: "beads-abc",
+						branch: "agent/builder-1",
+						exitCode: 0,
+						filesModified: [],
+					},
+				});
+
+				const msg = store.getById(id);
+				expect(msg?.audience).toBe("agent");
+			});
+
+			test("uses explicit audience when provided", () => {
+				const id = client.sendProtocol({
+					from: "builder-1",
+					to: "lead-1",
+					subject: "Task complete",
+					body: "Done",
+					type: "worker_done",
+					audience: "both",
+					payload: {
+						beadId: "beads-abc",
+						branch: "agent/builder-1",
+						exitCode: 0,
+						filesModified: [],
+					},
+				});
+
+				const msg = store.getById(id);
+				expect(msg?.audience).toBe("both");
+			});
+		});
+
 		test("sends a worker_done message with serialized payload", () => {
 			const payload: WorkerDonePayload = {
 				beadId: "beads-abc",

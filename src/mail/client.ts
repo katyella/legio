@@ -7,7 +7,7 @@
  */
 
 import { MailError } from "../errors.ts";
-import type { MailMessage, MailPayloadMap, MailProtocolType } from "../types.ts";
+import type { MailAudience, MailMessage, MailPayloadMap, MailProtocolType } from "../types.ts";
 import type { MailStore } from "./store.ts";
 
 export interface MailClient {
@@ -19,6 +19,7 @@ export interface MailClient {
 		body: string;
 		type?: MailMessage["type"];
 		priority?: MailMessage["priority"];
+		audience?: MailAudience;
 		threadId?: string;
 		payload?: string;
 	}): string;
@@ -31,6 +32,7 @@ export interface MailClient {
 		body: string;
 		type: T;
 		priority?: MailMessage["priority"];
+		audience?: MailAudience;
 		threadId?: string;
 		payload: MailPayloadMap[T];
 	}): string;
@@ -124,14 +126,17 @@ function formatForInjection(messages: MailMessage[]): string {
 export function createMailClient(store: MailStore): MailClient {
 	return {
 		send(msg): string {
+			const type = msg.type ?? "status";
+			const audience = msg.audience ?? (PROTOCOL_TYPES.has(type) ? "agent" : "both");
 			const message = store.insert({
 				id: "",
 				from: msg.from,
 				to: msg.to,
 				subject: msg.subject,
 				body: msg.body,
-				type: msg.type ?? "status",
+				type,
 				priority: msg.priority ?? "normal",
+				audience,
 				threadId: msg.threadId ?? null,
 				payload: msg.payload ?? null,
 			});
@@ -139,6 +144,7 @@ export function createMailClient(store: MailStore): MailClient {
 		},
 
 		sendProtocol(msg): string {
+			const audience = msg.audience ?? "agent";
 			const message = store.insert({
 				id: "",
 				from: msg.from,
@@ -147,6 +153,7 @@ export function createMailClient(store: MailStore): MailClient {
 				body: msg.body,
 				type: msg.type,
 				priority: msg.priority ?? "normal",
+				audience,
 				threadId: msg.threadId ?? null,
 				payload: JSON.stringify(msg.payload),
 			});
@@ -210,6 +217,7 @@ export function createMailClient(store: MailStore): MailClient {
 				body,
 				type: original.type,
 				priority: original.priority,
+				audience: original.audience,
 				threadId,
 				payload: null,
 			});
