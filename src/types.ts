@@ -37,11 +37,6 @@ export interface LegioConfig {
 		zombieThresholdMs: number; // When to kill
 		nudgeIntervalMs: number; // Time between progressive nudge stages (default 60_000)
 	};
-	autopilot: {
-		intervalMs: number; // Default: 10_000 (10s)
-		autoMerge: boolean; // Default: true
-		autoCleanWorktrees: boolean; // Default: false
-	};
 	models: Partial<Record<string, "sonnet" | "opus" | "haiku">>;
 	logging: {
 		verbose: boolean;
@@ -686,37 +681,6 @@ export interface InsightAnalysis {
 	insights: SessionInsight[];
 	toolProfile: ToolProfile;
 	fileProfile: FileProfile;
-}
-
-// === Autopilot ===
-
-/** Actions taken by the autopilot daemon on each tick. */
-export type AutopilotActionType = "merge" | "mail_processed" | "worktree_cleaned" | "error";
-
-/** A single action recorded by the autopilot. */
-export interface AutopilotAction {
-	timestamp: string;
-	type: AutopilotActionType;
-	details: string;
-}
-
-/** Runtime configuration for the autopilot daemon. */
-export interface AutopilotConfig {
-	intervalMs: number; // Default: 10_000 (10s)
-	autoMerge: boolean; // Default: true
-	autoCleanWorktrees: boolean; // Default: false
-	maxActionsLog: number; // Max actions to keep in memory (default: 100)
-}
-
-/** Current state of the autopilot daemon. */
-export interface AutopilotState {
-	running: boolean;
-	startedAt: string | null;
-	stoppedAt: string | null;
-	lastTick: string | null;
-	tickCount: number;
-	actions: AutopilotAction[]; // Most recent actions (capped at maxActionsLog)
-	config: AutopilotConfig;
 }
 
 // ---------------------------------------------------------------------------

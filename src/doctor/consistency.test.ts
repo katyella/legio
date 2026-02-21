@@ -105,7 +105,6 @@ describe("checkConsistency", () => {
 				verbose: false,
 				redactSecrets: true,
 			},
-			autopilot: { intervalMs: 10_000, autoMerge: true, autoCleanWorktrees: false },
 		};
 
 		// Reset mocks and create deps object

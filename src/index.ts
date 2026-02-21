@@ -8,7 +8,6 @@
  */
 
 import { agentsCommand } from "./commands/agents.ts";
-import { autopilotCommand } from "./commands/autopilot.ts";
 import { cleanCommand } from "./commands/clean.ts";
 import { completionsCommand } from "./commands/completions.ts";
 import { coordinatorCommand } from "./commands/coordinator.ts";
@@ -83,8 +82,6 @@ Commands:
   server <sub>            Local web UI (start)
   up                      Start everything (init + server + coordinator)
   down                    Stop everything (coordinator + server)
-  autopilot <sub>         Coordinator autopilot (start/stop/status)
-
 Options:
   --help, -h              Show this help
   --version, -v           Show version
@@ -126,7 +123,6 @@ const COMMANDS = [
 	"server",
 	"up",
 	"down",
-	"autopilot",
 ];
 
 function editDistance(a: string, b: string): number {
@@ -296,9 +292,6 @@ async function main(): Promise<void> {
 			break;
 		case "down":
 			await downCommand(commandArgs);
-			break;
-		case "autopilot":
-			await autopilotCommand(commandArgs);
 			break;
 		default: {
 			process.stderr.write(`Unknown command: ${command}\n`);

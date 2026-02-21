@@ -534,7 +534,6 @@ describe("resolveModel", () => {
 			},
 			models,
 			logging: { verbose: false, redactSecrets: true },
-			autopilot: { intervalMs: 10_000, autoMerge: true, autoCleanWorktrees: false },
 		};
 	}
 
