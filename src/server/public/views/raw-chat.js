@@ -12,6 +12,7 @@ import {
 	useRef,
 	useState,
 } from "../lib/preact-setup.js";
+import { appState } from "../lib/state.js";
 import { timeAgo } from "../lib/utils.js";
 
 /**
@@ -34,9 +35,9 @@ export function RawChatView() {
 	const [defaultModel, setDefaultModel] = useState("claude-sonnet-4-6");
 
 	// ── Sessions ─────────────────────────────────────────────────────────────
-	const [sessions, setSessions] = useState([]);
-	const [activeSessionId, setActiveSessionId] = useState(null);
-	const [sessionsLoading, setSessionsLoading] = useState(true);
+	const sessions = appState.chatSessions.value;
+	const activeSessionId = appState.chatActiveSessionId.value;
+	const [sessionsLoading, setSessionsLoading] = useState(appState.chatSessions.value.length === 0);
 
 	// ── Messages ─────────────────────────────────────────────────────────────
 	const [messages, setMessages] = useState([]);
@@ -54,6 +55,10 @@ export function RawChatView() {
 
 	// ── Mount: load config + sessions ────────────────────────────────────────
 	useEffect(() => {
+		if (appState.chatSessions.value.length > 0) {
+			setSessionsLoading(false);
+			return;
+		}
 		Promise.all([
 			fetchJson("/api/chat/config").catch(() => null),
 			fetchJson("/api/chat/sessions").catch(() => []),
@@ -62,7 +67,7 @@ export function RawChatView() {
 				setConfigAvailable(cfg.available ?? true);
 				if (cfg.defaultModel) setDefaultModel(cfg.defaultModel);
 			}
-			setSessions(Array.isArray(sess) ? sess : []);
+			appState.chatSessions.value = Array.isArray(sess) ? sess : [];
 			setSessionsLoading(false);
 		});
 	}, []);
@@ -106,8 +111,8 @@ export function RawChatView() {
 		setError("");
 		try {
 			const session = await postJson("/api/chat/sessions", {});
-			setSessions((prev) => [session, ...prev]);
-			setActiveSessionId(session.id);
+			appState.chatSessions.value = [session, ...appState.chatSessions.value];
+			appState.chatActiveSessionId.value = session.id;
 			setMessages([]);
 			isNearBottomRef.current = true;
 			setTimeout(() => inputRef.current?.focus(), 50);
@@ -119,11 +124,11 @@ export function RawChatView() {
 	// ── Select session ────────────────────────────────────────────────────────
 	const handleSelectSession = useCallback(
 		(id) => {
-			if (id === activeSessionId) return;
-			setActiveSessionId(id);
+			if (id === appState.chatActiveSessionId.value) return;
+			appState.chatActiveSessionId.value = id;
 			setError("");
 		},
-		[activeSessionId],
+		[],
 	);
 
 	// ── Delete session ────────────────────────────────────────────────────────
@@ -132,16 +137,16 @@ export function RawChatView() {
 			e.stopPropagation();
 			try {
 				await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
-				setSessions((prev) => prev.filter((s) => s.id !== id));
-				if (activeSessionId === id) {
-					setActiveSessionId(null);
+				appState.chatSessions.value = appState.chatSessions.value.filter((s) => s.id !== id);
+				if (appState.chatActiveSessionId.value === id) {
+					appState.chatActiveSessionId.value = null;
 					setMessages([]);
 				}
 			} catch (err) {
 				setError(err.message || "Failed to delete session");
 			}
 		},
-		[activeSessionId],
+		[],
 	);
 
 	// ── Send message ──────────────────────────────────────────────────────────
@@ -182,10 +187,8 @@ export function RawChatView() {
 				return [...withoutTemp, userMsg, assistantMsg];
 			});
 			// Update session updatedAt in sidebar
-			setSessions((prev) =>
-				prev.map((s) =>
-					s.id === activeSessionId ? { ...s, updatedAt: assistantMsg.createdAt } : s,
-				),
+			appState.chatSessions.value = appState.chatSessions.value.map((s) =>
+				s.id === activeSessionId ? { ...s, updatedAt: assistantMsg.createdAt } : s,
 			);
 		} catch (err) {
 			setError(err.message || "Failed to send message");
