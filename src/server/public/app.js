@@ -112,7 +112,7 @@ function Layout({ view, param }) {
 				</div>
 			</nav>
 			<main class="flex-1 overflow-auto min-h-0">
-				<${Router} view=${view} param=${param} />
+				<${Router} key=${view} view=${view} param=${param} />
 			</main>
 			<${SpawnDialog} />
 		</div>
