@@ -324,6 +324,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						body: bodyVal.trim(),
 						type: "status",
 						priority: "normal",
+						audience: "human",
 					}),
 				});
 				if (!res.ok) {

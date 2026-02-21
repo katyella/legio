@@ -907,7 +907,7 @@ describe("POST /api/mail/send", () => {
 		expect(body.audience).toBe("human");
 	});
 
-	it("defaults audience to 'both' when not provided", async () => {
+	it("defaults audience to 'agent' for non-orchestrator sender", async () => {
 		const res = await dispatchPost("/api/mail/send", {
 			from: "agent1",
 			to: "agent2",
@@ -916,10 +916,34 @@ describe("POST /api/mail/send", () => {
 		});
 		expect(res.status).toBe(201);
 		const body = (await json(res)) as { audience: string };
+		expect(body.audience).toBe("agent");
+	});
+
+	it("defaults audience to 'both' for orchestrator sender", async () => {
+		const res = await dispatchPost("/api/mail/send", {
+			from: "orchestrator",
+			to: "agent2",
+			subject: "Orchestrator message",
+			body: "From orchestrator",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { audience: string };
 		expect(body.audience).toBe("both");
 	});
 
-	it("falls back to 'both' audience for invalid audience value", async () => {
+	it("defaults audience to 'both' for coordinator sender", async () => {
+		const res = await dispatchPost("/api/mail/send", {
+			from: "coordinator",
+			to: "agent2",
+			subject: "Coordinator message",
+			body: "From coordinator",
+		});
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as { audience: string };
+		expect(body.audience).toBe("both");
+	});
+
+	it("falls back to sender-appropriate default for invalid audience value", async () => {
 		const res = await dispatchPost("/api/mail/send", {
 			from: "agent1",
 			to: "agent2",
@@ -929,7 +953,7 @@ describe("POST /api/mail/send", () => {
 		});
 		expect(res.status).toBe(201);
 		const body = (await json(res)) as { audience: string };
-		expect(body.audience).toBe("both");
+		expect(body.audience).toBe("agent");
 	});
 });
 
