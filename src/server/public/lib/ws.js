@@ -54,6 +54,11 @@ export function connectWS() {
 				appState.mail.value = [newMsg, ...current];
 			}
 			setLastUpdated();
+		} else if (msg.type === "coordinator_output") {
+			const text = msg.data?.text ?? "";
+			if (text) {
+				window.dispatchEvent(new CustomEvent("coordinator-output", { detail: { text } }));
+			}
 		}
 	});
 

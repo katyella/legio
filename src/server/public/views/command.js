@@ -313,12 +313,13 @@ function buildProgressNarration(agents) {
 
 // ===== CoordinatorChat =====
 
-function CoordinatorChat({ mail }) {
+function CoordinatorChat({ mail, headless }) {
 	const [input, setInput] = useState("");
 	const [sending, setSending] = useState(false);
 	const [sendError, setSendError] = useState("");
 	const [pendingMessages, setPendingMessages] = useState([]);
 	const [thinking, setThinking] = useState(false);
+	const [streamText, setStreamText] = useState("");
 	const [dropdown, setDropdown] = useState({
 		visible: false,
 		items: [],
@@ -330,6 +331,7 @@ function CoordinatorChat({ mail }) {
 	const prevFromCoordCountRef = useRef(0);
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
+	const baselineCaptureRef = useRef(null);
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
@@ -370,13 +372,19 @@ function CoordinatorChat({ mail }) {
 		prevFromCoordCountRef.current = fromCoordCount;
 	}, [fromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Poll terminal capture while coordinator is thinking
+	// Poll terminal capture while coordinator is thinking (tmux mode only).
+	// In headless mode, streaming is handled by the always-on effect below.
 	useEffect(() => {
 		if (!thinking) {
-			setStreamText("");
-			baselineCaptureRef.current = null;
+			if (!headless) {
+				setStreamText("");
+				baselineCaptureRef.current = null;
+			}
 			return;
 		}
+
+		// HEADLESS MODE: streaming handled by always-on effect; skip tmux polling
+		if (headless) return;
 
 		let cancelled = false;
 
@@ -407,7 +415,21 @@ function CoordinatorChat({ mail }) {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, [thinking]);
+	}, [thinking, headless]);
+
+	// Always-on coordinator output stream for headless mode
+	useEffect(() => {
+		if (!headless) return;
+		const handler = (e) => {
+			setStreamText((prev) => {
+				const combined = prev + e.detail.text;
+				const lines = combined.split("\n");
+				return lines.length > 100 ? lines.slice(-100).join("\n") : combined;
+			});
+		};
+		window.addEventListener("coordinator-output", handler);
+		return () => window.removeEventListener("coordinator-output", handler);
+	}, [headless]);
 
 	// Transform agent activity log entries into feed-compatible objects
 	const activityEntries = agentActivityLog.value.map((event, i) => ({
@@ -702,7 +724,7 @@ function CoordinatorChat({ mail }) {
 							})
 				}
 				${
-					thinking
+					thinking || (headless && streamText)
 						? html`
 							<div class="flex justify-start">
 								<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
@@ -807,7 +829,7 @@ function CoordinatorChat({ mail }) {
 
 // ===== CoordinatorBar =====
 
-function CoordinatorBar() {
+function CoordinatorBar({ headless }) {
 	const [coordStatus, setCoordStatus] = useState(null); // null = unknown, true = running, false = stopped
 	const [loading, setLoading] = useState(false); // start/stop in-flight
 	const [error, setError] = useState(null);
@@ -844,7 +866,7 @@ function CoordinatorBar() {
 		setLoading(true);
 		setError(null);
 		try {
-			await postJson("/api/coordinator/start", {});
+			await postJson("/api/coordinator/start", { headless: true });
 			await poll(false);
 		} catch (err) {
 			setError(err?.message ?? "Failed to start coordinator");
@@ -884,6 +906,7 @@ function CoordinatorBar() {
 				<div class="flex items-center gap-1">
 					<div class="w-2 h-2 rounded-full ${dotColor}"></div>
 					<span class="text-sm text-[#e5e5e5]">${statusText}</span>
+					${headless ? html`<span class="text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 font-mono">Headless</span>` : null}
 				</div>
 			</div>
 			<div class="flex items-center gap-2">
@@ -920,6 +943,7 @@ const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
 export function CommandView() {
 	const [activityEvents, setActivityEvents] = useState([]);
 	const [mail, setMail] = useState([]);
+	const [headless, setHeadless] = useState(false);
 
 	// Poll event store every 5 seconds
 	useEffect(() => {
@@ -977,18 +1001,37 @@ export function CommandView() {
 		};
 	}, []);
 
+	// Poll coordinator status to detect headless mode
+	useEffect(() => {
+		let cancelled = false;
+		async function pollHeadless() {
+			try {
+				const data = await fetchJson("/api/coordinator/status");
+				if (!cancelled) setHeadless(data?.headless === true);
+			} catch (_err) {
+				// non-fatal
+			}
+		}
+		pollHeadless();
+		const interval = setInterval(pollHeadless, 5000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, []);
+
 	const agents = appState.agents.value;
 
 	return html`
 		<div class="flex flex-col h-full bg-[#0f0f0f] min-h-0">
-			<${CoordinatorBar} />
+			<${CoordinatorBar} headless=${headless} />
 			<div class="flex flex-1 min-h-0">
 				<!-- Coordinator Chat (left, ~55%) -->
 				<div
 					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
 					style="flex: 55 1 0%"
 				>
-					<${CoordinatorChat} mail=${mail} />
+					<${CoordinatorChat} mail=${mail} headless=${headless} />
 				</div>
 
 				<!-- Agent Roster (right, ~45%) -->
