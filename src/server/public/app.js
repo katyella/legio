@@ -62,6 +62,7 @@ function Router({ view, param }) {
 		case 'tasks':     return html`<${IssuesView} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
+		case 'chat':      return html`<${RawChatView} />`;
 		default:          return html`<${DashboardView} />`;
 	}
 }
