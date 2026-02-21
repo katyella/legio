@@ -61,7 +61,7 @@ function Router({ view, param }) {
 		case 'command':   return html`<${CommandView} />`;
 		case 'dashboard': return html`<${DashboardView} agents=${appState.agents.value} mail=${appState.mail.value} mergeQueue=${appState.mergeQueue.value} status=${appState.status.value} />`;
 		case 'costs':     return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
-		case 'issues':    return html`<${IssuesView} issues=${appState.issues.value} />`;
+		case 'issues':    return html`<${IssuesView} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'autopilot': return html`<${AutopilotView} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
