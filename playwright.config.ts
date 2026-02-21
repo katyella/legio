@@ -6,7 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
  * Tests live in e2e/ and use the fixtures defined in e2e/fixtures.ts.
  * The fixtures start a real legio server against a temp project dir.
  *
- * Run with: bun run test:e2e
+ * Run with: npm run test:e2e
  * Type-check with: tsc --project tsconfig.e2e.json --noEmit
  */
 export default defineConfig({

@@ -1,8 +1,8 @@
 /**
  * Playwright e2e test fixtures for the legio web UI.
  *
- * Uses node:child_process (not Bun.spawn) because Playwright workers run in Node.js,
- * not Bun. The server process itself is spawned via `bun src/index.ts server start`.
+ * Uses node:child_process because Playwright workers run in Node.js.
+ * The server process itself is spawned via `tsx src/index.ts server start`.
  */
 
 import { test as base } from "@playwright/test";
@@ -68,7 +68,7 @@ export const test = base.extend<OvFixtures>({
 		const port = E2E_PORT;
 		const serverEntry = join(REPO_ROOT, "src", "index.ts");
 
-		const proc = spawn("bun", [serverEntry, "server", "start", "--port", String(port)], {
+		const proc = spawn("tsx", [serverEntry, "server", "start", "--port", String(port)], {
 			cwd: projectDir,
 			stdio: ["ignore", "pipe", "pipe"],
 			env: { ...process.env },

@@ -9,7 +9,7 @@ Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a
 - **Runtime:** Node (runs TypeScript directly, no build step)
 - **Language:** TypeScript with strict mode (`noUncheckedIndexedAccess`, no `any`)
 - **Linting:** Biome (formatter + linter in one tool)
-- **Dev dependencies:** `better-sqlite3`, `@types/better-sqlite3`, `@types/bun`, `typescript`, `@biomejs/biome`, `vitest`
+- **Dev dependencies:** `better-sqlite3`, `@types/better-sqlite3`, `@types/ws`, `typescript`, `@biomejs/biome`, `vitest`
 
 
 ## Architecture
@@ -517,9 +517,9 @@ tsc --noEmit                          # Type checking passes
 Or use the package.json scripts:
 
 ```bash
-bun run test                          # vitest run
-bun run lint                          # biome check .
-bun run typecheck                     # tsc --noEmit
+npm run test                          # vitest run
+npm run lint                          # biome check .
+npm run typecheck                     # tsc --noEmit
 ```
 
 ## Session Completion Protocol

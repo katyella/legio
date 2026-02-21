@@ -1,11 +1,15 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
  * Bump version in both package.json and src/index.ts.
  *
- * Usage: bun run version:bump <major|minor|patch>
+ * Usage: npm run version:bump <major|minor|patch>
  */
 
-const USAGE = "Usage: bun run version:bump <major|minor|patch>";
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const USAGE = "Usage: npm run version:bump <major|minor|patch>";
 
 type BumpType = "major" | "minor" | "patch";
 
@@ -41,18 +45,20 @@ async function main(): Promise<void> {
 		process.exit(1);
 	}
 
+	const scriptDir = dirname(fileURLToPath(import.meta.url));
+
 	// Read and update package.json
-	const pkgPath = `${import.meta.dir}/../package.json`;
-	const pkgText = await Bun.file(pkgPath).text();
+	const pkgPath = join(scriptDir, "..", "package.json");
+	const pkgText = await readFile(pkgPath, "utf-8");
 	const pkg = JSON.parse(pkgText) as { version: string };
 	const oldVersion = pkg.version;
 	const newVersion = bumpVersion(oldVersion, bumpType);
 	pkg.version = newVersion;
-	await Bun.write(pkgPath, `${JSON.stringify(pkg, null, "\t")}\n`);
+	await writeFile(pkgPath, `${JSON.stringify(pkg, null, "\t")}\n`);
 
 	// Read and update src/index.ts
-	const indexPath = `${import.meta.dir}/../src/index.ts`;
-	const indexText = await Bun.file(indexPath).text();
+	const indexPath = join(scriptDir, "..", "src", "index.ts");
+	const indexText = await readFile(indexPath, "utf-8");
 	const updatedIndex = indexText.replace(
 		/const VERSION = "[^"]+"/,
 		`const VERSION = "${newVersion}"`,
@@ -61,7 +67,7 @@ async function main(): Promise<void> {
 		console.error("Error: Could not find VERSION constant in src/index.ts");
 		process.exit(1);
 	}
-	await Bun.write(indexPath, updatedIndex);
+	await writeFile(indexPath, updatedIndex);
 
 	console.log(`${oldVersion} -> ${newVersion}`);
 	console.log("Updated: package.json, src/index.ts");

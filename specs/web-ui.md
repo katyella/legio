@@ -6,7 +6,7 @@ Add a local web UI to Legio for monitoring agent swarms. The UI is **read-only**
 
 ## Constraints
 
-- **Zero runtime dependencies** — use only `Bun.serve()` (built-in HTTP/WS server), `bun:sqlite`, `Bun.file()`, etc.
+- **Zero runtime dependencies** — use only Node.js built-ins (`node:http`, `node:fs/promises`, etc.) and `better-sqlite3`
 - **No build step for frontend** — vanilla HTML/CSS/JS served as static files
 - **Follow existing patterns** — tab indentation, 100-char line width, colocated tests, strict TypeScript (`noUncheckedIndexedAccess`, `noExplicitAny`), typed errors extending `LegioError`
 - **Reuse existing store interfaces** — do not reimplement data access; import and call the existing `SessionStore`, `MailStore`, `EventStore`, `MetricsStore`, `MergeQueue`, `RunStore`
@@ -367,7 +367,7 @@ Follow the project's testing philosophy: **never mock what you can use for real.
 5. Wire `server` command into `src/index.ts`
 6. Export `loadDashboardData()` from `src/commands/dashboard.ts`
 7. Write `src/commands/server.test.ts` and `src/server/routes.test.ts`
-8. Verify: `bun test && bun run lint && bun run typecheck`
+8. Verify: `npm test && npm run lint && npm run typecheck`
 
 ### Phase 2: Complete API + WebSocket
 1. Add all remaining routes to `src/server/routes.ts` (events, metrics, runs, merge-queue, inspect, config)
@@ -376,7 +376,7 @@ Follow the project's testing philosophy: **never mock what you can use for real.
 4. Wire WebSocket into `src/server/index.ts`
 5. Write `src/server/websocket.test.ts` and expand `src/server/routes.test.ts`
 6. Update `src/commands/completions.ts`
-7. Verify: `bun test && bun run lint && bun run typecheck`
+7. Verify: `npm test && npm run lint && npm run typecheck`
 
 ### Phase 3: Frontend — Chat view (primary)
 1. Create `src/server/public/index.html` with SPA shell and nav
@@ -396,6 +396,6 @@ Follow the project's testing philosophy: **never mock what you can use for real.
 ## Quality Gates
 
 Before marking any phase complete:
-1. `bun test` — all tests pass (existing + new)
-2. `bun run lint` — biome check clean (tab indentation, 100-char width, no unused vars, no `any`)
-3. `bun run typecheck` — tsc passes (strict mode)
+1. `npm test` — all tests pass (existing + new)
+2. `npm run lint` — biome check clean (tab indentation, 100-char width, no unused vars, no `any`)
+3. `npm run typecheck` — tsc passes (strict mode)
