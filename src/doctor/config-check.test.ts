@@ -71,7 +71,6 @@ const mockConfig: LegioConfig = {
 		verbose: false,
 		redactSecrets: true,
 	},
-	autopilot: { intervalMs: 10_000, autoMerge: true, autoCleanWorktrees: false },
 };
 
 describe("checkConfig", () => {

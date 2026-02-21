@@ -630,38 +630,6 @@ export const COMMANDS: readonly CommandDef[] = [
 			{ name: "--help", desc: "Show help" },
 		],
 	},
-	{
-		name: "autopilot",
-		desc: "Coordinator autopilot daemon (start/stop/status)",
-		flags: [{ name: "--help", desc: "Show help" }],
-		subcommands: [
-			{
-				name: "start",
-				desc: "Start the autopilot",
-				flags: [
-					{ name: "--port", desc: "Server port", takesValue: true },
-					{ name: "--host", desc: "Server host", takesValue: true },
-					{ name: "--json", desc: "JSON output" },
-				],
-			},
-			{
-				name: "stop",
-				desc: "Stop the autopilot",
-				flags: [
-					{ name: "--port", desc: "Server port", takesValue: true },
-					{ name: "--json", desc: "JSON output" },
-				],
-			},
-			{
-				name: "status",
-				desc: "Show autopilot state",
-				flags: [
-					{ name: "--port", desc: "Server port", takesValue: true },
-					{ name: "--json", desc: "JSON output" },
-				],
-			},
-		],
-	},
 ] as const;
 
 export function generateBash(): string {

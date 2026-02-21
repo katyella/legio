@@ -47,11 +47,6 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		zombieThresholdMs: 600_000, // 10 minutes
 		nudgeIntervalMs: 60_000, // 1 minute between progressive nudge stages
 	},
-	autopilot: {
-		intervalMs: 10_000,
-		autoMerge: true,
-		autoCleanWorktrees: false,
-	},
 	models: {},
 	logging: {
 		verbose: false,

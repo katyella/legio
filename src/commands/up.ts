@@ -5,7 +5,7 @@
  * 1. Check git repo
  * 2. Initialize .legio/ if needed (legio init)
  * 3. Start the server in daemon mode (legio server start --daemon)
- *    The server auto-starts the coordinator with watchdog + autopilot.
+ *    The server auto-starts the coordinator with watchdog.
  * 4. Open the browser (unless --no-open)
  *
  * Running legio up when everything is already running is a safe no-op.
@@ -117,7 +117,7 @@ Options:
 
 legio up initializes .legio/ if needed, starts the server in daemon mode,
 and opens the browser. The server auto-starts the coordinator with watchdog
-and autopilot enabled. Running legio up when already running is a no-op.`;
+Running legio up when already running is a no-op.`;
 
 /**
  * Entry point for \`legio up [options]\`.
