@@ -982,9 +982,44 @@ export async function handleApiRequest(
 		}
 		const limitStr = url.searchParams.get("limit");
 		const limit = limitStr ? Number.parseInt(limitStr, 10) : 100;
+		const since = url.searchParams.get("since") ?? undefined;
+		const until = url.searchParams.get("until") ?? undefined;
 		const store = createMetricsStore(dbPath);
 		try {
+			if (since !== undefined || until !== undefined) {
+				return jsonResponse(store.getSessionsFiltered({ since, until, limit }));
+			}
 			return jsonResponse(store.getRecentSessions(limit));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/metrics/by-model") {
+		const dbPath = join(legioDir, "metrics.db");
+		if (!(await fileExists(dbPath))) {
+			return jsonResponse([]);
+		}
+		const since = url.searchParams.get("since") ?? undefined;
+		const until = url.searchParams.get("until") ?? undefined;
+		const store = createMetricsStore(dbPath);
+		try {
+			return jsonResponse(store.getSessionsByModel({ since, until }));
+		} finally {
+			store.close();
+		}
+	}
+
+	if (path === "/api/metrics/by-date") {
+		const dbPath = join(legioDir, "metrics.db");
+		if (!(await fileExists(dbPath))) {
+			return jsonResponse([]);
+		}
+		const since = url.searchParams.get("since") ?? undefined;
+		const until = url.searchParams.get("until") ?? undefined;
+		const store = createMetricsStore(dbPath);
+		try {
+			return jsonResponse(store.getSessionsByDate({ since, until }));
 		} finally {
 			store.close();
 		}

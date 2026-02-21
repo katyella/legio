@@ -8,10 +8,36 @@
 import Database from "better-sqlite3";
 import type { SessionMetrics, TokenSnapshot } from "../types.ts";
 
+export interface ModelGroup {
+	model: string;
+	sessions: number;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheCreationTokens: number;
+	estimatedCostUsd: number;
+}
+
+export interface DateGroup {
+	date: string;
+	sessions: number;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheCreationTokens: number;
+	estimatedCostUsd: number;
+}
+
 export interface MetricsStore {
 	recordSession(metrics: SessionMetrics): void;
 	getRecentSessions(limit?: number): SessionMetrics[];
+	/** Get sessions filtered by optional time range. */
+	getSessionsFiltered(opts: { since?: string; until?: string; limit?: number }): SessionMetrics[];
 	getSessionsByAgent(agentName: string): SessionMetrics[];
+	/** Get sessions grouped by model_used with aggregated token totals and cost. */
+	getSessionsByModel(opts?: { since?: string; until?: string }): ModelGroup[];
+	/** Get sessions grouped by date (YYYY-MM-DD) with aggregated token totals and cost. */
+	getSessionsByDate(opts?: { since?: string; until?: string }): DateGroup[];
 	getAverageDuration(capability?: string): number;
 	/** Delete metrics matching the given criteria. Returns the number of rows deleted. */
 	purge(options: { all?: boolean; agent?: string }): number;
@@ -56,6 +82,28 @@ interface SnapshotRow {
 	estimated_cost_usd: number | null;
 	model_used: string | null;
 	created_at: string;
+}
+
+/** Aggregated row shape from by-model GROUP BY query. */
+interface ModelGroupRow {
+	model: string;
+	sessions: number;
+	input_tokens: number;
+	output_tokens: number;
+	cache_read_tokens: number;
+	cache_creation_tokens: number;
+	estimated_cost_usd: number;
+}
+
+/** Aggregated row shape from by-date GROUP BY query. */
+interface DateGroupRow {
+	date: string;
+	sessions: number;
+	input_tokens: number;
+	output_tokens: number;
+	cache_read_tokens: number;
+	cache_creation_tokens: number;
+	estimated_cost_usd: number;
 }
 
 const CREATE_TABLE = `
@@ -194,6 +242,46 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 		SELECT * FROM sessions WHERE agent_name = $agent_name ORDER BY started_at DESC
 	`);
 
+	const filteredStmt = db.prepare(`
+		SELECT * FROM sessions
+		WHERE ($since IS NULL OR started_at >= $since)
+		  AND ($until IS NULL OR started_at <= $until)
+		ORDER BY started_at DESC
+		LIMIT $limit
+	`);
+
+	const byModelStmt = db.prepare(`
+		SELECT
+		  COALESCE(model_used, 'unknown') as model,
+		  COUNT(*) as sessions,
+		  SUM(input_tokens) as input_tokens,
+		  SUM(output_tokens) as output_tokens,
+		  SUM(cache_read_tokens) as cache_read_tokens,
+		  SUM(cache_creation_tokens) as cache_creation_tokens,
+		  SUM(COALESCE(estimated_cost_usd, 0)) as estimated_cost_usd
+		FROM sessions
+		WHERE ($since IS NULL OR started_at >= $since)
+		  AND ($until IS NULL OR started_at <= $until)
+		GROUP BY COALESCE(model_used, 'unknown')
+		ORDER BY estimated_cost_usd DESC
+	`);
+
+	const byDateStmt = db.prepare(`
+		SELECT
+		  DATE(started_at) as date,
+		  COUNT(*) as sessions,
+		  SUM(input_tokens) as input_tokens,
+		  SUM(output_tokens) as output_tokens,
+		  SUM(cache_read_tokens) as cache_read_tokens,
+		  SUM(cache_creation_tokens) as cache_creation_tokens,
+		  SUM(COALESCE(estimated_cost_usd, 0)) as estimated_cost_usd
+		FROM sessions
+		WHERE ($since IS NULL OR started_at >= $since)
+		  AND ($until IS NULL OR started_at <= $until)
+		GROUP BY DATE(started_at)
+		ORDER BY date ASC
+	`);
+
 	const avgDurationAllStmt = db.prepare(`
 		SELECT AVG(duration_ms) AS avg_duration FROM sessions WHERE completed_at IS NOT NULL
 	`);
@@ -253,9 +341,50 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 			return rows.map(rowToMetrics);
 		},
 
+		getSessionsFiltered(opts: { since?: string; until?: string; limit?: number }): SessionMetrics[] {
+			const rows = filteredStmt.all({
+				since: opts.since ?? null,
+				until: opts.until ?? null,
+				limit: opts.limit ?? 100,
+			}) as SessionRow[];
+			return rows.map(rowToMetrics);
+		},
+
 		getSessionsByAgent(agentName: string): SessionMetrics[] {
 			const rows = byAgentStmt.all({ agent_name: agentName }) as SessionRow[];
 			return rows.map(rowToMetrics);
+		},
+
+		getSessionsByModel(opts?: { since?: string; until?: string }): ModelGroup[] {
+			const rows = byModelStmt.all({
+				since: opts?.since ?? null,
+				until: opts?.until ?? null,
+			}) as ModelGroupRow[];
+			return rows.map((row) => ({
+				model: row.model,
+				sessions: row.sessions,
+				inputTokens: row.input_tokens,
+				outputTokens: row.output_tokens,
+				cacheReadTokens: row.cache_read_tokens,
+				cacheCreationTokens: row.cache_creation_tokens,
+				estimatedCostUsd: row.estimated_cost_usd,
+			}));
+		},
+
+		getSessionsByDate(opts?: { since?: string; until?: string }): DateGroup[] {
+			const rows = byDateStmt.all({
+				since: opts?.since ?? null,
+				until: opts?.until ?? null,
+			}) as DateGroupRow[];
+			return rows.map((row) => ({
+				date: row.date,
+				sessions: row.sessions,
+				inputTokens: row.input_tokens,
+				outputTokens: row.output_tokens,
+				cacheReadTokens: row.cache_read_tokens,
+				cacheCreationTokens: row.cache_creation_tokens,
+				estimatedCostUsd: row.estimated_cost_usd,
+			}));
 		},
 
 		getAverageDuration(capability?: string): number {

@@ -632,6 +632,313 @@ describe("token snapshots", () => {
 	});
 });
 
+// === getSessionsFiltered ===
+
+describe("getSessionsFiltered", () => {
+	test("returns all sessions when no since/until provided", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-02T10:00:00Z" }));
+
+		const results = store.getSessionsFiltered({});
+		expect(results).toHaveLength(2);
+	});
+
+	test("filters by since (inclusive)", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-02T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-3", startedAt: "2026-01-03T10:00:00Z" }));
+
+		const results = store.getSessionsFiltered({ since: "2026-01-02T10:00:00Z" });
+		expect(results).toHaveLength(2);
+		const beadIds = results.map((s) => s.beadId);
+		expect(beadIds).toContain("task-2");
+		expect(beadIds).toContain("task-3");
+	});
+
+	test("filters by until (inclusive)", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-02T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-3", startedAt: "2026-01-03T10:00:00Z" }));
+
+		const results = store.getSessionsFiltered({ until: "2026-01-02T10:00:00Z" });
+		expect(results).toHaveLength(2);
+		const beadIds = results.map((s) => s.beadId);
+		expect(beadIds).toContain("task-1");
+		expect(beadIds).toContain("task-2");
+	});
+
+	test("filters by both since and until", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-02T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-3", startedAt: "2026-01-03T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-4", startedAt: "2026-01-04T10:00:00Z" }));
+
+		const results = store.getSessionsFiltered({
+			since: "2026-01-02T10:00:00Z",
+			until: "2026-01-03T10:00:00Z",
+		});
+		expect(results).toHaveLength(2);
+		const beadIds = results.map((s) => s.beadId);
+		expect(beadIds).toContain("task-2");
+		expect(beadIds).toContain("task-3");
+	});
+
+	test("respects limit", () => {
+		for (let i = 0; i < 10; i++) {
+			store.recordSession(
+				makeSession({
+					beadId: `task-${i}`,
+					startedAt: new Date(Date.now() + i * 1000).toISOString(),
+				}),
+			);
+		}
+
+		const results = store.getSessionsFiltered({ limit: 3 });
+		expect(results).toHaveLength(3);
+	});
+
+	test("returns empty array when nothing matches time range", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+
+		const results = store.getSessionsFiltered({ since: "2026-06-01T00:00:00Z" });
+		expect(results).toEqual([]);
+	});
+
+	test("empty DB returns empty array", () => {
+		const results = store.getSessionsFiltered({});
+		expect(results).toEqual([]);
+	});
+});
+
+// === getSessionsByModel ===
+
+describe("getSessionsByModel", () => {
+	test("returns empty array when no sessions", () => {
+		const results = store.getSessionsByModel();
+		expect(results).toEqual([]);
+	});
+
+	test("groups sessions by model and sums tokens", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-1",
+				modelUsed: "claude-opus-4-6",
+				inputTokens: 1000,
+				outputTokens: 500,
+				cacheReadTokens: 100,
+				cacheCreationTokens: 50,
+				estimatedCostUsd: 1.0,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-2",
+				modelUsed: "claude-opus-4-6",
+				inputTokens: 2000,
+				outputTokens: 1000,
+				cacheReadTokens: 200,
+				cacheCreationTokens: 100,
+				estimatedCostUsd: 2.0,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-3",
+				modelUsed: "claude-sonnet-4-6",
+				inputTokens: 500,
+				outputTokens: 250,
+				cacheReadTokens: 50,
+				cacheCreationTokens: 25,
+				estimatedCostUsd: 0.5,
+			}),
+		);
+
+		const results = store.getSessionsByModel();
+		expect(results).toHaveLength(2);
+
+		const opus = results.find((r) => r.model === "claude-opus-4-6");
+		const sonnet = results.find((r) => r.model === "claude-sonnet-4-6");
+
+		expect(opus?.sessions).toBe(2);
+		expect(opus?.inputTokens).toBe(3000);
+		expect(opus?.outputTokens).toBe(1500);
+		expect(opus?.cacheReadTokens).toBe(300);
+		expect(opus?.cacheCreationTokens).toBe(150);
+		expect(opus?.estimatedCostUsd).toBeCloseTo(3.0, 5);
+
+		expect(sonnet?.sessions).toBe(1);
+		expect(sonnet?.inputTokens).toBe(500);
+		expect(sonnet?.estimatedCostUsd).toBeCloseTo(0.5, 5);
+	});
+
+	test("sessions with null model_used are grouped as 'unknown'", () => {
+		store.recordSession(makeSession({ beadId: "task-1", modelUsed: null, estimatedCostUsd: null }));
+		store.recordSession(makeSession({ beadId: "task-2", modelUsed: null, estimatedCostUsd: null }));
+
+		const results = store.getSessionsByModel();
+		expect(results).toHaveLength(1);
+		expect(results[0]?.model).toBe("unknown");
+		expect(results[0]?.sessions).toBe(2);
+		expect(results[0]?.estimatedCostUsd).toBe(0);
+	});
+
+	test("filters by since/until", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-1",
+				startedAt: "2026-01-01T10:00:00Z",
+				modelUsed: "claude-opus-4-6",
+				estimatedCostUsd: 1.0,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-2",
+				startedAt: "2026-01-03T10:00:00Z",
+				modelUsed: "claude-opus-4-6",
+				estimatedCostUsd: 2.0,
+			}),
+		);
+
+		const results = store.getSessionsByModel({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.sessions).toBe(1);
+		expect(results[0]?.estimatedCostUsd).toBeCloseTo(2.0, 5);
+	});
+
+	test("ordered by estimated_cost_usd DESC", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-1",
+				modelUsed: "model-cheap",
+				estimatedCostUsd: 0.1,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-2",
+				modelUsed: "model-expensive",
+				estimatedCostUsd: 10.0,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-3",
+				modelUsed: "model-mid",
+				estimatedCostUsd: 1.0,
+			}),
+		);
+
+		const results = store.getSessionsByModel();
+		expect(results[0]?.model).toBe("model-expensive");
+		expect(results[1]?.model).toBe("model-mid");
+		expect(results[2]?.model).toBe("model-cheap");
+	});
+});
+
+// === getSessionsByDate ===
+
+describe("getSessionsByDate", () => {
+	test("returns empty array when no sessions", () => {
+		const results = store.getSessionsByDate();
+		expect(results).toEqual([]);
+	});
+
+	test("groups sessions by date and sums tokens", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-1",
+				startedAt: "2026-01-01T10:00:00Z",
+				inputTokens: 100,
+				outputTokens: 50,
+				cacheReadTokens: 10,
+				cacheCreationTokens: 5,
+				estimatedCostUsd: 0.1,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-2",
+				startedAt: "2026-01-01T14:00:00Z",
+				inputTokens: 200,
+				outputTokens: 100,
+				cacheReadTokens: 20,
+				cacheCreationTokens: 10,
+				estimatedCostUsd: 0.2,
+			}),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-3",
+				startedAt: "2026-01-02T08:00:00Z",
+				inputTokens: 300,
+				outputTokens: 150,
+				cacheReadTokens: 30,
+				cacheCreationTokens: 15,
+				estimatedCostUsd: 0.3,
+			}),
+		);
+
+		const results = store.getSessionsByDate();
+		expect(results).toHaveLength(2);
+
+		const day1 = results.find((r) => r.date === "2026-01-01");
+		const day2 = results.find((r) => r.date === "2026-01-02");
+
+		expect(day1?.sessions).toBe(2);
+		expect(day1?.inputTokens).toBe(300);
+		expect(day1?.outputTokens).toBe(150);
+		expect(day1?.cacheReadTokens).toBe(30);
+		expect(day1?.cacheCreationTokens).toBe(15);
+		expect(day1?.estimatedCostUsd).toBeCloseTo(0.3, 5);
+
+		expect(day2?.sessions).toBe(1);
+		expect(day2?.inputTokens).toBe(300);
+		expect(day2?.estimatedCostUsd).toBeCloseTo(0.3, 5);
+	});
+
+	test("ordered by date ASC", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-03T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-3", startedAt: "2026-01-02T10:00:00Z" }));
+
+		const results = store.getSessionsByDate();
+		expect(results[0]?.date).toBe("2026-01-01");
+		expect(results[1]?.date).toBe("2026-01-02");
+		expect(results[2]?.date).toBe("2026-01-03");
+	});
+
+	test("filters by since/until", () => {
+		store.recordSession(makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-2", startedAt: "2026-01-02T10:00:00Z" }));
+		store.recordSession(makeSession({ beadId: "task-3", startedAt: "2026-01-03T10:00:00Z" }));
+
+		const results = store.getSessionsByDate({
+			since: "2026-01-02T00:00:00Z",
+			until: "2026-01-02T23:59:59Z",
+		});
+		expect(results).toHaveLength(1);
+		expect(results[0]?.date).toBe("2026-01-02");
+	});
+
+	test("null estimated_cost_usd treated as 0 in sum", () => {
+		store.recordSession(
+			makeSession({ beadId: "task-1", startedAt: "2026-01-01T10:00:00Z", estimatedCostUsd: null }),
+		);
+		store.recordSession(
+			makeSession({
+				beadId: "task-2",
+				startedAt: "2026-01-01T11:00:00Z",
+				estimatedCostUsd: 0.5,
+			}),
+		);
+
+		const results = store.getSessionsByDate();
+		expect(results).toHaveLength(1);
+		expect(results[0]?.estimatedCostUsd).toBeCloseTo(0.5, 5);
+	});
+});
+
 // === close ===
 
 describe("close", () => {

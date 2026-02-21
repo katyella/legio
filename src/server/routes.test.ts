@@ -1120,6 +1120,315 @@ describe("GET /api/metrics", () => {
 		const body = (await json(res)) as unknown[];
 		expect(body.length).toBe(2);
 	});
+
+	it("filters by since param", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-old",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 10,
+			outputTokens: 5,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: null,
+			modelUsed: null,
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-new",
+			capability: "scout",
+			startedAt: "2026-06-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 20,
+			outputTokens: 10,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: null,
+			modelUsed: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics", { since: "2026-03-01T00:00:00Z" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ beadId: string }>;
+		expect(body).toHaveLength(1);
+		expect(body[0]?.beadId).toBe("task-new");
+	});
+
+	it("filters by until param", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-old",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 10,
+			outputTokens: 5,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: null,
+			modelUsed: null,
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-new",
+			capability: "scout",
+			startedAt: "2026-06-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 20,
+			outputTokens: 10,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: null,
+			modelUsed: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics", { until: "2026-03-01T00:00:00Z" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ beadId: string }>;
+		expect(body).toHaveLength(1);
+		expect(body[0]?.beadId).toBe("task-old");
+	});
+});
+
+describe("GET /api/metrics/by-model", () => {
+	it("returns empty array when no metrics.db", async () => {
+		const res = await dispatch("/api/metrics/by-model");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("groups sessions by model", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-1",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 100,
+			outputTokens: 50,
+			cacheReadTokens: 10,
+			cacheCreationTokens: 5,
+			estimatedCostUsd: 1.0,
+			modelUsed: "claude-opus-4-6",
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-2",
+			capability: "scout",
+			startedAt: "2026-01-01T12:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 200,
+			outputTokens: 100,
+			cacheReadTokens: 20,
+			cacheCreationTokens: 10,
+			estimatedCostUsd: 0.5,
+			modelUsed: "claude-sonnet-4-6",
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics/by-model");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ model: string; sessions: number; inputTokens: number }>;
+		expect(body).toHaveLength(2);
+		const opus = body.find((r) => r.model === "claude-opus-4-6");
+		expect(opus?.sessions).toBe(1);
+		expect(opus?.inputTokens).toBe(100);
+	});
+
+	it("accepts since/until filter", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-old",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 100,
+			outputTokens: 50,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: 1.0,
+			modelUsed: "claude-opus-4-6",
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-new",
+			capability: "scout",
+			startedAt: "2026-06-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 200,
+			outputTokens: 100,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: 0.5,
+			modelUsed: "claude-sonnet-4-6",
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics/by-model", { since: "2026-03-01T00:00:00Z" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ model: string }>;
+		expect(body).toHaveLength(1);
+		expect(body[0]?.model).toBe("claude-sonnet-4-6");
+	});
+});
+
+describe("GET /api/metrics/by-date", () => {
+	it("returns empty array when no metrics.db", async () => {
+		const res = await dispatch("/api/metrics/by-date");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("groups sessions by date", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-1",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 100,
+			outputTokens: 50,
+			cacheReadTokens: 10,
+			cacheCreationTokens: 5,
+			estimatedCostUsd: 0.5,
+			modelUsed: "claude-sonnet-4-6",
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-2",
+			capability: "scout",
+			startedAt: "2026-01-01T14:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 200,
+			outputTokens: 100,
+			cacheReadTokens: 20,
+			cacheCreationTokens: 10,
+			estimatedCostUsd: 0.5,
+			modelUsed: "claude-sonnet-4-6",
+		});
+		store.recordSession({
+			agentName: "agent-c",
+			beadId: "task-3",
+			capability: "builder",
+			startedAt: "2026-01-02T08:00:00Z",
+			completedAt: null,
+			durationMs: 3000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 300,
+			outputTokens: 150,
+			cacheReadTokens: 30,
+			cacheCreationTokens: 15,
+			estimatedCostUsd: 0.3,
+			modelUsed: "claude-opus-4-6",
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics/by-date");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ date: string; sessions: number; inputTokens: number }>;
+		expect(body).toHaveLength(2);
+		expect(body[0]?.date).toBe("2026-01-01");
+		expect(body[0]?.sessions).toBe(2);
+		expect(body[0]?.inputTokens).toBe(300);
+		expect(body[1]?.date).toBe("2026-01-02");
+		expect(body[1]?.sessions).toBe(1);
+	});
+
+	it("accepts since/until filter", async () => {
+		const store = createMetricsStore(join(legioDir, "metrics.db"));
+		store.recordSession({
+			agentName: "agent-a",
+			beadId: "task-1",
+			capability: "builder",
+			startedAt: "2026-01-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 1000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 100,
+			outputTokens: 50,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: 1.0,
+			modelUsed: null,
+		});
+		store.recordSession({
+			agentName: "agent-b",
+			beadId: "task-2",
+			capability: "scout",
+			startedAt: "2026-06-01T10:00:00Z",
+			completedAt: null,
+			durationMs: 2000,
+			exitCode: 0,
+			mergeResult: null,
+			parentAgent: null,
+			inputTokens: 200,
+			outputTokens: 100,
+			cacheReadTokens: 0,
+			cacheCreationTokens: 0,
+			estimatedCostUsd: 2.0,
+			modelUsed: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/metrics/by-date", { since: "2026-03-01T00:00:00Z" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ date: string }>;
+		expect(body).toHaveLength(1);
+		expect(body[0]?.date).toBe("2026-06-01");
+	});
 });
 
 // ---------------------------------------------------------------------------
