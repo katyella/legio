@@ -507,8 +507,8 @@ describe("GET /api/coordinator/status", () => {
 	it("returns stopped when no sessions.db and no orchestrator-tmux.json", async () => {
 		const res = await dispatch("/api/coordinator/status");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as { state: string; tmuxSession?: string };
-		expect(body.state).toBe("stopped");
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(false);
 		expect(body.tmuxSession).toBeUndefined();
 	});
 
@@ -538,8 +538,8 @@ describe("GET /api/coordinator/status", () => {
 
 		const res = await dispatch("/api/coordinator/status");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as { state: string; tmuxSession?: string };
-		expect(body.state).toBe("running");
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(true);
 		expect(body.tmuxSession).toBe("legio-test-coordinator");
 	});
 
@@ -569,10 +569,10 @@ describe("GET /api/coordinator/status", () => {
 
 		const res = await dispatch("/api/coordinator/status");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as { state: string; tmuxSession?: string };
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
 		// zombie state → resolveTerminalSession returns null → stopped
 		// (unless orchestrator-tmux.json exists, which it doesn't here)
-		expect(body.state).toBe("stopped");
+		expect(body.running).toBe(false);
 	});
 
 	it("returns running when coordinator session state is completed but orchestrator-tmux.json exists", async () => {
@@ -584,8 +584,8 @@ describe("GET /api/coordinator/status", () => {
 		// No sessions.db — falls back to orchestrator-tmux.json
 		const res = await dispatch("/api/coordinator/status");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as { state: string; tmuxSession?: string };
-		expect(body.state).toBe("running");
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(true);
 		expect(body.tmuxSession).toBe("legio-orchestrator-fallback");
 	});
 });
