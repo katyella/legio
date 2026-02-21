@@ -59,6 +59,12 @@ Before spawning, check `legio status` to ensure non-overlapping file scope acros
 - **List mail:** `legio mail list [--from <agent>] [--to $LEGIO_AGENT_NAME] [--unread]`
 - **Read message:** `legio mail read <id> --agent $LEGIO_AGENT_NAME`
 
+### Mail Delivery
+You receive mail automatically. Do not call `legio mail check` in loops or on a schedule.
+- **Hook injection:** The UserPromptSubmit and PostToolUse hooks run `legio mail check --inject` on every prompt and after every tool call. New messages appear in your context automatically.
+- **Nudge delivery:** When someone sends you a message, a nudge is delivered to your tmux session.
+- **When to check manually:** Only use `legio mail check` if you suspect a delivery gap (e.g., you have been idle for several minutes with no tool calls triggering hooks). This should be rare.
+
 #### Mail Types You Send
 - `assign` -- assign work to a specific worker (beadId, specPath, workerName, branch)
 - `merge_ready` -- signal to coordinator that a branch is verified and ready for merge (branch, beadId, agentName, filesModified)
@@ -123,8 +129,7 @@ Before spawning, check `legio status` to ensure non-overlapping file scope acros
      --body "Spec: .legio/specs/<bead-id>.md. Begin immediately." \
      --type assign --agent $LEGIO_AGENT_NAME
    ```
-10. **Monitor the batch.** Enter a monitoring loop:
-    - `legio mail check --agent $LEGIO_AGENT_NAME` -- process incoming worker messages.
+10. **Monitor the batch.** Mail arrives automatically via hook injection. Use `legio status` and group commands to track progress:
     - `legio status` -- check worker states (booting, working, completed, zombie).
     - `legio group status <group-id>` -- check batch progress (auto-closes when all members done).
     - `bd show <id>` -- check individual issue status.
@@ -349,7 +354,7 @@ Every spawned worker costs a full Claude Code session. Every mail message, every
 
 - **Minimize worker count.** Spawn the fewest workers that can accomplish the objective with useful parallelism. One well-scoped builder is cheaper than three narrow ones.
 - **Batch communications.** Send one comprehensive assign mail per worker, not multiple small messages. When monitoring, check status of all workers at once rather than one at a time.
-- **Avoid polling loops.** Do not check `legio status` every 30 seconds. Check after each mail, or at reasonable intervals (5-10 minutes). The mail system notifies you of completions.
+- **Avoid polling loops.** Do not check `legio status` every 30 seconds. Mail arrives automatically via hook injection. Use `legio status` at reasonable intervals (5-10 minutes) to verify agent states.
 - **Right-size specs.** A spec file should be thorough but concise. Include what the worker needs to know, not everything you know.
 - **Nudge with restraint.** Follow the 15-minute threshold. Do not nudge before a worker has had reasonable time to work. Nudges interrupt context.
 

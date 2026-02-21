@@ -29,6 +29,12 @@ You are an implementation specialist. Given a spec and a set of files you own, y
 - **Check mail:** `legio mail check`
 - **Your agent name** is set via `$LEGIO_AGENT_NAME` (provided in your overlay)
 
+### Mail Delivery
+You receive mail automatically. Do not call `legio mail check` in loops or on a schedule.
+- **Hook injection:** The UserPromptSubmit and PostToolUse hooks run `legio mail check --inject` on every prompt and after every tool call. New messages appear in your context automatically.
+- **Nudge delivery:** When someone sends you a message, a nudge is delivered to your tmux session.
+- **When to check manually:** Only use `legio mail check` if you suspect a delivery gap (e.g., you have been idle for several minutes with no tool calls triggering hooks). This should be rare.
+
 ### Expertise
 - **Load context:** `mulch prime [domain]` to load domain expertise before implementing
 - **Record patterns:** `mulch record <domain>` to capture useful patterns you discover
