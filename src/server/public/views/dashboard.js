@@ -942,17 +942,21 @@ function CoordinatorChat({ mail }) {
 function CoordinatorBar() {
 	const [coordStatus, setCoordStatus] = useState(null); // null = unknown, true = running, false = stopped
 	const [loading, setLoading] = useState(false); // start/stop in-flight
+	const [gwStatus, setGwStatus] = useState(null); // null = unknown, true = running, false = stopped
+	const [gwLoading, setGwLoading] = useState(false);
 	const [error, setError] = useState(null);
 
 	const poll = useCallback(async (cancelled) => {
 		try {
 			const data = await fetchJson("/api/coordinator/status");
-			if (!cancelled) {
-				setCoordStatus(data?.running === true);
-			}
+			if (!cancelled) setCoordStatus(data?.running === true);
 		} catch (_err) {
 			// non-fatal — leave status as unknown
 		}
+		try {
+			const gwData = await fetchJson("/api/gateway/status");
+			if (!cancelled) setGwStatus(gwData?.running === true);
+		} catch (_err) { /* non-fatal */ }
 	}, []);
 
 	useEffect(() => {
@@ -998,6 +1002,20 @@ function CoordinatorBar() {
 		}
 	}, [poll]);
 
+	const handleGwStart = useCallback(async () => {
+		setGwLoading(true); setError(null);
+		try { await postJson("/api/gateway/start", {}); await poll(false); }
+		catch (err) { setError(err?.message ?? "Failed to start gateway"); }
+		finally { setGwLoading(false); }
+	}, [poll]);
+
+	const handleGwStop = useCallback(async () => {
+		setGwLoading(true); setError(null);
+		try { await postJson("/api/gateway/stop", {}); await poll(false); }
+		catch (err) { setError(err?.message ?? "Failed to stop gateway"); }
+		finally { setGwLoading(false); }
+	}, [poll]);
+
 	const handleSpawn = useCallback(() => {
 		if (appState.showSpawnDialog) appState.showSpawnDialog.value = true;
 	}, []);
@@ -1008,6 +1026,13 @@ function CoordinatorBar() {
 
 	const dotColor = isRunning ? "bg-green-500" : isStopped ? "bg-[#666]" : "bg-[#666]";
 	const statusText = isRunning ? "Running" : isStopped ? "Stopped" : "Unknown";
+
+	const gwIsRunning = gwStatus === true;
+	const gwIsStopped = gwStatus === false;
+	const gwIsUnknown = gwStatus === null;
+
+	const gwDotColor = gwIsRunning ? "bg-green-500" : "bg-[#666]";
+	const gwStatusText = gwIsRunning ? "Running" : gwIsStopped ? "Stopped" : "Unknown";
 
 	return html`
 		<div class="flex items-center gap-3 px-3 py-2 bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0">
@@ -1032,6 +1057,29 @@ function CoordinatorBar() {
 					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
 				>
 					${loading && isRunning ? "\u2026" : "Stop"}
+				</button>
+			</div>
+			<div class="border-l border-[#2a2a2a] pl-3 ml-1 flex items-center gap-2">
+				<span class="text-xs text-[#666] uppercase tracking-wide">Gateway</span>
+				<div class="flex items-center gap-1">
+					<div class="w-2 h-2 rounded-full ${gwDotColor}"></div>
+					<span class="text-sm text-[#e5e5e5]">${gwStatusText}</span>
+				</div>
+			</div>
+			<div class="flex items-center gap-2">
+				<button
+					onClick=${handleGwStart}
+					disabled=${gwLoading || gwIsRunning}
+					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+				>
+					${gwLoading && !gwIsRunning ? "\u2026" : "Start"}
+				</button>
+				<button
+					onClick=${handleGwStop}
+					disabled=${gwLoading || gwIsStopped || gwIsUnknown}
+					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
+				>
+					${gwLoading && gwIsRunning ? "\u2026" : "Stop"}
 				</button>
 				<button
 					onClick=${handleSpawn}

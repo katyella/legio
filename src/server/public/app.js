@@ -11,7 +11,6 @@ import { timeAgo } from "./lib/utils.js";
 import { connectWS } from "./lib/ws.js";
 import { CostsView } from "./views/costs.js";
 import { DashboardView } from "./views/dashboard.js";
-import { GatewayView } from "./views/gateway.js";
 import { InspectView } from "./views/inspect.js";
 import { IssuesView } from "./views/issues.js";
 import { RawChatView } from "./views/raw-chat.js";
@@ -70,8 +69,6 @@ function Router({ view, param }) {
 			return html`<${StrategyView} />`;
 		case "chat":
 			return html`<${RawChatView} />`;
-		case "gateway":
-			return html`<${GatewayView} />`;
 		default:
 			return html`<${DashboardView} />`;
 	}
@@ -84,7 +81,6 @@ const NAV_LINKS = [
 	{ href: "#costs", label: "Costs", view: "costs" },
 	{ href: "#tasks", label: "Tasks", view: "tasks" },
 	{ href: "#chat", label: "Chat", view: "chat" },
-	{ href: "#gateway", label: "Gateway", view: "gateway" },
 	{ href: "#strategy", label: "Strategy", view: "strategy" },
 ];
 
@@ -155,6 +151,10 @@ function App() {
 				window.location.hash = "#dashboard";
 				return; // will re-trigger the hash change handler
 			}
+			if (hash === "#gateway" || hash === "gateway") {
+				window.location.hash = "#dashboard";
+				return; // will re-trigger the hash change handler
+			}
 			setRoute(parseHash(hash));
 		};
 		// Redirect legacy #issues hash on initial load
@@ -163,6 +163,10 @@ function App() {
 		}
 		// Redirect legacy #command hash on initial load
 		if (location.hash === "#command" || location.hash === "command") {
+			window.location.hash = "#dashboard";
+		}
+		// Redirect legacy #gateway hash on initial load
+		if (location.hash === "#gateway" || location.hash === "gateway") {
 			window.location.hash = "#dashboard";
 		}
 		window.addEventListener("hashchange", onHashChange);
