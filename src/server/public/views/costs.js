@@ -1,8 +1,28 @@
 // CostsView — Usage report with charts, tables, and live snapshots
 // Preact+HTM component, no build step required.
 
-import { html, useCallback, useMemo, useState } from "../lib/preact-setup.js";
+import { html, useCallback, useEffect, useMemo, useState } from "../lib/preact-setup.js";
+import { fetchJson } from "../lib/api.js";
 import { timeAgo } from "../lib/utils.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const TIME_WINDOWS = [
+	{ label: "All Time", value: null },
+	{ label: "Last Hour", value: 60 * 60 * 1000 },
+	{ label: "Last 24h", value: 24 * 60 * 60 * 1000 },
+	{ label: "Last 7d", value: 7 * 24 * 60 * 60 * 1000 },
+	{ label: "Last 30d", value: 30 * 24 * 60 * 60 * 1000 },
+];
+
+const MODEL_COLORS = {
+	opus: "bg-blue-500",
+	sonnet: "bg-green-500",
+	haiku: "bg-yellow-500",
+	unknown: "bg-gray-500",
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -23,6 +43,23 @@ function formatCostShort(n) {
 	return `$${Number(n).toFixed(2)}`;
 }
 
+function formatDateShort(dateStr) {
+	if (!dateStr) return "";
+	const d = String(dateStr).split("T")[0]; // "2026-02-21"
+	const parts = d.split("-");
+	if (parts.length < 3) return d;
+	return `${parts[1]}/${parts[2]}`; // "02/21"
+}
+
+function modelColor(model) {
+	if (!model) return MODEL_COLORS.unknown;
+	const lower = String(model).toLowerCase();
+	if (lower.includes("opus")) return MODEL_COLORS.opus;
+	if (lower.includes("sonnet")) return MODEL_COLORS.sonnet;
+	if (lower.includes("haiku")) return MODEL_COLORS.haiku;
+	return MODEL_COLORS.unknown;
+}
+
 // ---------------------------------------------------------------------------
 // StatCard
 // ---------------------------------------------------------------------------
@@ -32,6 +69,104 @@ function StatCard({ label, value }) {
 		<div class="bg-surface border border-border rounded-sm p-4 flex-1 min-w-0">
 			<div class="text-xs text-gray-500 uppercase tracking-wider mb-1">${label}</div>
 			<div class="text-2xl font-mono text-white">${value}</div>
+		</div>
+	`;
+}
+
+// ---------------------------------------------------------------------------
+// ModelBreakdown
+// ---------------------------------------------------------------------------
+
+function ModelBreakdown({ modelData }) {
+	if (!modelData || modelData.length === 0) {
+		return html`<div class="text-center text-gray-500 py-8">No model data</div>`;
+	}
+
+	const sorted = [...modelData].sort(
+		(a, b) => (b.estimatedCostUsd || 0) - (a.estimatedCostUsd || 0),
+	);
+	const maxCost = sorted[0]?.estimatedCostUsd ?? 0;
+
+	return html`
+		<div class="flex flex-col gap-3">
+			${sorted.map((row) => {
+				const totalTokens =
+					(row.inputTokens || 0) +
+					(row.outputTokens || 0) +
+					(row.cacheReadTokens || 0) +
+					(row.cacheCreationTokens || 0);
+				const pct = maxCost > 0 ? ((row.estimatedCostUsd || 0) / maxCost) * 100 : 0;
+				const color = modelColor(row.model);
+				return html`
+					<div key=${row.model || "unknown"} class="flex items-center gap-3">
+						<div class="flex items-center gap-2 w-[140px] shrink-0">
+							<div class=${`${color} w-2 h-2 rounded-full shrink-0`}></div>
+							<span class="text-sm text-gray-300 truncate">${row.model || "unknown"}</span>
+						</div>
+						<div class="flex-1 bg-white/5 rounded-sm h-5 overflow-hidden">
+							<div
+								class=${`${color} h-full rounded-sm`}
+								style=${"width: " + pct.toFixed(1) + "%"}
+							></div>
+						</div>
+						<span class="font-mono text-xs text-gray-400 w-28 text-right shrink-0">
+							${formatNumber(totalTokens)} tok
+						</span>
+						<span class="font-mono text-sm text-gray-300 w-20 text-right shrink-0">
+							${formatCost(row.estimatedCostUsd)}
+						</span>
+					</div>
+				`;
+			})}
+			<!-- Legend details -->
+			<div class="flex flex-wrap gap-x-6 gap-y-1 mt-1">
+				${sorted.map(
+					(row) => html`
+						<div key=${row.model} class="text-xs text-gray-500">
+							${row.model || "unknown"}: ${row.sessions ?? 0} session${row.sessions === 1 ? "" : "s"}
+						</div>
+					`,
+				)}
+			</div>
+		</div>
+	`;
+}
+
+// ---------------------------------------------------------------------------
+// DateChart
+// ---------------------------------------------------------------------------
+
+function DateChart({ dateData }) {
+	if (!dateData || dateData.length === 0) {
+		return html`<div class="text-center text-gray-500 py-8">No date data</div>`;
+	}
+
+	const maxCost = Math.max(...dateData.map((d) => d.estimatedCostUsd || 0));
+	const maxHeight = 160; // px
+
+	return html`
+		<div class="overflow-x-auto">
+			<div class="flex items-end gap-1 min-w-0" style="min-height: ${maxHeight + 32}px">
+				${dateData.map((d) => {
+					const cost = d.estimatedCostUsd || 0;
+					const barH = maxCost > 0 ? Math.max(2, Math.round((cost / maxCost) * maxHeight)) : 2;
+					return html`
+						<div
+							key=${d.date}
+							class="flex flex-col items-center gap-1 shrink-0"
+							style="min-width: 40px"
+							title=${`${d.date}: ${formatCost(cost)} (${d.sessions ?? 0} sessions)`}
+						>
+							<span class="text-xs font-mono text-gray-500">${formatCostShort(cost)}</span>
+							<div
+								class="w-6 bg-blue-500 rounded-t-sm"
+								style=${"height: " + barH + "px"}
+							></div>
+							<span class="text-xs text-gray-500 rotate-0">${formatDateShort(d.date)}</span>
+						</div>
+					`;
+				})}
+			</div>
 		</div>
 	`;
 }
@@ -188,13 +323,47 @@ function CapabilityChart({ metrics }) {
 // CostsView
 // ---------------------------------------------------------------------------
 
-export function CostsView({ metrics, snapshots }) {
+export function CostsView({ metrics: initialMetrics, snapshots }) {
 	const [groupByCapability, setGroupByCapability] = useState(false);
-
-	const safeMetrics = Array.isArray(metrics) ? metrics : [];
-	const safeSnapshots = snapshots || [];
+	const [timeWindow, setTimeWindow] = useState(null); // null = all time
+	const [filteredMetrics, setFilteredMetrics] = useState(null);
+	const [modelData, setModelData] = useState([]);
+	const [dateData, setDateData] = useState([]);
+	const [loading, setLoading] = useState(false);
 
 	const onToggleGroup = useCallback(() => setGroupByCapability((v) => !v), []);
+
+	// When timeWindow changes, fetch filtered data from all 3 endpoints
+	useEffect(() => {
+		if (timeWindow === null) {
+			// All time: reset to initial prop data, clear model/date data
+			setFilteredMetrics(null);
+			setModelData([]);
+			setDateData([]);
+			return;
+		}
+
+		const since = new Date(Date.now() - timeWindow).toISOString();
+		const enc = encodeURIComponent(since);
+
+		setLoading(true);
+		Promise.all([
+			fetchJson(`/api/metrics?since=${enc}&limit=1000`).catch(() => []),
+			fetchJson(`/api/metrics/by-model?since=${enc}`).catch(() => []),
+			fetchJson(`/api/metrics/by-date?since=${enc}`).catch(() => []),
+		]).then(([metrics, byModel, byDate]) => {
+			setFilteredMetrics(Array.isArray(metrics) ? metrics : []);
+			setModelData(Array.isArray(byModel) ? byModel : []);
+			setDateData(Array.isArray(byDate) ? byDate : []);
+			setLoading(false);
+		});
+	}, [timeWindow]);
+
+	// Use filteredMetrics if a time window is selected, otherwise fall back to initial prop
+	const safeMetrics = Array.isArray(filteredMetrics ?? initialMetrics)
+		? (filteredMetrics ?? initialMetrics)
+		: [];
+	const safeSnapshots = snapshots || [];
 
 	// Compute overall totals
 	const totals = useMemo(
@@ -308,6 +477,30 @@ export function CostsView({ metrics, snapshots }) {
 
 	return html`
 		<div class="flex flex-col gap-6 p-6">
+			<!-- Time Window Selector -->
+			<div class="flex items-center justify-between">
+				<div class="text-gray-500 uppercase text-xs tracking-wider">Cost Analysis</div>
+				<div class="flex items-center gap-2">
+					${loading ? html`<span class="text-xs text-gray-500">Loading...</span>` : null}
+					<select
+						class="text-sm bg-surface border border-border rounded-sm px-3 py-1.5 text-gray-300 focus:outline-none focus:border-blue-500"
+						value=${timeWindow}
+						onChange=${(e) => {
+							const val = e.target.value;
+							setTimeWindow(val === "null" ? null : Number(val));
+						}}
+					>
+						${TIME_WINDOWS.map(
+							(w) => html`
+								<option key=${String(w.value)} value=${String(w.value)}>
+									${w.label}
+								</option>
+							`,
+						)}
+					</select>
+				</div>
+			</div>
+
 			<!-- Summary Stat Cards -->
 			<div class="flex gap-4">
 				<${StatCard}
@@ -328,11 +521,31 @@ export function CostsView({ metrics, snapshots }) {
 				/>
 			</div>
 
+			<!-- Model Usage Breakdown (only when time window is selected and data available) -->
+			${timeWindow !== null
+				? html`
+					<div class="bg-surface border border-border rounded-sm p-4">
+						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Model Usage</div>
+						<${ModelBreakdown} modelData=${modelData} />
+					</div>
+				`
+				: null}
+
 			<!-- Cost by Agent Bar Chart -->
 			<div class="bg-surface border border-border rounded-sm p-4">
 				<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Cost by Agent</div>
 				<${AgentBarChart} metrics=${safeMetrics} />
 			</div>
+
+			<!-- Date Chart (only when time window is selected and data available) -->
+			${timeWindow !== null && dateData.length > 0
+				? html`
+					<div class="bg-surface border border-border rounded-sm p-4">
+						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Daily Cost Trend</div>
+						<${DateChart} dateData=${dateData} />
+					</div>
+				`
+				: null}
 
 			<!-- Token Distribution -->
 			<div class="bg-surface border border-border rounded-sm p-4">
