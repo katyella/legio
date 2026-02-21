@@ -359,6 +359,35 @@ export const COMMANDS: readonly CommandDef[] = [
 		],
 	},
 	{
+		name: "gateway",
+		desc: "Gateway planning agent",
+		flags: [
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+		subcommands: [
+			{
+				name: "start",
+				desc: "Start gateway",
+				flags: [
+					{ name: "--attach", desc: "Attach to tmux session" },
+					{ name: "--no-attach", desc: "Do not attach to tmux session" },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "stop",
+				desc: "Stop gateway",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "status",
+				desc: "Show gateway state",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+		],
+	},
+	{
 		name: "supervisor",
 		desc: "Per-project supervisor agent",
 		flags: [
