@@ -101,6 +101,19 @@ export interface AgentSession {
 	stalledSince: string | null; // ISO timestamp when agent first entered stalled state
 }
 
+// === Headless Coordinator ===
+
+export interface HeadlessCoordinatorConfig {
+	/** Command to run (e.g., "claude --model opus --dangerously-skip-permissions") */
+	command: string;
+	/** Working directory for the subprocess */
+	cwd: string;
+	/** Environment variables to inject */
+	env?: Record<string, string>;
+	/** Max lines in the ring buffer (default: 500) */
+	ringBufferSize?: number;
+}
+
 // === Agent Identity ===
 
 export interface AgentIdentity {

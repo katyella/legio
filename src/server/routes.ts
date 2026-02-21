@@ -22,6 +22,7 @@ import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type {
 	EventLevel,
+	HeadlessCoordinatorConfig,
 	MailAudience,
 	MailMessage,
 	MergeEntry,
@@ -32,6 +33,7 @@ import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
 import { createChatStore } from "./chat-store.ts";
+import { HeadlessCoordinator } from "./headless.ts";
 
 // ---------------------------------------------------------------------------
 // File helpers
@@ -276,6 +278,10 @@ export async function handleApiRequest(
 	legioDir: string,
 	projectRoot: string,
 	wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
+	headless?: {
+		coordinator: HeadlessCoordinator | null;
+		setCoordinator: (c: HeadlessCoordinator | null) => void;
+	} | null,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const path = url.pathname;
@@ -378,6 +384,21 @@ export async function handleApiRequest(
 		}
 
 		const agentName = typeof obj.agent === "string" && obj.agent ? obj.agent : "coordinator";
+
+		// If a headless coordinator is running for the coordinator agent, write to stdin
+		if (
+			(agentName === "coordinator" || agentName === "headless") &&
+			headless?.coordinator?.isRunning()
+		) {
+			try {
+				headless.coordinator.write(`${obj.text}\n`);
+			} catch (err) {
+				return errorResponse(
+					`Failed to write to headless coordinator: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+			return jsonResponse({ ok: true });
+		}
 
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
 		if (!tmuxSession) {
@@ -562,6 +583,50 @@ export async function handleApiRequest(
 	if (request.method === "POST" && path === "/api/coordinator/start") {
 		const parsed = await parseJsonBody(request);
 		if (parsed instanceof Response) return parsed;
+
+		if (parsed.headless === true) {
+			// Start headless coordinator in-process
+			if (headless?.coordinator?.isRunning()) {
+				return errorResponse("Headless coordinator is already running", 409);
+			}
+
+			// Build the command (same as CLI path but we can't read full config here,
+			// so we use a sensible default and let the caller configure via env)
+			const claudeCmd =
+				typeof parsed.command === "string" && parsed.command
+					? parsed.command
+					: "claude --dangerously-skip-permissions";
+
+			const config: HeadlessCoordinatorConfig = {
+				command: claudeCmd,
+				cwd: projectRoot,
+				env:
+					typeof parsed.env === "object" && parsed.env !== null
+						? (parsed.env as Record<string, string>)
+						: { LEGIO_AGENT_NAME: "coordinator" },
+				ringBufferSize: typeof parsed.ringBufferSize === "number" ? parsed.ringBufferSize : 500,
+			};
+
+			const coordinator = new HeadlessCoordinator(config);
+
+			// Wire output events to WebSocket broadcast
+			coordinator.on("output", (chunk: string) => {
+				wsManager?.broadcastEvent({ type: "coordinator_output", data: { text: chunk } });
+			});
+
+			coordinator.on("exit", (code: number) => {
+				wsManager?.broadcastEvent({ type: "coordinator_stop", data: { headless: true, code } });
+				headless?.setCoordinator(null);
+			});
+
+			coordinator.start();
+			headless?.setCoordinator(coordinator);
+
+			const responseData = { headless: true, pid: coordinator.getPid() };
+			wsManager?.broadcastEvent({ type: "coordinator_start", data: responseData });
+			return jsonResponse(responseData);
+		}
+
 		const args = ["coordinator", "start", "--no-attach", "--json"];
 		if (parsed.watchdog === true) args.push("--watchdog");
 		if (parsed.monitor === true) args.push("--monitor");
@@ -574,6 +639,15 @@ export async function handleApiRequest(
 	}
 
 	if (request.method === "POST" && path === "/api/coordinator/stop") {
+		// If headless coordinator is running, stop it
+		if (headless?.coordinator?.isRunning()) {
+			await headless.coordinator.stop();
+			headless.setCoordinator(null);
+			const responseData = { stopped: true, headless: true };
+			wsManager?.broadcastEvent({ type: "coordinator_stop", data: responseData });
+			return jsonResponse(responseData);
+		}
+
 		const parsed = await parseJsonBody(request);
 		if (parsed instanceof Response) return parsed;
 		const result = await runLegio(["coordinator", "stop", "--json"], projectRoot);
@@ -834,9 +908,20 @@ export async function handleApiRequest(
 	}
 
 	if (path === "/api/coordinator/status") {
+		// Check headless coordinator first
+		const headlessRunning = headless?.coordinator?.isRunning() ?? false;
+		if (headlessRunning) {
+			return jsonResponse({
+				running: true,
+				headless: true,
+				tmuxSession: undefined,
+			});
+		}
+
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "coordinator");
 		return jsonResponse({
 			running: tmuxSession !== null,
+			headless: false,
 			tmuxSession: tmuxSession ?? undefined,
 		});
 	}
@@ -1341,6 +1426,19 @@ export async function handleApiRequest(
 		const agentName = url.searchParams.get("agent") ?? "coordinator";
 		const linesStr = url.searchParams.get("lines");
 		const lines = linesStr ? Math.max(1, Number.parseInt(linesStr, 10)) : 100;
+
+		// If headless coordinator is running for this agent, return its ring buffer
+		if (
+			(agentName === "coordinator" || agentName === "headless") &&
+			headless?.coordinator?.isRunning()
+		) {
+			return jsonResponse({
+				output: headless.coordinator.getOutput(),
+				agent: agentName,
+				headless: true,
+				timestamp: new Date().toISOString(),
+			});
+		}
 
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
 		if (!tmuxSession) {
