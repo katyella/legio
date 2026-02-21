@@ -16,6 +16,7 @@ import { timeAgo } from './lib/utils.js';
 import { SetupView } from './views/setup.js';
 import { StrategyView } from './views/strategy.js';
 import { SpawnDialog } from './components/spawn-dialog.js';
+import { RawChatView } from './views/raw-chat.js';
 
 // ===== Initial Data Fetch =====
 
@@ -63,6 +64,7 @@ function Router({ view, param }) {
 		case 'tasks':     return html`<${IssuesView} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
+		case 'chat':      return html`<${RawChatView} />`;
 		default:          return html`<${CommandView} />`;
 	}
 }
@@ -74,6 +76,7 @@ const NAV_LINKS = [
 	{ href: '#dashboard', label: 'Dashboard', view: 'dashboard' },
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
 	{ href: '#tasks',     label: 'Tasks',     view: 'tasks' },
+	{ href: '#chat',      label: 'Chat',      view: 'chat' },
 	{ href: '#strategy',  label: 'Strategy',  view: 'strategy' },
 ];
 
