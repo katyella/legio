@@ -1429,15 +1429,7 @@ describe("mailCommand", () => {
 
 		test("normal priority message never triggers direct nudge regardless of busy state", async () => {
 			// No busy marker = idle, but normal priority means no nudge at all
-			await mailCommand([
-				"send",
-				"--to",
-				"builder-1",
-				"--subject",
-				"FYI",
-				"--body",
-				"Just a note",
-			]);
+			await mailCommand(["send", "--to", "builder-1", "--subject", "FYI", "--body", "Just a note"]);
 
 			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
 			expect(nudgeEvent).toBeUndefined();
@@ -1583,6 +1575,146 @@ describe("mailCommand", () => {
 			});
 			// Only 1 nudge (builder-2 is idle, builder-1 is busy)
 			expect(nudgeEvents.length).toBe(1);
+		});
+	});
+
+	describe("audience flag", () => {
+		test("handleSend with explicit --audience human sends without error", async () => {
+			output = "";
+			await mailCommand([
+				"send",
+				"--to",
+				"builder-1",
+				"--subject",
+				"Human message",
+				"--body",
+				"For human operators",
+				"--audience",
+				"human",
+			]);
+
+			expect(output).toContain("Sent message");
+			expect(output).toContain("builder-1");
+		});
+
+		test("handleSend auto-derives audience 'agent' for protocol type worker_done", async () => {
+			output = "";
+			await mailCommand([
+				"send",
+				"--to",
+				"orchestrator",
+				"--subject",
+				"Done",
+				"--body",
+				"Task complete",
+				"--type",
+				"worker_done",
+				"--from",
+				"builder-1",
+			]);
+
+			// Message should be sent without error (audience auto-derived as 'agent')
+			expect(output).toContain("Sent message");
+		});
+
+		test("handleSend auto-derives audience 'both' for semantic type status", async () => {
+			output = "";
+			await mailCommand([
+				"send",
+				"--to",
+				"orchestrator",
+				"--subject",
+				"Update",
+				"--body",
+				"Status update",
+				"--type",
+				"status",
+				"--from",
+				"builder-1",
+			]);
+
+			// Message should be sent without error (audience auto-derived as 'both')
+			expect(output).toContain("Sent message");
+		});
+
+		test("handleSend rejects invalid --audience value with ValidationError", async () => {
+			let caughtError: unknown;
+			try {
+				await mailCommand([
+					"send",
+					"--to",
+					"builder-1",
+					"--subject",
+					"Test",
+					"--body",
+					"Body",
+					"--audience",
+					"invalid",
+				]);
+			} catch (err) {
+				caughtError = err;
+			}
+
+			expect(caughtError).toBeInstanceOf(Error);
+			if (caughtError instanceof Error) {
+				expect(caughtError.message).toContain('Invalid --audience "invalid"');
+				expect(caughtError.message).toContain("human, agent, both");
+			}
+		});
+
+		test("handleCheck with --audience agent runs without error and filters messages", async () => {
+			output = "";
+			// Existing messages (seeded in beforeEach) have no audience field set.
+			// Filtering by "agent" will exclude them (undefined !== "agent").
+			await mailCommand(["check", "--agent", "builder-1", "--audience", "agent"]);
+
+			// No messages match the audience filter, so inbox appears empty
+			expect(output).toContain("No new messages");
+		});
+
+		test("handleCheck with invalid --audience throws ValidationError", async () => {
+			let caughtError: unknown;
+			try {
+				await mailCommand(["check", "--agent", "builder-1", "--audience", "robots"]);
+			} catch (err) {
+				caughtError = err;
+			}
+
+			expect(caughtError).toBeInstanceOf(Error);
+			if (caughtError instanceof Error) {
+				expect(caughtError.message).toContain('Invalid --audience "robots"');
+			}
+		});
+
+		test("handleList with --audience both runs without error and filters messages", async () => {
+			output = "";
+			// Existing messages (seeded in beforeEach) have no audience field set.
+			// Filtering by "both" will exclude them (undefined !== "both").
+			await mailCommand(["list", "--audience", "both"]);
+
+			// No messages match the audience filter
+			expect(output).toContain("No messages found");
+		});
+
+		test("handleList with invalid --audience throws ValidationError", async () => {
+			let caughtError: unknown;
+			try {
+				await mailCommand(["list", "--audience", "everyone"]);
+			} catch (err) {
+				caughtError = err;
+			}
+
+			expect(caughtError).toBeInstanceOf(Error);
+			if (caughtError instanceof Error) {
+				expect(caughtError.message).toContain('Invalid --audience "everyone"');
+			}
+		});
+
+		test("MAIL_HELP includes --audience flag documentation", async () => {
+			output = "";
+			await mailCommand(["--help"]);
+
+			expect(output).toContain("--audience <human|agent|both>");
 		});
 	});
 });
