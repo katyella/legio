@@ -81,9 +81,9 @@ function formatQualityGates(config: OverlayConfig): string {
 		"",
 		"Before reporting completion, you MUST pass all quality gates:",
 		"",
-		"1. **Tests:** `bun test` — all tests must pass",
-		"2. **Lint:** `bun run lint` — zero errors",
-		"3. **Typecheck:** `bun run typecheck` — no TypeScript errors",
+		"1. **Tests:** `npm test` — all tests must pass",
+		"2. **Lint:** `npm run lint` — zero errors",
+		"3. **Typecheck:** `npm run typecheck` — no TypeScript errors",
 		`4. **Commit:** all changes committed to your branch (${config.branchName})`,
 		`5. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
 		`6. **Signal completion:** send \`worker_done\` mail to ${config.parentAgent ?? "orchestrator"}: \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
@@ -153,7 +153,9 @@ function formatCanSpawn(config: OverlayConfig): string {
  */
 export async function generateOverlay(config: OverlayConfig): Promise<string> {
 	const templatePath = getTemplatePath();
-	const exists = await access(templatePath).then(() => true).catch(() => false);
+	const exists = await access(templatePath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		throw new AgentError(`Overlay template not found: ${templatePath}`, {

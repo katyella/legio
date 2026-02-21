@@ -3,7 +3,7 @@ import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
 /**
  * External dependency checks.
- * Validates that required CLI tools (git, bun, tmux, bd, mulch) are available
+ * Validates that required CLI tools (git, node, tmux, bd, mulch) are available
  * and that bd has functional CGO support for its Dolt database backend.
  */
 export const checkDependencies: DoctorCheckFn = async (
@@ -12,7 +12,7 @@ export const checkDependencies: DoctorCheckFn = async (
 ): Promise<DoctorCheck[]> => {
 	const requiredTools = [
 		{ name: "git", versionFlag: "--version", required: true },
-		{ name: "bun", versionFlag: "--version", required: true },
+		{ name: "node", versionFlag: "--version", required: true },
 		{ name: "tmux", versionFlag: "-V", required: true },
 		{ name: "bd", versionFlag: "--version", required: true },
 		{ name: "mulch", versionFlag: "--version", required: true },

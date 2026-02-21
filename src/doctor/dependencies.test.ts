@@ -57,7 +57,7 @@ describe("checkDependencies", () => {
 		// Verify we have checks for each required tool
 		const toolNames = checks.map((c) => c.name);
 		expect(toolNames).toContain("git availability");
-		expect(toolNames).toContain("bun availability");
+		expect(toolNames).toContain("node availability");
 		expect(toolNames).toContain("tmux availability");
 		expect(toolNames).toContain("bd availability");
 		expect(toolNames).toContain("mulch availability");
@@ -102,16 +102,16 @@ describe("checkDependencies", () => {
 	test("checks for commonly available tools should pass", async () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
 
-		// git and bun should definitely be available in this environment
+		// git and node should definitely be available in this environment
 		const gitCheck = checks.find((c) => c.name === "git availability");
-		const bunCheck = checks.find((c) => c.name === "bun availability");
+		const nodeCheck = checks.find((c) => c.name === "node availability");
 
 		expect(gitCheck).toBeDefined();
-		expect(bunCheck).toBeDefined();
+		expect(nodeCheck).toBeDefined();
 
 		// These should pass in a normal development environment
 		expect(gitCheck?.status).toBe("pass");
-		expect(bunCheck?.status).toBe("pass");
+		expect(nodeCheck?.status).toBe("pass");
 
 		// Passing checks should include version info
 		if (gitCheck?.status === "pass") {

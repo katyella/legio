@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
 import {
 	buildBashFileGuardScript,
@@ -31,7 +31,9 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "test-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -206,9 +208,7 @@ describe("deployHooks", () => {
 		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const userPrompt = parsed.hooks.UserPromptSubmit[0];
-		expect(userPrompt.hooks[0].command).toContain(
-			"legio mail check --inject --agent mail-agent",
-		);
+		expect(userPrompt.hooks[0].command).toContain("legio mail check --inject --agent mail-agent");
 		expect(userPrompt.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -222,9 +222,7 @@ describe("deployHooks", () => {
 		const parsed = JSON.parse(content);
 		const preCompact = parsed.hooks.PreCompact[0];
 		expect(preCompact.hooks[0].type).toBe("command");
-		expect(preCompact.hooks[0].command).toContain(
-			"legio prime --agent compact-agent --compact",
-		);
+		expect(preCompact.hooks[0].command).toContain("legio prime --agent compact-agent --compact");
 		expect(preCompact.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -341,7 +339,9 @@ describe("deployHooks", () => {
 		await deployHooks(worktreePath, "test-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
-		const exists = await access(outputPath).then(() => true).catch(() => false);
+		const exists = await access(outputPath)
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -382,7 +382,9 @@ describe("deployHooks", () => {
 
 		// Successful deployment proves the template exists
 		await deployHooks(worktreePath, "template-exists");
-		const exists = await access(join(worktreePath, ".claude", "settings.local.json")).then(() => true).catch(() => false);
+		const exists = await access(join(worktreePath, ".claude", "settings.local.json"))
+			.then(() => true)
+			.catch(() => false);
 		expect(exists).toBe(true);
 	});
 
@@ -875,8 +877,8 @@ describe("buildBashFileGuardScript", () => {
 		expect(script).toContain("git log");
 		expect(script).toContain("git diff");
 		expect(script).toContain("mulch ");
-		expect(script).toContain("bun test");
-		expect(script).toContain("bun run lint");
+		expect(script).toContain("npm test");
+		expect(script).toContain("npm run lint");
 	});
 
 	test("includes dangerous command pattern checks", () => {
@@ -904,12 +906,6 @@ describe("buildBashFileGuardScript", () => {
 		}
 	});
 
-	test("blocks bun install and bun add", () => {
-		const script = buildBashFileGuardScript("scout");
-		expect(script).toContain("bun\\s+install");
-		expect(script).toContain("bun\\s+add");
-	});
-
 	test("blocks npm install", () => {
 		const script = buildBashFileGuardScript("scout");
 		expect(script).toContain("npm\\s+install");
@@ -926,19 +922,14 @@ describe("buildBashFileGuardScript", () => {
 		expect(script).toContain(">>");
 	});
 
-	test("blocks bun -e eval execution", () => {
-		const script = buildBashFileGuardScript("scout");
-		expect(script).toContain("bun\\s+-e");
-	});
-
 	test("blocks node -e eval execution", () => {
 		const script = buildBashFileGuardScript("scout");
 		expect(script).toContain("node\\s+-e");
 	});
 
-	test("blocks runtime eval flags (bun --eval, deno eval, python -c, perl -e, ruby -e)", () => {
+	test("blocks runtime eval flags (node --eval, deno eval, python -c, perl -e, ruby -e)", () => {
 		const script = buildBashFileGuardScript("scout");
-		expect(script).toContain("bun\\s+--eval");
+		expect(script).toContain("node\\s+--eval");
 		expect(script).toContain("deno\\s+eval");
 		expect(script).toContain("python3?\\s+-c");
 		expect(script).toContain("perl\\s+-e");
@@ -1067,7 +1058,10 @@ describe("structural enforcement integration", () => {
 			join(builderPath, ".claude", "settings.local.json"),
 			"utf-8",
 		);
-		const mergerContent = await readFile(join(mergerPath, ".claude", "settings.local.json"), "utf-8");
+		const mergerContent = await readFile(
+			join(mergerPath, ".claude", "settings.local.json"),
+			"utf-8",
+		);
 
 		const builderPreToolUse = JSON.parse(builderContent).hooks.PreToolUse;
 		const mergerPreToolUse = JSON.parse(mergerContent).hooks.PreToolUse;

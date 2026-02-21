@@ -80,11 +80,7 @@ const DANGEROUS_BASH_PATTERNS = [
 	"\\bgit\\s+rebase\\b",
 	"\\bgit\\s+stash\\b",
 	"\\bnpm\\s+install\\b",
-	"\\bbun\\s+install\\b",
-	"\\bbun\\s+add\\b",
 	// Runtime eval flags — bypass shell pattern guards by executing JS/Python directly
-	"\\bbun\\s+-e\\b",
-	"\\bbun\\s+--eval\\b",
 	"\\bnode\\s+-e\\b",
 	"\\bnode\\s+--eval\\b",
 	"\\bdeno\\s+eval\\b",
@@ -108,10 +104,10 @@ const SAFE_BASH_PREFIXES = [
 	"git blame",
 	"git branch",
 	"mulch ",
-	"bun test",
-	"bun run lint",
-	"bun run typecheck",
-	"bun run biome",
+	"npm test",
+	"npm run lint",
+	"npm run typecheck",
+	"npx biome",
 ];
 
 /** Hook entry shape matching Claude Code's settings.local.json format. */
@@ -437,10 +433,7 @@ export function getCapabilityGuards(capability: string): HookEntry[] {
 	// Block Claude Code native team/task tools for ALL legio agents.
 	// Agents must use `legio sling` for delegation, not native Task/Team tools.
 	const teamToolGuards = NATIVE_TEAM_TOOLS.map((tool) =>
-		blockGuard(
-			tool,
-			`Legio agents must use 'legio sling' for delegation — ${tool} is not allowed`,
-		),
+		blockGuard(tool, `Legio agents must use 'legio sling' for delegation — ${tool} is not allowed`),
 	);
 	guards.push(...teamToolGuards);
 
@@ -490,7 +483,9 @@ export async function deployHooks(
 	capability = "builder",
 ): Promise<void> {
 	const templatePath = getTemplatePath();
-	const exists = await access(templatePath).then(() => true).catch(() => false);
+	const exists = await access(templatePath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		throw new AgentError(`Hooks template not found: ${templatePath}`, {
