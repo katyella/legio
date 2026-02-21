@@ -16,7 +16,6 @@ export const appState = {
 	audit: signal([]),
 	config: signal(null),
 	status: signal(null),
-	autopilot: signal(null),
 	connected: signal(false),
 	lastUpdated: signal(null),
 	selectedAgent: signal(null),

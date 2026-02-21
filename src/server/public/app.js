@@ -13,7 +13,6 @@ import { CostsView } from './views/costs.js';
 import { connectWS } from './lib/ws.js';
 import { fetchJson } from './lib/api.js';
 import { timeAgo } from './lib/utils.js';
-import { AutopilotView } from './views/autopilot.js';
 import { SetupView } from './views/setup.js';
 import { StrategyView } from './views/strategy.js';
 import { SpawnDialog } from './components/spawn-dialog.js';
@@ -63,7 +62,6 @@ function Router({ view, param }) {
 		case 'costs':     return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
 		case 'issues':    return html`<${IssuesView} issues=${appState.issues.value} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
-		case 'autopilot': return html`<${AutopilotView} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
 		default:          return html`<${CommandView} />`;
 	}
@@ -77,7 +75,6 @@ const NAV_LINKS = [
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
 	{ href: '#issues',    label: 'Issues',    view: 'issues' },
 	{ href: '#strategy',  label: 'Strategy',  view: 'strategy' },
-	{ href: '#autopilot', label: 'Autopilot', view: 'autopilot' },
 ];
 
 function Layout({ view, param }) {

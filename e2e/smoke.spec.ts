@@ -121,8 +121,8 @@ function isActionablePageError(message: string): boolean {
 // ---------------------------------------------------------------------------
 
 // Current SPA routes (as of app.js NAV_LINKS):
-// #command (main view), #dashboard, #costs, #issues, #strategy, #autopilot
-const ROUTES = ["command", "dashboard", "costs", "issues", "strategy", "autopilot"] as const;
+// #command (main view), #dashboard, #costs, #issues, #strategy
+const ROUTES = ["command", "dashboard", "costs", "issues", "strategy"] as const;
 
 /**
  * Single test covering all SPA routes. Using one test avoids repeated

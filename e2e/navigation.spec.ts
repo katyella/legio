@@ -27,7 +27,7 @@ test("renders a nav bar with all expected links", async ({ page, serverUrl }) =>
 	await page.goto(serverUrl);
 	await waitForApp(page);
 
-	const expectedLabels = ["Chat", "Dashboard", "Events", "Costs", "Issues", "Terminal", "Autopilot"];
+	const expectedLabels = ["Chat", "Dashboard", "Events", "Costs", "Issues", "Terminal"];
 
 	for (const label of expectedLabels) {
 		const link = page.locator("nav a", { hasText: label });
@@ -93,12 +93,6 @@ test("navigates to Issues view via #issues hash", async ({ page, serverUrl }) =>
 
 test("navigates to Terminal view via #terminal hash", async ({ page, serverUrl }) => {
 	await page.goto(`${serverUrl}#terminal`);
-	await waitForApp(page);
-	await expect(page.locator("nav")).toBeVisible();
-});
-
-test("navigates to Autopilot view via #autopilot hash", async ({ page, serverUrl }) => {
-	await page.goto(`${serverUrl}#autopilot`);
 	await waitForApp(page);
 	await expect(page.locator("nav")).toBeVisible();
 });
