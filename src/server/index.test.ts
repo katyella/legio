@@ -11,49 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
-import type { AutopilotInstance } from "../autopilot/daemon.ts";
-import type { AutopilotState } from "../types.ts";
 import { createServer } from "./index.ts";
 
 let tempDir: string;
-
-function makeMockAutopilot(): AutopilotInstance & { startCalls: number; stopCalls: number } {
-	let startCalls = 0;
-	let stopCalls = 0;
-	const state: AutopilotState = {
-		running: false,
-		startedAt: null,
-		stoppedAt: null,
-		lastTick: null,
-		tickCount: 0,
-		actions: [],
-		config: {
-			intervalMs: 10_000,
-			autoMerge: true,
-			autoCleanWorktrees: false,
-			maxActionsLog: 100,
-		},
-	};
-	return {
-		get startCalls() {
-			return startCalls;
-		},
-		get stopCalls() {
-			return stopCalls;
-		},
-		start() {
-			startCalls++;
-			state.running = true;
-		},
-		stop() {
-			stopCalls++;
-			state.running = false;
-		},
-		getState() {
-			return { ...state, actions: [...state.actions], config: { ...state.config } };
-		},
-	};
-}
 
 beforeEach(async () => {
 	tempDir = await mkdtemp(join(tmpdir(), "server-test-"));
@@ -193,58 +153,14 @@ describe("createServer", () => {
 		// Use 127.0.0.1 explicitly to avoid IPv4/IPv6 ambiguity: on macOS, 'localhost'
 		// may resolve to ::1 for one call and 127.0.0.1 for another, causing both servers
 		// to bind to different addresses and not conflict.
-		const server1 = await createServer(
-			{ port: 0, host: "127.0.0.1", root: tempDir, noAutopilot: true },
-			{ _autopilot: makeMockAutopilot() },
-		);
+		const server1 = await createServer({ port: 0, host: "127.0.0.1", root: tempDir });
 		try {
 			await expect(
-				createServer(
-					{ port: server1.port, host: "127.0.0.1", root: tempDir, noAutopilot: true },
-					{ _autopilot: makeMockAutopilot() },
-				),
+				createServer({ port: server1.port, host: "127.0.0.1", root: tempDir }),
 			).rejects.toThrow();
 		} finally {
 			server1.stop(true);
 		}
-	});
-});
-
-describe("autopilot auto-start", () => {
-	it("calls autopilot.start() by default", async () => {
-		const mockAutopilot = makeMockAutopilot();
-		const server = await createServer(
-			{ port: 0, host: "localhost", root: tempDir },
-			{ _autopilot: mockAutopilot },
-		);
-		try {
-			expect(mockAutopilot.startCalls).toBe(1);
-		} finally {
-			server.stop(true);
-		}
-	});
-
-	it("does NOT call autopilot.start() when noAutopilot: true", async () => {
-		const mockAutopilot = makeMockAutopilot();
-		const server = await createServer(
-			{ port: 0, host: "localhost", root: tempDir, noAutopilot: true },
-			{ _autopilot: mockAutopilot },
-		);
-		try {
-			expect(mockAutopilot.startCalls).toBe(0);
-		} finally {
-			server.stop(true);
-		}
-	});
-
-	it("calls autopilot.stop() when server is stopped", async () => {
-		const mockAutopilot = makeMockAutopilot();
-		const server = await createServer(
-			{ port: 0, host: "localhost", root: tempDir },
-			{ _autopilot: mockAutopilot },
-		);
-		server.stop(true);
-		expect(mockAutopilot.stopCalls).toBe(1);
 	});
 });
 

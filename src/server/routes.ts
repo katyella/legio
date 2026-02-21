@@ -10,7 +10,6 @@ import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AutopilotInstance } from "../autopilot/daemon.ts";
 import { createBeadsClient } from "../beads/client.ts";
 import { gatherInspectData } from "../commands/inspect.ts";
 import { gatherStatus } from "../commands/status.ts";
@@ -216,7 +215,6 @@ export async function handleApiRequest(
 	request: Request,
 	legioDir: string,
 	projectRoot: string,
-	autopilot?: AutopilotInstance | null,
 	wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
 ): Promise<Response> {
 	const url = new URL(request.url);
@@ -270,7 +268,9 @@ export async function handleApiRequest(
 		const audienceDefault = isHumanSender ? "both" : "agent";
 		const audienceRaw = typeof obj.audience === "string" ? obj.audience : audienceDefault;
 		const validAudiences: readonly string[] = ["human", "agent", "both"];
-		const audience = (validAudiences.includes(audienceRaw) ? audienceRaw : audienceDefault) as MailAudience;
+		const audience = (
+			validAudiences.includes(audienceRaw) ? audienceRaw : audienceDefault
+		) as MailAudience;
 
 		const dbPath = join(legioDir, "mail.db");
 		const store = createMailStore(dbPath);
@@ -337,26 +337,6 @@ export async function handleApiRequest(
 		}
 
 		return jsonResponse({ ok: true });
-	}
-
-	// -------------------------------------------------------------------------
-	// Autopilot — POST routes (before the GET-only guard)
-	// -------------------------------------------------------------------------
-
-	if (path === "/api/autopilot/start" && request.method === "POST") {
-		if (!autopilot) {
-			return errorResponse("Autopilot not available", 404);
-		}
-		autopilot.start();
-		return jsonResponse(autopilot.getState());
-	}
-
-	if (path === "/api/autopilot/stop" && request.method === "POST") {
-		if (!autopilot) {
-			return errorResponse("Autopilot not available", 404);
-		}
-		autopilot.stop();
-		return jsonResponse(autopilot.getState());
 	}
 
 	// -------------------------------------------------------------------------
@@ -1182,17 +1162,6 @@ export async function handleApiRequest(
 			agent: agentName,
 			timestamp: new Date().toISOString(),
 		});
-	}
-
-	// -------------------------------------------------------------------------
-	// Autopilot — GET route
-	// -------------------------------------------------------------------------
-
-	if (path === "/api/autopilot/status") {
-		if (!autopilot) {
-			return errorResponse("Autopilot not available", 404);
-		}
-		return jsonResponse(autopilot.getState());
 	}
 
 	// -------------------------------------------------------------------------

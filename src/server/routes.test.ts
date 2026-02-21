@@ -826,7 +826,6 @@ describe("POST /api/mail/send", () => {
 			}),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 
@@ -850,7 +849,6 @@ describe("POST /api/mail/send", () => {
 			}),
 			legioDir,
 			projectRoot,
-			undefined,
 			null,
 		);
 		expect(res.status).toBe(201);
@@ -866,8 +864,6 @@ describe("POST /api/mail/send", () => {
 			}),
 			legioDir,
 			projectRoot,
-			undefined,
-			undefined,
 		);
 		expect(res.status).toBe(201);
 	});
@@ -1837,132 +1833,6 @@ describe("Unknown /api/* path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Autopilot routes
-// ---------------------------------------------------------------------------
-
-import type { AutopilotInstance } from "../autopilot/daemon.ts";
-import type { AutopilotState } from "../types.ts";
-
-function makeAutopilot(initial?: Partial<AutopilotState>): AutopilotInstance {
-	const state: AutopilotState = {
-		running: false,
-		startedAt: null,
-		stoppedAt: null,
-		lastTick: null,
-		tickCount: 0,
-		actions: [],
-		config: {
-			intervalMs: 10_000,
-			autoMerge: true,
-			autoCleanWorktrees: false,
-			maxActionsLog: 100,
-		},
-		...initial,
-	};
-	return {
-		start() {
-			state.running = true;
-			state.startedAt = new Date().toISOString();
-		},
-		stop() {
-			state.running = false;
-			state.stoppedAt = new Date().toISOString();
-		},
-		getState() {
-			return { ...state, actions: [...state.actions], config: { ...state.config } };
-		},
-	};
-}
-
-describe("GET /api/autopilot/status", () => {
-	it("returns autopilot state when autopilot is provided", async () => {
-		const ap = makeAutopilot();
-		const res = await handleApiRequest(
-			makeRequest("/api/autopilot/status"),
-			legioDir,
-			projectRoot,
-			ap,
-		);
-		expect(res.status).toBe(200);
-		const body = (await json(res)) as AutopilotState;
-		expect(typeof body.running).toBe("boolean");
-		expect(body.running).toBe(false);
-		expect(Array.isArray(body.actions)).toBe(true);
-	});
-
-	it("returns 404 when no autopilot instance is provided", async () => {
-		const res = await handleApiRequest(
-			makeRequest("/api/autopilot/status"),
-			legioDir,
-			projectRoot,
-			null,
-		);
-		expect(res.status).toBe(404);
-	});
-
-	it("returns 404 when autopilot is undefined", async () => {
-		const res = await handleApiRequest(
-			makeRequest("/api/autopilot/status"),
-			legioDir,
-			projectRoot,
-			undefined,
-		);
-		expect(res.status).toBe(404);
-	});
-});
-
-describe("POST /api/autopilot/start", () => {
-	it("starts the autopilot and returns new state", async () => {
-		const ap = makeAutopilot({ running: false });
-		const res = await handleApiRequest(
-			makePostRequest("/api/autopilot/start", {}),
-			legioDir,
-			projectRoot,
-			ap,
-		);
-		expect(res.status).toBe(200);
-		const body = (await json(res)) as AutopilotState;
-		expect(body.running).toBe(true);
-	});
-
-	it("returns 404 when no autopilot instance is provided", async () => {
-		const res = await handleApiRequest(
-			makePostRequest("/api/autopilot/start", {}),
-			legioDir,
-			projectRoot,
-			null,
-		);
-		expect(res.status).toBe(404);
-	});
-});
-
-describe("POST /api/autopilot/stop", () => {
-	it("stops the autopilot and returns new state", async () => {
-		const ap = makeAutopilot({ running: true, startedAt: new Date().toISOString() });
-		ap.start(); // ensure it's started
-		const res = await handleApiRequest(
-			makePostRequest("/api/autopilot/stop", {}),
-			legioDir,
-			projectRoot,
-			ap,
-		);
-		expect(res.status).toBe(200);
-		const body = (await json(res)) as AutopilotState;
-		expect(body.running).toBe(false);
-	});
-
-	it("returns 404 when no autopilot instance is provided", async () => {
-		const res = await handleApiRequest(
-			makePostRequest("/api/autopilot/stop", {}),
-			legioDir,
-			projectRoot,
-			null,
-		);
-		expect(res.status).toBe(404);
-	});
-});
-
-// ---------------------------------------------------------------------------
 // Setup routes
 // ---------------------------------------------------------------------------
 
@@ -2107,7 +1977,6 @@ describe("POST /api/coordinator/start", () => {
 			makePostRequest("/api/coordinator/start", {}),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 
@@ -2157,7 +2026,6 @@ describe("POST /api/coordinator/stop", () => {
 			makePostRequest("/api/coordinator/stop", {}),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 
@@ -2258,7 +2126,6 @@ describe("POST /api/agents/spawn", () => {
 			}),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 
@@ -2329,7 +2196,6 @@ describe("POST /api/merge", () => {
 			makePostRequest("/api/merge", { branch: "legio/some-agent/task-1" }),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 
@@ -2392,7 +2258,6 @@ describe("POST /api/nudge", () => {
 			makePostRequest("/api/nudge", { agent: "my-builder", message: "hey" }),
 			legioDir,
 			projectRoot,
-			undefined,
 			mockWsManager,
 		);
 

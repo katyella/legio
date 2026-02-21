@@ -4,7 +4,6 @@ import * as http from "node:http";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
-import { createAutopilot, type AutopilotInstance } from "../autopilot/daemon.ts";
 import { createWebSocketManager, type WebSocketData } from "./websocket.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,13 +14,10 @@ export interface ServerOptions {
 	root: string; // Project root directory
 	shouldOpen?: boolean; // Auto-open browser
 	autoStartCoordinator?: boolean; // Auto-start coordinator with --watchdog on server start
-	noAutopilot?: boolean; // Opt-out of autopilot auto-start
 }
 
 /** Dependency injection for testing. */
 export interface ServerDeps {
-	/** Inject a custom autopilot instance (for testing). */
-	_autopilot?: AutopilotInstance;
 	/** Inject a custom coordinator start function (for testing). */
 	_tryStartCoordinator?: (root: string) => Promise<void>;
 }
@@ -112,18 +108,15 @@ async function tryStartCoordinator(root: string): Promise<void> {
  * Create and return a server instance without blocking.
  * Exported for testing; production code should use startServer().
  */
-export async function createServer(options: ServerOptions, deps?: ServerDeps): Promise<ServerInstance> {
+export async function createServer(
+	options: ServerOptions,
+	deps?: ServerDeps,
+): Promise<ServerInstance> {
 	const { port, host, root } = options;
 	const legioDir = join(root, ".legio");
 	const publicDir = join(__dirname, "public");
 
-	const autopilot = deps?._autopilot ?? createAutopilot(root);
-
-	if (!options.noAutopilot) {
-		autopilot.start();
-	}
-
-	const wsManager = createWebSocketManager(legioDir, () => autopilot.getState());
+	const wsManager = createWebSocketManager(legioDir);
 
 	const httpServer = http.createServer(async (req, res) => {
 		try {
@@ -146,8 +139,7 @@ export async function createServer(options: ServerOptions, deps?: ServerDeps): P
 							req: Request,
 							legioDir: string,
 							root: string,
-							autopilot?: import("../autopilot/daemon.ts").AutopilotInstance | null,
-						wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
+							wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
 						): Promise<Response>;
 					};
 					const { handleApiRequest } = (await import("./routes.ts")) as RoutesModule;
@@ -170,7 +162,7 @@ export async function createServer(options: ServerOptions, deps?: ServerDeps): P
 						body: body.length > 0 ? body.toString("utf8") : undefined,
 					});
 
-					const webRes = await handleApiRequest(webReq, legioDir, root, autopilot, wsManager);
+					const webRes = await handleApiRequest(webReq, legioDir, root, wsManager);
 					await sendWebResponse(webRes, res);
 				} catch (err) {
 					const message = err instanceof Error ? err.message : "Internal server error";
@@ -262,7 +254,6 @@ export async function createServer(options: ServerOptions, deps?: ServerDeps): P
 	return {
 		port: actualPort,
 		stop(_force?: boolean) {
-			autopilot.stop();
 			wsManager.stopPolling();
 			wss.close();
 			httpServer.close();
