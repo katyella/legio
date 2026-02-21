@@ -72,6 +72,7 @@ function Column({ title, issues, borderClass }) {
 export function IssuesView() {
 	// null = show all priorities
 	const [priorityFilter, setPriorityFilter] = useState(null);
+	const [showClosed, setShowClosed] = useState(true);
 
 	// Read from signal (establishes subscription if auto-tracking works)
 	const signalIssues = appState.issues.value;
@@ -103,7 +104,8 @@ export function IssuesView() {
 	const filtered =
 		priorityFilter == null ? issues : issues.filter((i) => i.priority === priorityFilter);
 
-	const { open, inProgress, blocked, closed } = categorize(filtered);
+	const visibleIssues = showClosed ? filtered : filtered.filter(i => i.status !== "closed");
+	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
 
 	const filterButtons = [null, 0, 1, 2, 3, 4];
 
@@ -126,6 +128,16 @@ export function IssuesView() {
 						</button>
 					`;
 				})}
+				<div class="ml-2 pl-2 border-l border-[#2a2a2a]">
+					<button
+						class=${showClosed
+							? "px-2 py-1 text-xs rounded-sm border border-green-700 text-green-400 bg-green-900/20"
+							: "px-2 py-1 text-xs rounded-sm border border-[#2a2a2a] text-[#999] hover:border-[#444]"}
+						onClick=${() => setShowClosed(!showClosed)}
+					>
+						${showClosed ? "Hide Closed" : "Show Closed"}
+					</button>
+				</div>
 			</div>
 
 			<!-- Kanban board -->
@@ -145,13 +157,25 @@ export function IssuesView() {
 function renderIssueCardHtml(issue) {
 	const borderColor = priorityBorderHex[issue.priority] ?? "#6b7280";
 	const hasBlockedBy = Array.isArray(issue.blockedBy) && issue.blockedBy.length > 0;
+	const isClosed = issue.status === "closed";
+	const opacityClass = isClosed ? " opacity-50" : "";
+	const idColorClass = hasBlockedBy ? "text-red-400" : "text-[#999]";
+	const blockedIcon = hasBlockedBy ? `<span class="text-xs">⚠️</span> ` : "";
+	const closedBadge = isClosed ? `<span class="text-xs bg-green-900/40 text-green-400 rounded px-1 ml-1">Closed</span>` : "";
+	const titleClass = isClosed ? "line-through" : "";
+	const closeReasonHtml = isClosed && issue.closeReason
+		? `<div class="text-[#666] text-xs mb-1 italic">${escapeHtml(truncate(issue.closeReason, 80))}</div>`
+		: "";
 	return `
-		<div class="bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3" style="border-left-color: ${borderColor}">
+		<div class="bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${opacityClass}" style="border-left-color: ${borderColor}">
 			<div class="flex items-start justify-between gap-2 mb-1">
-				<span class="text-[#999] text-xs font-mono">${escapeHtml(issue.id || "")}</span>
+				<span class="flex items-center gap-1">
+					${blockedIcon}<span class="${idColorClass} text-xs font-mono">${escapeHtml(issue.id || "")}</span>${closedBadge}
+				</span>
 				${issue.priority != null ? `<span class="text-[#999] text-xs">P${issue.priority}</span>` : ""}
 			</div>
-			<div class="text-[#e5e5e5] font-medium text-sm mb-1">${escapeHtml(truncate(issue.title || "", 60))}</div>
+			<div class="text-[#e5e5e5] font-medium text-sm mb-1 ${titleClass}">${escapeHtml(truncate(issue.title || "", 60))}</div>
+			${closeReasonHtml}
 		${issue.description ? `<div class="text-[#999] text-xs mb-2 leading-relaxed">${escapeHtml(truncate(issue.description, 120))}</div>` : ""}
 			<div class="flex items-center gap-2 flex-wrap">
 				${issue.type ? `<span class="text-xs bg-[#2a2a2a] rounded px-1 text-[#999]">${escapeHtml(issue.type)}</span>` : ""}
@@ -179,13 +203,15 @@ function renderColumnHtml(title, issues, borderClass) {
 window.renderIssues = function (appState, el) {
 	const issues = appState.issues || [];
 	const priorityFilter = el.dataset.priorityFilter || "all";
+	const showClosed = el.dataset.showClosed !== "false";
 
 	const filtered =
 		priorityFilter === "all"
 			? issues
 			: issues.filter((i) => String(i.priority) === priorityFilter);
 
-	const { open, inProgress, blocked, closed } = categorize(filtered);
+	const visibleIssues = showClosed ? filtered : filtered.filter(i => i.status !== "closed");
+	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
 
 	const filterButtons = [
 		{ key: "all", label: "All" },
@@ -206,6 +232,12 @@ window.renderIssues = function (appState, el) {
 		})
 		.join("");
 
+	const closedToggleCls = showClosed
+		? "border-green-700 text-green-400 bg-green-900/20"
+		: "border-[#2a2a2a] text-[#999]";
+	const closedToggleLabel = showClosed ? "Hide Closed" : "Show Closed";
+	const closedToggleHtml = `<div class="ml-2 pl-2 border-l border-[#2a2a2a]"><button class="px-2 py-1 text-xs rounded-sm border ${closedToggleCls}" data-toggle-closed="true">${closedToggleLabel}</button></div>`;
+
 	const columnsHtml = [
 		renderColumnHtml("Open", open, "border-blue-500"),
 		renderColumnHtml("In Progress", inProgress, "border-yellow-500"),
@@ -215,7 +247,7 @@ window.renderIssues = function (appState, el) {
 
 	el.innerHTML = `
 		<div class="p-4">
-			<div class="flex items-center gap-2 mb-4">${filterBtnsHtml}</div>
+			<div class="flex items-center gap-2 mb-4">${filterBtnsHtml}${closedToggleHtml}</div>
 			<div class="flex gap-4 overflow-x-auto pb-4">${columnsHtml}</div>
 		</div>`;
 
@@ -223,6 +255,14 @@ window.renderIssues = function (appState, el) {
 	el.querySelectorAll("button[data-priority]").forEach((btn) => {
 		btn.addEventListener("click", () => {
 			el.dataset.priorityFilter = btn.getAttribute("data-priority") || "all";
+			window.renderIssues(appState, el);
+		});
+	});
+
+	// Wire up show/hide closed toggle
+	el.querySelectorAll("button[data-toggle-closed]").forEach((btn) => {
+		btn.addEventListener("click", () => {
+			el.dataset.showClosed = showClosed ? "false" : "true";
 			window.renderIssues(appState, el);
 		});
 	});
