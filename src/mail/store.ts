@@ -45,7 +45,6 @@ interface MessageRow {
 	audience: string;
 	thread_id: string | null;
 	payload: string | null;
-	audience: string;
 	read: number;
 	created_at: string;
 }
@@ -65,7 +64,6 @@ CREATE TABLE IF NOT EXISTS messages (
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
-  audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both')),
   read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`;
@@ -110,7 +108,7 @@ function migrateSchema(db: InstanceType<typeof Database>): void {
 	// If only missing the audience column (other constraints already correct), use ALTER TABLE
 	if (hasCheckConstraints && hasProtocolTypes && !hasAudienceColumn) {
 		db.exec(
-			"ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both'))",
+			"ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'agent' CHECK(audience IN ('human','agent','both'))",
 		);
 		return;
 	}
@@ -137,20 +135,20 @@ CREATE TABLE messages (
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
-  audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both')),
   read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
-		// Copy data, mapping invalid types to 'status'. Old tables may not have payload column.
+		// Copy data, mapping invalid types to 'status'. Old tables may not have payload/audience columns.
 		const oldHasPayload = row.sql.includes("payload");
 		const payloadSelect = oldHasPayload ? "payload" : "NULL";
+		const oldHasAudience = row.sql.includes("audience");
+		const audienceSelect = oldHasAudience ? "audience" : "'agent'";
 		db.exec(`
 INSERT INTO messages (id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, audience, read, created_at)
 SELECT id, from_agent, to_agent, subject, body,
   CASE WHEN type IN (${validTypes}) THEN type ELSE 'status' END,
-  'agent',
   CASE WHEN priority IN ('low','normal','high','urgent') THEN priority ELSE 'normal' END,
-  thread_id, ${payloadSelect}, 'both', read, created_at
+  thread_id, ${payloadSelect}, ${audienceSelect}, read, created_at
 FROM messages_old`);
 		db.exec("DROP TABLE messages_old");
 		db.exec("COMMIT");
@@ -192,7 +190,6 @@ function rowToMessage(row: MessageRow): MailMessage {
 		priority: row.priority as MailMessage["priority"],
 		threadId: row.thread_id,
 		payload: row.payload,
-		audience: row.audience as MailMessage["audience"],
 		read: row.read === 1,
 		createdAt: row.created_at,
 	};
@@ -289,7 +286,7 @@ export function createMailStore(dbPath: string): MailStore {
 			const id = message.id || `msg-${randomId()}`;
 			const createdAt = new Date().toISOString();
 			const payload = message.payload ?? null;
-			const audience = message.audience ?? "both";
+			const audience = message.audience ?? "agent";
 
 			try {
 				insertStmt.run({
@@ -303,7 +300,6 @@ export function createMailStore(dbPath: string): MailStore {
 					priority: message.priority,
 					thread_id: message.threadId,
 					payload,
-					audience,
 					read: 0,
 					created_at: createdAt,
 				});

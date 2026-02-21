@@ -172,7 +172,6 @@ export interface MailMessage {
 	audience: MailAudience; // Who should see this message
 	threadId: string | null; // Conversation threading
 	payload: string | null; // JSON-encoded structured data for protocol messages
-	audience: MailAudience; // Intended audience: "human", "agent", or "both"
 	read: boolean;
 	createdAt: string; // ISO timestamp
 }
