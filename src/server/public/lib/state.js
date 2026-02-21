@@ -25,6 +25,8 @@ export const appState = {
 	collapsedThreads: signal(new Set()),
 	coordinator: signal(null),
 	showSpawnDialog: signal(false),
+	chatSessions: signal([]),
+	chatActiveSessionId: signal(null),
 };
 
 export function setConnected(value) {
