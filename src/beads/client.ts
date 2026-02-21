@@ -25,6 +25,7 @@ export interface BeadIssue {
 	blockedBy?: string[];
 	closedAt?: string;
 	closeReason?: string;
+	createdAt?: string;
 }
 
 export interface BeadsClient {
@@ -107,12 +108,15 @@ interface RawBeadIssue {
 	priority: number;
 	issue_type?: string;
 	type?: string;
+	owner?: string;
 	assignee?: string;
 	description?: string;
 	blocks?: string[];
+	blocked_by?: string[];
 	blockedBy?: string[];
 	closed_at?: string;
 	close_reason?: string;
+	created_at?: string;
 }
 
 /**
@@ -126,12 +130,13 @@ function normalizeIssue(raw: RawBeadIssue): BeadIssue {
 		status: raw.status,
 		priority: raw.priority,
 		type: raw.issue_type ?? raw.type ?? "unknown",
-		assignee: raw.assignee,
+		assignee: raw.owner ?? raw.assignee,
 		description: raw.description,
 		blocks: raw.blocks,
-		blockedBy: raw.blockedBy,
+		blockedBy: raw.blocked_by ?? raw.blockedBy,
 		closedAt: raw.closed_at,
 		closeReason: raw.close_reason,
+		createdAt: raw.created_at,
 	};
 }
 

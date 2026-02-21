@@ -43,6 +43,7 @@ function categorize(issues) {
 		const hasBlockers = Array.isArray(issue.blockedBy) && issue.blockedBy.length > 0;
 		if (status === "in_progress") inProgress.push(issue);
 		else if (status === "closed") closed.push(issue);
+		else if (status === "blocked") blocked.push(issue);
 		else if (status === "open" && hasBlockers) blocked.push(issue);
 		else open.push(issue);
 	}

@@ -121,12 +121,12 @@ vi.mock("bun:sqlite", async () => {
 // list/ready return [] (keeps existing /api/issues tests passing).
 // show throws (existing /api/issues/:id test expects 404 on error).
 // create returns a predictable issue ID for strategy approve tests.
-// list returns a closed issue fixture when all=true to verify all-statuses behavior.
+// list returns a closed and a blocked issue fixture when all=true to verify all-statuses behavior.
 vi.mock("../beads/client.ts", () => ({
 	createBeadsClient: () => ({
 		ready: async () => [],
 		list: async (options?: { status?: string; limit?: number; all?: boolean }) => {
-			// Return a closed issue fixture when all is true
+			// Return closed and blocked issue fixtures when all is true
 			if (options?.all) {
 				return [
 					{
@@ -137,6 +137,14 @@ vi.mock("../beads/client.ts", () => ({
 						type: "task",
 						closedAt: "2026-01-01T00:00:00.000Z",
 						closeReason: "Done",
+					},
+					{
+						id: "bead-blocked-001",
+						title: "Blocked issue",
+						status: "blocked",
+						priority: 2,
+						type: "task",
+						dependency_count: 1,
 					},
 				];
 			}
@@ -1272,7 +1280,11 @@ describe("GET /api/metrics/by-model", () => {
 
 		const res = await dispatch("/api/metrics/by-model");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as Array<{ model: string; sessions: number; inputTokens: number }>;
+		const body = (await json(res)) as Array<{
+			model: string;
+			sessions: number;
+			inputTokens: number;
+		}>;
 		expect(body).toHaveLength(2);
 		const opus = body.find((r) => r.model === "claude-opus-4-6");
 		expect(opus?.sessions).toBe(1);
@@ -1389,7 +1401,11 @@ describe("GET /api/metrics/by-date", () => {
 
 		const res = await dispatch("/api/metrics/by-date");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as Array<{ date: string; sessions: number; inputTokens: number }>;
+		const body = (await json(res)) as Array<{
+			date: string;
+			sessions: number;
+			inputTokens: number;
+		}>;
 		expect(body).toHaveLength(2);
 		expect(body[0]?.date).toBe("2026-01-01");
 		expect(body[0]?.sessions).toBe(2);
@@ -1526,17 +1542,33 @@ describe("GET /api/issues", () => {
 		const res = await dispatch("/api/issues");
 		expect(res.status).toBe(200);
 		const body = (await json(res)) as Array<{ status: string }>;
-		// Mock returns a closed issue when all=true
-		expect(body.length).toBe(1);
-		expect(body[0]?.status).toBe("closed");
+		// Mock returns a closed and blocked issue when all=true
+		expect(body.length).toBe(2);
+		const statuses = body.map((i) => i.status);
+		expect(statuses).toContain("closed");
+		expect(statuses).toContain("blocked");
 	});
 
 	it("returns closedAt and closeReason fields on closed issues", async () => {
 		const res = await dispatch("/api/issues");
 		expect(res.status).toBe(200);
-		const body = (await json(res)) as Array<{ closedAt?: string; closeReason?: string }>;
-		expect(body[0]?.closedAt).toBe("2026-01-01T00:00:00.000Z");
-		expect(body[0]?.closeReason).toBe("Done");
+		const body = (await json(res)) as Array<{
+			id: string;
+			closedAt?: string;
+			closeReason?: string;
+		}>;
+		const closedIssue = body.find((i) => i.id === "bead-closed-001");
+		expect(closedIssue?.closedAt).toBe("2026-01-01T00:00:00.000Z");
+		expect(closedIssue?.closeReason).toBe("Done");
+	});
+
+	it("returns blocked issues with status=blocked", async () => {
+		const res = await dispatch("/api/issues");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ id: string; status: string }>;
+		const blockedIssue = body.find((i) => i.id === "bead-blocked-001");
+		expect(blockedIssue).toBeDefined();
+		expect(blockedIssue?.status).toBe("blocked");
 	});
 
 	it("passes all=false to client when ?all=false query param is set", async () => {
