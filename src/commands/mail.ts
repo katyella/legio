@@ -31,6 +31,26 @@ const AUTO_NUDGE_TYPES: ReadonlySet<MailMessageType> = new Set([
 	"merge_failed",
 ]);
 
+/** Valid audience values for mail messages. */
+const VALID_AUDIENCES = ["human", "agent", "both"] as const;
+type MailAudience = (typeof VALID_AUDIENCES)[number];
+
+/**
+ * Protocol message types that default to audience 'agent'.
+ * Semantic types (status, question, result, error) default to 'both'.
+ * Named differently from PROTOCOL_TYPES in client.ts to avoid confusion.
+ */
+const AGENT_AUDIENCE_TYPES: ReadonlySet<string> = new Set([
+	"worker_done",
+	"merge_ready",
+	"merged",
+	"merge_failed",
+	"escalation",
+	"health_check",
+	"dispatch",
+	"assign",
+]);
+
 /**
  * Parse a named flag value from an args array.
  * Returns the value after the flag, or undefined if not present.
@@ -93,6 +113,35 @@ function formatMessage(msg: MailMessage): string {
 		lines.push(`  Payload: ${msg.payload}`);
 	}
 	lines.push(`  ${msg.createdAt}`);
+	return lines.join("\n");
+}
+
+/**
+ * Format messages for injection into agent context (audience-filtered inject path).
+ *
+ * Duplicates the format from client.ts's formatForInjection, needed because that
+ * function is not exported. Used when --audience filtering must only mark matching
+ * messages as read (requires direct store access rather than client.checkInject).
+ */
+function formatMessagesForInjection(messages: MailMessage[]): string {
+	if (messages.length === 0) {
+		return "";
+	}
+	const lines: string[] = [
+		`📬 You have ${messages.length} new message${messages.length === 1 ? "" : "s"}:`,
+		"",
+	];
+	for (const msg of messages) {
+		const priorityTag = msg.priority !== "normal" ? ` [${msg.priority.toUpperCase()}]` : "";
+		lines.push(`--- From: ${msg.from}${priorityTag} (${msg.type}) ---`);
+		lines.push(`Subject: ${msg.subject}`);
+		lines.push(msg.body);
+		if (msg.payload !== null && AGENT_AUDIENCE_TYPES.has(msg.type)) {
+			lines.push(`Payload: ${msg.payload}`);
+		}
+		lines.push(`[Reply with: legio mail reply ${msg.id} --body "..."]`);
+		lines.push("");
+	}
 	return lines.join("\n");
 }
 
@@ -311,6 +360,22 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	const priority = rawPriority as MailMessage["priority"];
 	const audience = rawAudience as MailAudience | undefined;
 
+	// Parse --audience flag (optional, auto-derived from type if not specified)
+	const rawAudience = getFlag(args, "--audience");
+	let audience: MailAudience;
+	if (rawAudience !== undefined) {
+		if (!(VALID_AUDIENCES as readonly string[]).includes(rawAudience)) {
+			throw new ValidationError(
+				`Invalid --audience "${rawAudience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
+				{ field: "audience", value: rawAudience },
+			);
+		}
+		audience = rawAudience as MailAudience;
+	} else {
+		// Auto-derive: protocol types -> "agent", semantic types -> "both"
+		audience = AGENT_AUDIENCE_TYPES.has(type) ? "agent" : "both";
+	}
+
 	// Validate JSON payload if provided
 	let payload: string | undefined;
 	if (rawPayload !== undefined) {
@@ -335,6 +400,20 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 		throw new ValidationError("--body is required for mail send", { field: "body" });
 	}
 
+	// audience field will be added to MailClient.send() by schema-lead (legio-9c89).
+	// Cast to pass audience through until the interface is updated.
+	type SendWithAudience = (msg: {
+		from: string;
+		to: string;
+		subject: string;
+		body: string;
+		type?: MailMessage["type"];
+		priority?: MailMessage["priority"];
+		threadId?: string;
+		payload?: string;
+		audience?: string;
+	}) => string;
+
 	// Handle broadcast messages (group addresses)
 	if (isGroupAddress(to)) {
 		const legioDir = join(cwd, ".legio");
@@ -350,15 +429,15 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			try {
 				// Fan out: send individual message to each recipient
 				for (const recipient of recipients) {
-					const id = client.send({
+					const id = (client.send as SendWithAudience)({
 						from,
 						to: recipient,
 						subject,
 						body,
 						type,
 						priority,
-						audience,
 						payload,
+						audience,
 					});
 					messageIds.push(id);
 
@@ -456,7 +535,16 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	// Single-recipient message (existing logic)
 	const client = openClient(cwd);
 	try {
-		const id = client.send({ from, to, subject, body, type, priority, audience, payload });
+		const id = (client.send as SendWithAudience)({
+			from,
+			to,
+			subject,
+			body,
+			type,
+			priority,
+			payload,
+			audience,
+		});
 
 		// Record mail_sent event to EventStore (fire-and-forget)
 		try {
@@ -570,6 +658,13 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 	const inject = hasFlag(args, "--inject");
 	const json = hasFlag(args, "--json");
 	const debounceFlag = getFlag(args, "--debounce");
+	const audience = getFlag(args, "--audience");
+	if (audience !== undefined && !(VALID_AUDIENCES as readonly string[]).includes(audience)) {
+		throw new ValidationError(
+			`Invalid --audience "${audience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
+			{ field: "audience", value: audience },
+		);
+	}
 
 	// Parse debounce interval if provided
 	let debounceMs: number | undefined;
@@ -598,7 +693,27 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 		if (inject) {
 			// Check for pending nudge markers (written by auto-nudge instead of tmux keys)
 			const pendingNudge = await readAndClearPendingNudge(cwd, agent);
-			const output = client.checkInject(agent);
+			let injectOutput: string;
+
+			if (audience !== undefined) {
+				// Audience-filtered inject: use store directly to mark only filtered messages as read.
+				// This prevents silently consuming messages intended for a different audience.
+				const store = openStore(cwd);
+				try {
+					const allUnread = store.getUnread(agent);
+					const filtered = allUnread.filter(
+						(m) => (m as unknown as Record<string, unknown>).audience === audience,
+					);
+					for (const msg of filtered) {
+						store.markRead(msg.id);
+					}
+					injectOutput = formatMessagesForInjection(filtered);
+				} finally {
+					store.close();
+				}
+			} else {
+				injectOutput = client.checkInject(agent);
+			}
 
 			// Prepend a priority banner if there's a pending nudge
 			if (pendingNudge) {
@@ -606,11 +721,16 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 				process.stdout.write(banner);
 			}
 
-			if (output.length > 0) {
-				process.stdout.write(output);
+			if (injectOutput.length > 0) {
+				process.stdout.write(injectOutput);
 			}
 		} else {
-			const messages = client.check(agent);
+			let messages = client.check(agent);
+			if (audience !== undefined) {
+				messages = messages.filter(
+					(m) => (m as unknown as Record<string, unknown>).audience === audience,
+				);
+			}
 
 			if (json) {
 				process.stdout.write(`${JSON.stringify(messages)}\n`);
@@ -642,10 +762,22 @@ function handleList(args: string[], cwd: string): void {
 	const to = getFlag(args, "--to") ?? getFlag(args, "--agent");
 	const unread = hasFlag(args, "--unread") ? true : undefined;
 	const json = hasFlag(args, "--json");
+	const audience = getFlag(args, "--audience");
+	if (audience !== undefined && !(VALID_AUDIENCES as readonly string[]).includes(audience)) {
+		throw new ValidationError(
+			`Invalid --audience "${audience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
+			{ field: "audience", value: audience },
+		);
+	}
 
 	const client = openClient(cwd);
 	try {
-		const messages = client.list({ from, to, unread });
+		let messages = client.list({ from, to, unread });
+		if (audience !== undefined) {
+			messages = messages.filter(
+				(m) => (m as unknown as Record<string, unknown>).audience === audience,
+			);
+		}
 
 		if (json) {
 			process.stdout.write(`${JSON.stringify(messages)}\n`);
@@ -772,11 +904,13 @@ Subcommands:
            Types: status, question, result, error (semantic)
                   worker_done, merge_ready, merged, merge_failed,
                   escalation, health_check, dispatch, assign (protocol)
+           Audience: defaults to 'agent' for protocol types, 'both' for semantic types
   check    Check inbox (unread messages)
-             [--agent <name>] [--inject] [--json]
+             [--agent <name>] [--audience <human|agent|both>]
+             [--inject] [--json]
   list     List messages with filters
              [--from <name>] [--to <name>] [--agent <name> (alias for --to)]
-             [--unread] [--json]
+             [--audience <human|agent|both>] [--unread] [--json]
   read     Mark a message as read
              <message-id>
   reply    Reply to a message
