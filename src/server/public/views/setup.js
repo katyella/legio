@@ -2,8 +2,8 @@
 // Preact + HTM component for the setup wizard (shown when .legio/ is not initialized).
 // No npm dependencies — uses importmap bare specifiers. Served as a static ES module.
 
-import { html, useState, useCallback } from "../lib/preact-setup.js";
 import { postJson } from "../lib/api.js";
+import { html, useCallback, useState } from "../lib/preact-setup.js";
 
 export function SetupView({ onInitialized, projectRoot }) {
 	const [status, setStatus] = useState("idle"); // idle | loading | success | error
@@ -45,35 +45,49 @@ export function SetupView({ onInitialized, projectRoot }) {
 					and configuration.
 				</p>
 
-				${projectRoot ? html`
+				${
+					projectRoot
+						? html`
 					<div class="mb-6 p-3 bg-[#0f0f0f] border border-[#2a2a2a] rounded">
 						<span class="text-[#555] text-xs uppercase tracking-wider font-medium">Project Root</span>
 						<p class="text-[#ccc] text-xs font-mono mt-1 break-all">${projectRoot}</p>
 					</div>
-				` : null}
+				`
+						: null
+				}
 
-				${status === "success" ? html`
+				${
+					status === "success"
+						? html`
 					<div class="text-green-400 text-sm py-3 text-center">
 						✓ Project initialized successfully. Loading dashboard...
 					</div>
-				` : html`
+				`
+						: html`
 					<button
 						onClick=${handleInit}
 						disabled=${status === "loading"}
-						class=${"w-full py-2.5 px-4 rounded text-sm font-medium transition-colors " +
+						class=${
+							"w-full py-2.5 px-4 rounded text-sm font-medium transition-colors " +
 							(status === "loading"
 								? "bg-[#333] text-[#666] cursor-not-allowed"
-								: "bg-[#E64415] hover:bg-[#cc3a12] text-white cursor-pointer")}
+								: "bg-[#E64415] hover:bg-[#cc3a12] text-white cursor-pointer")
+						}
 					>
 						${status === "loading" ? "Initializing..." : "Initialize Project"}
 					</button>
-				`}
+				`
+				}
 
-				${status === "error" && error ? html`
+				${
+					status === "error" && error
+						? html`
 					<div class="mt-3 p-3 bg-[#2a1010] border border-[#5a2020] rounded text-red-400 text-xs font-mono whitespace-pre-wrap break-all">
 						${error}
 					</div>
-				` : null}
+				`
+						: null
+				}
 			</div>
 		</div>
 	`;

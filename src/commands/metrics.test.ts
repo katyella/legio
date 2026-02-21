@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createMetricsStore } from "../metrics/store.ts";
 import type { SessionMetrics } from "../types.ts";
 import { metricsCommand } from "./metrics.ts";

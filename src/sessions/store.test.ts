@@ -5,10 +5,10 @@
  * Temp files (not :memory:) because file-based migration must be tested.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { AgentSession, AgentState, InsertRun, Run, RunStore } from "../types.ts";
 import { createRunStore, createSessionStore, type SessionStore } from "./store.ts";
 

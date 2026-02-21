@@ -75,10 +75,7 @@ test("GET /api/mail returns 200 with empty array when no mail exists", async ({
 	expect(Array.isArray(body)).toBe(true);
 });
 
-test("GET /api/mail/conversations returns 200 with empty array", async ({
-	request,
-	serverUrl,
-}) => {
+test("GET /api/mail/conversations returns 200 with empty array", async ({ request, serverUrl }) => {
 	const res = await request.get(`${serverUrl}/api/mail/conversations`);
 	expect(res.ok()).toBe(true);
 	const body = await res.json();
@@ -140,10 +137,7 @@ test("POST /api/mail/send returns 400 when required fields are missing", async (
 // Events
 // ---------------------------------------------------------------------------
 
-test("GET /api/events returns 400 when since param is missing", async ({
-	request,
-	serverUrl,
-}) => {
+test("GET /api/events returns 400 when since param is missing", async ({ request, serverUrl }) => {
 	const res = await request.get(`${serverUrl}/api/events`);
 	expect(res.status()).toBe(400);
 });
@@ -153,9 +147,7 @@ test("GET /api/events with since param returns 200 with empty array", async ({
 	serverUrl,
 }) => {
 	const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-	const res = await request.get(
-		`${serverUrl}/api/events?since=${encodeURIComponent(since)}`,
-	);
+	const res = await request.get(`${serverUrl}/api/events?since=${encodeURIComponent(since)}`);
 	expect(res.ok()).toBe(true);
 	const body = await res.json();
 	expect(Array.isArray(body)).toBe(true);

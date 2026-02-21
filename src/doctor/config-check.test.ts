@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describe, expect, test } from "vitest";
 import type { LegioConfig } from "../types.ts";
 import { checkConfig } from "./config-check.ts";
 

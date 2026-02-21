@@ -11,12 +11,11 @@
  *   show <id>     Show run details with agents
  */
 
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type { AgentSession, Run } from "../types.ts";
-import { access, readFile } from "node:fs/promises";
-
 
 const RUN_HELP = `legio run -- Manage runs (coordinator session groupings)
 
@@ -145,7 +144,12 @@ async function showCurrentRun(legioDir: string, json: boolean): Promise<void> {
 async function listRuns(legioDir: string, limit: number, json: boolean): Promise<void> {
 	const dbPath = join(legioDir, "sessions.db");
 	let dbFileExists = false;
-	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	try {
+		await access(dbPath);
+		dbFileExists = true;
+	} catch {
+		/* not found */
+	}
 	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write('{"runs":[]}\n');
@@ -233,7 +237,12 @@ async function completeCurrentRun(legioDir: string, json: boolean): Promise<void
 async function showRun(legioDir: string, runId: string, json: boolean): Promise<void> {
 	const dbPath = join(legioDir, "sessions.db");
 	let dbFileExists = false;
-	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	try {
+		await access(dbPath);
+		dbFileExists = true;
+	} catch {
+		/* not found */
+	}
 	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write(`${JSON.stringify({ run: null, message: `Run ${runId} not found` })}\n`);

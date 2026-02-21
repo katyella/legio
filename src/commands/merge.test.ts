@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {access, mkdir, readFile, writeFile} from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import {
@@ -54,7 +54,10 @@ merge:
 	async function createCleanFeatureBranch(dir: string, branchName: string): Promise<void> {
 		// Only commit base file if it doesn't exist
 		const baseFilePath = join(dir, "src/base.ts");
-		const baseFileExists = await access(baseFilePath).then(() => true, () => false);
+		const baseFileExists = await access(baseFilePath).then(
+			() => true,
+			() => false,
+		);
 		if (!baseFileExists) {
 			await commitFile(dir, "src/base.ts", "base content");
 		}
@@ -458,7 +461,10 @@ merge:
 
 			// Verify defaultBranch was NOT modified (switch back and check)
 			await runGitInDir(repoDir, ["checkout", defaultBranch]);
-			const featureOnDefault = await access(join(repoDir, `src/${branchName}.ts`)).then(() => true, () => false);
+			const featureOnDefault = await access(join(repoDir, `src/${branchName}.ts`)).then(
+				() => true,
+				() => false,
+			);
 			expect(featureOnDefault).toBe(false);
 		});
 

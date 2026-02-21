@@ -5,11 +5,10 @@
  * merge tier distribution, agent utilization.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { createMetricsStore } from "../metrics/store.ts";
-import { access } from "node:fs/promises";
-
 
 /**
  * Parse a named flag value from args.
@@ -68,7 +67,12 @@ export async function metricsCommand(args: string[]): Promise<void> {
 	const dbPath = join(config.project.root, ".legio", "metrics.db");
 
 	let dbFileExists = false;
-	try { await access(dbPath); dbFileExists = true; } catch { /* not found */ }
+	try {
+		await access(dbPath);
+		dbFileExists = true;
+	} catch {
+		/* not found */
+	}
 	if (!dbFileExists) {
 		if (json) {
 			process.stdout.write('{"sessions":[]}\n');

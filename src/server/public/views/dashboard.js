@@ -4,6 +4,7 @@
 
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
+import { agentActivityLog, appState } from "../lib/state.js";
 import {
 	agentColor,
 	groupActivityMessages,
@@ -12,7 +13,6 @@ import {
 	stateIcon,
 	timeAgo,
 } from "../lib/utils.js";
-import { agentActivityLog, appState } from "../lib/state.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -198,22 +198,25 @@ function MergeQueue({ mergeQueue, onRefresh }) {
 		<div class="bg-[#1a1a1a] border-t border-[#2a2a2a] shrink-0">
 			<div class="border-b border-[#2a2a2a] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
 				<span>Merge Queue</span>
-				${pendingEntries.length > 0
-					? html`<button
+				${
+					pendingEntries.length > 0
+						? html`<button
 							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-1 rounded cursor-pointer border-none"
 							onClick=${handleMergeAll}
 							disabled=${mergingAll}
 						>
 							${mergingAll ? "Merging\u2026" : "Merge All"}
 						</button>`
-					: null}
+						: null
+				}
 			</div>
 			<div class="overflow-y-auto max-h-[30vh] p-2 space-y-1">
 				${error ? html`<div class="text-xs text-red-400 mt-1 px-2">${error}</div>` : null}
-				${mergeQueue.length === 0
-					? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">Queue is empty</div>`
-					: mergeQueue.map(
-							(entry) => html`
+				${
+					mergeQueue.length === 0
+						? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">Queue is empty</div>`
+						: mergeQueue.map(
+								(entry) => html`
 								<div
 									key=${entry.agentName + entry.branchName}
 									class="flex items-center gap-2 px-2 py-1 text-xs hover:bg-white/5 rounded-sm"
@@ -226,18 +229,21 @@ function MergeQueue({ mergeQueue, onRefresh }) {
 									<span class="shrink-0 rounded-sm border border-[#2a2a2a] px-1.5 py-0.5 text-gray-400">
 										${entry.status || ""}
 									</span>
-									${entry.status === "pending"
-										? html`<button
+									${
+										entry.status === "pending"
+											? html`<button
 												class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none shrink-0"
 												onClick=${() => handleMergeBranch(entry.branchName)}
 												disabled=${mergingBranch === entry.branchName || mergingAll}
 											>
 												${mergingBranch === entry.branchName ? "\u2026" : "Merge"}
 											</button>`
-										: null}
+											: null
+									}
 								</div>
 							`,
-						)}
+							)
+				}
 			</div>
 		</div>
 	`;
@@ -275,33 +281,29 @@ function AgentRoster({ agents, mail, events }) {
 
 			<!-- Agent list -->
 			<div class="flex-1 overflow-y-auto min-h-0 p-2">
-				${sorted.length === 0
-					? html`
+				${
+					sorted.length === 0
+						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
 							No agents yet
 						</div>
 					`
-					: sorted.map((agent) => {
-							const isExpanded = expandedAgent === agent.agentName;
-							const colors = agentColor(agent.capability);
-							const icon = stateIcon(agent.state);
-							const iconColor = stateColor(agent.state);
+						: sorted.map((agent) => {
+								const isExpanded = expandedAgent === agent.agentName;
+								const colors = agentColor(agent.capability);
+								const icon = stateIcon(agent.state);
+								const iconColor = stateColor(agent.state);
 
-							// Filter mail for this agent
-							const agentMail = mail
-								.filter((m) => m.from === agent.agentName || m.to === agent.agentName)
-								.sort(
-									(a, b) =>
-										new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-								)
-								.slice(0, 5);
+								// Filter mail for this agent
+								const agentMail = mail
+									.filter((m) => m.from === agent.agentName || m.to === agent.agentName)
+									.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+									.slice(0, 5);
 
-							// Filter events for this agent
-							const agentEvents = events
-								.filter((e) => e.agent === agent.agentName)
-								.slice(0, 5);
+								// Filter events for this agent
+								const agentEvents = events.filter((e) => e.agent === agent.agentName).slice(0, 5);
 
-							return html`
+								return html`
 								<div
 									key=${agent.agentName}
 									class="mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden"
@@ -316,19 +318,22 @@ function AgentRoster({ agents, mail, events }) {
 										<span class="text-sm text-[#e5e5e5] truncate flex-1 min-w-0">
 											${agent.agentName}
 										</span>
-										${agent.beadId
-											? html`<span class="text-xs font-mono text-[#666] flex-shrink-0">
+										${
+											agent.beadId
+												? html`<span class="text-xs font-mono text-[#666] flex-shrink-0">
 													${agent.beadId}
 												</span>`
-											: null}
+												: null
+										}
 										<span class="text-xs text-[#444] flex-shrink-0">
 											${isExpanded ? "\u25B2" : "\u25BC"}
 										</span>
 									</div>
 
 									<!-- Expanded detail -->
-									${isExpanded
-										? html`
+									${
+										isExpanded
+											? html`
 											<div class="border-t border-[#2a2a2a] px-3 py-2 text-xs">
 												<!-- Meta badges -->
 												<div class="flex flex-wrap gap-1.5 mb-2">
@@ -342,12 +347,16 @@ function AgentRoster({ agents, mail, events }) {
 													>
 														${icon} ${agent.state}
 													</span>
-													${agent.beadId
-														? html`<span class="font-mono text-[#666]">${agent.beadId}</span>`
-														: null}
-													${agent.startedAt
-														? html`<span class="text-[#555]">started ${timeAgo(agent.startedAt)}</span>`
-														: null}
+													${
+														agent.beadId
+															? html`<span class="font-mono text-[#666]">${agent.beadId}</span>`
+															: null
+													}
+													${
+														agent.startedAt
+															? html`<span class="text-[#555]">started ${timeAgo(agent.startedAt)}</span>`
+															: null
+													}
 												</div>
 
 												<!-- Drill-down link -->
@@ -363,10 +372,11 @@ function AgentRoster({ agents, mail, events }) {
 												<!-- Recent Mail -->
 												<div class="mb-2">
 													<div class="text-[#555] mb-1">Recent Mail</div>
-													${agentMail.length === 0
-														? null
-														: agentMail.map(
-																(m) => html`
+													${
+														agentMail.length === 0
+															? null
+															: agentMail.map(
+																	(m) => html`
 																	<div
 																		key=${m.id}
 																		class="flex items-center gap-1.5 py-0.5 border-b border-[#1f1f1f]"
@@ -385,16 +395,18 @@ function AgentRoster({ agents, mail, events }) {
 																		</span>
 																	</div>
 																`,
-															)}
+																)
+													}
 												</div>
 
 												<!-- Recent Events -->
 												<div>
 													<div class="text-[#555] mb-1">Recent Events</div>
-													${agentEvents.length === 0
-														? null
-														: agentEvents.map(
-																(ev) => html`
+													${
+														agentEvents.length === 0
+															? null
+															: agentEvents.map(
+																	(ev) => html`
 																	<div
 																		key=${ev.id}
 																		class="flex items-center gap-1.5 py-0.5 border-b border-[#1f1f1f]"
@@ -412,18 +424,23 @@ function AgentRoster({ agents, mail, events }) {
 																		</span>
 																	</div>
 																`,
-															)}
+																)
+													}
 												</div>
 
-												${agentMail.length === 0 && agentEvents.length === 0
-													? html`<div class="text-[#444] text-center py-1">No recent activity</div>`
-													: null}
+												${
+													agentMail.length === 0 && agentEvents.length === 0
+														? html`<div class="text-[#444] text-center py-1">No recent activity</div>`
+														: null
+												}
 											</div>
 										`
-										: null}
+											: null
+									}
 								</div>
 							`;
-						})}
+							})
+				}
 			</div>
 		</div>
 	`;
@@ -483,9 +500,8 @@ function CoordinatorChat({ mail }) {
 						!coordMessages.some(
 							(rm) =>
 								rm.body === pm.body &&
-								Math.abs(
-									new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
-								) < 60000,
+								Math.abs(new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime()) <
+									60000,
 						),
 				),
 			);
@@ -643,9 +659,7 @@ function CoordinatorChat({ mail }) {
 		// Check for /command trigger — only when input starts with / and no space yet
 		if (value.startsWith("/") && value.indexOf(" ") === -1) {
 			const filter = value.slice(1).toLowerCase();
-			const filtered = SLASH_COMMANDS.filter(
-				(c) => !filter || c.cmd.slice(1).startsWith(filter),
-			);
+			const filtered = SLASH_COMMANDS.filter((c) => !filter || c.cmd.slice(1).startsWith(filter));
 			if (filtered.length > 0) {
 				setDropdown({ visible: true, items: filtered, selectedIndex: 0, type: "command" });
 				return;
@@ -733,22 +747,23 @@ function CoordinatorChat({ mail }) {
 				ref=${feedRef}
 				onScroll=${handleFeedScroll}
 			>
-				${groupedMessages.length === 0
-					? html`
+				${
+					groupedMessages.length === 0
+						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
 							No coordinator messages yet
 						</div>
 					`
-					: groupedMessages.map((msg) => {
-							const isFromUser = msg.from === "you";
-							const isSending = msg.status === "sending";
-							const isCommand = isFromUser && (msg.body ?? "").startsWith("/");
+						: groupedMessages.map((msg) => {
+								const isFromUser = msg.from === "you";
+								const isSending = msg.status === "sending";
+								const isCommand = isFromUser && (msg.body ?? "").startsWith("/");
 
-							// Agent lifecycle events → compact centered inline card
-							if (msg._isAgentActivity) {
-								const colors = agentColor(msg.capability);
-								const ts = msg.timestamp || msg.createdAt;
-								return html`
+								// Agent lifecycle events → compact centered inline card
+								if (msg._isAgentActivity) {
+									const colors = agentColor(msg.capability);
+									const ts = msg.timestamp || msg.createdAt;
+									return html`
 									<div key=${msg.id}
 										class="mx-auto max-w-[70%] flex items-center gap-1.5 px-3 py-1 mb-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
 										<span class="text-xs leading-none flex-shrink-0">${colors.avatar}</span>
@@ -756,11 +771,11 @@ function CoordinatorChat({ mail }) {
 										<span class="text-xs text-[#444] flex-shrink-0 ml-auto">${timeAgo(ts)}</span>
 									</div>
 								`;
-							}
+								}
 
-							// Protocol messages → compact one-liner
-							if (isActivityMessage(msg)) {
-								return html`
+								// Protocol messages → compact one-liner
+								if (isActivityMessage(msg)) {
+									return html`
 									<div
 										key=${msg.id}
 										class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
@@ -776,10 +791,10 @@ function CoordinatorChat({ mail }) {
 										<span class="shrink-0">${timeAgo(msg.createdAt)}</span>
 									</div>
 								`;
-							}
+								}
 
-							// Conversational messages (left for coord/agents, right for user)
-							return html`
+								// Conversational messages (left for coord/agents, right for user)
+								return html`
 								<div
 									key=${msg.id}
 									class=${`flex ${isFromUser ? "justify-end" : "justify-start"}`}
@@ -795,93 +810,105 @@ function CoordinatorChat({ mail }) {
 									>
 										<div class="flex items-center gap-1 mb-1">
 											<span class="text-xs text-[#999]">
-												${isFromUser ? "You" : (msg.from || "unknown")}
+												${isFromUser ? "You" : msg.from || "unknown"}
 											</span>
 											<span class="text-xs text-[#555]">
-												${isSending
-													? "\u00b7 sending\u2026"
-													: `\u00b7 ${timeAgo(msg.createdAt)}`}
+												${isSending ? "\u00b7 sending\u2026" : `\u00b7 ${timeAgo(msg.createdAt)}`}
 											</span>
 										</div>
 										<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
-											${isCommand
-												? html`<span
+											${
+												isCommand
+													? html`<span
 															class="text-xs px-1 py-0.5 rounded bg-[#2a2a2a] text-[#888] font-mono mr-1"
 														>cmd</span
 													><span class="font-mono">${msg.body || ""}</span>`
-												: (msg.body || "")}
+													: msg.body || ""
+											}
 										</div>
 									</div>
 								</div>
 							`;
-						})}
-				${thinking
-					? html`
+							})
+				}
+				${
+					thinking
+						? html`
 						<div class="flex justify-start">
 							<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
 								<div class="flex items-center gap-1 mb-1">
 									<span class="text-xs text-[#999]">coordinator</span>
 									<span class="text-xs text-[#555] animate-pulse">\u00b7 working\u2026</span>
 								</div>
-								${streamText
-									? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
-									: html`<div class="flex items-center gap-2 text-sm text-[#666]">
+								${
+									streamText
+										? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
+										: html`<div class="flex items-center gap-2 text-sm text-[#666]">
 										<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
-									</div>`}
+									</div>`
+								}
 							</div>
 						</div>
 					`
-					: null}
+						: null
+				}
 			</div>
 
 			<!-- Input area -->
 			<div class="border-t border-[#2a2a2a] p-3 shrink-0">
 				<div class="relative">
-					${dropdown.visible
-						? html`
+					${
+						dropdown.visible
+							? html`
 							<div
 								class="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded shadow-lg max-h-48 overflow-y-auto z-50"
 							>
-								${dropdown.items.map((item, i) =>
-									html`
+								${dropdown.items.map(
+									(item, i) =>
+										html`
 										<div
-											key=${dropdown.type === "mention"
-												? (item.agentName ?? item.name ?? String(i))
-												: item.cmd}
+											key=${
+												dropdown.type === "mention"
+													? (item.agentName ?? item.name ?? String(i))
+													: item.cmd
+											}
 											class=${
 												"flex items-center gap-2 px-3 py-2 cursor-pointer text-sm text-[#e5e5e5] " +
-												(i === dropdown.selectedIndex
-													? "bg-[#E64415]/20"
-													: "hover:bg-[#2a2a2a]")
+												(i === dropdown.selectedIndex ? "bg-[#E64415]/20" : "hover:bg-[#2a2a2a]")
 											}
 											onMouseDown=${(e) => {
 												e.preventDefault();
 												selectDropdownItem(item);
 											}}
 										>
-											${dropdown.type === "mention"
-												? html`
+											${
+												dropdown.type === "mention"
+													? html`
 													<span class="flex-1 font-mono">
 														@${item.agentName ?? item.name ?? ""}
 													</span>
-													${item.capability
-														? html`<span
+													${
+														item.capability
+															? html`<span
 																	class="text-xs px-1.5 py-0.5 rounded bg-[#2a2a2a] text-[#888] shrink-0"
 																>
 																	${item.capability}
 																</span>`
-														: null}
+															: null
+													}
 												`
-												: html`
+													: html`
 													<span class="flex-1 font-mono">${item.cmd}</span>
 													<span class="text-xs text-[#666] shrink-0">${item.desc}</span>
-												`}
+												`
+											}
 										</div>
 									`,
 								)}
 							</div>
 						`
-						: null}
+							: null
+					}
 					<div class="flex gap-2">
 						<input
 							ref=${inputRef}

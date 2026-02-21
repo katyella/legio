@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
 import type { SessionHandoff } from "../types.ts";
 import { loadCheckpoint } from "./checkpoint.ts";
@@ -46,7 +46,11 @@ describe("lifecycle", () => {
 
 		// Handoffs file was created
 		const handoffsPath = join(agentsDir, "builder-1", "handoffs.json");
-		expect(await access(handoffsPath).then(() => true).catch(() => false)).toBe(true);
+		expect(
+			await access(handoffsPath)
+				.then(() => true)
+				.catch(() => false),
+		).toBe(true);
 		const handoffs = JSON.parse(await readFile(handoffsPath, "utf-8")) as SessionHandoff[];
 		expect(handoffs).toHaveLength(1);
 	});

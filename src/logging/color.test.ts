@@ -1,18 +1,22 @@
-import { describe, expect, test } from "vitest";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
+import { describe, expect, test } from "vitest";
 
 // Resolve the project root from this file's location (src/logging/ -> project root)
 const projectRoot = join(dirname(import.meta.dirname), "..");
 
 function makeEnv(overrides: Record<string, string | undefined>): Record<string, string> {
 	const merged = { ...process.env, ...overrides };
-	return Object.fromEntries(
-		Object.entries(merged).filter(([, v]) => v !== undefined),
-	) as Record<string, string>;
+	return Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined)) as Record<
+		string,
+		string
+	>;
 }
 
-async function runBun(code: string, envOverrides: Record<string, string | undefined>): Promise<string> {
+async function runBun(
+	code: string,
+	envOverrides: Record<string, string | undefined>,
+): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const proc = spawn("bun", ["-e", code], {
 			cwd: projectRoot,
@@ -34,7 +38,11 @@ describe("color module", () => {
 	test("colors enabled by default (no env vars)", async () => {
 		const code =
 			'import { color, colorsEnabled } from "./src/logging/color.ts"; console.log(JSON.stringify({ colorsEnabled, reset: color.reset }))';
-		const output = await runBun(code, { NO_COLOR: undefined, FORCE_COLOR: undefined, TERM: undefined });
+		const output = await runBun(code, {
+			NO_COLOR: undefined,
+			FORCE_COLOR: undefined,
+			TERM: undefined,
+		});
 		const result = JSON.parse(output.trim());
 		expect(result.colorsEnabled).toBe(true);
 		expect(result.reset).toBe("\x1b[0m");
@@ -52,7 +60,11 @@ describe("color module", () => {
 	test("TERM=dumb disables colors", async () => {
 		const code =
 			'import { color, colorsEnabled } from "./src/logging/color.ts"; console.log(JSON.stringify({ colorsEnabled, reset: color.reset }))';
-		const output = await runBun(code, { TERM: "dumb", NO_COLOR: undefined, FORCE_COLOR: undefined });
+		const output = await runBun(code, {
+			TERM: "dumb",
+			NO_COLOR: undefined,
+			FORCE_COLOR: undefined,
+		});
 		const result = JSON.parse(output.trim());
 		expect(result.colorsEnabled).toBe(false);
 		expect(result.reset).toBe("");

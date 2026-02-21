@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { DEFAULT_CONFIG, loadConfig, resolveProjectRoot } from "./config.ts";
 import { ValidationError } from "./errors.ts";
 import { cleanupTempDir, createTempGitRepo, runGitInDir } from "./test-helpers.ts";
@@ -158,10 +158,7 @@ project:
 agents:
   maxConcurrent: 10
 `);
-		await writeFile(
-			join(tempDir, ".legio", "config.local.yaml"),
-			`agents:\n  maxConcurrent: 4\n`,
-		);
+		await writeFile(join(tempDir, ".legio", "config.local.yaml"), `agents:\n  maxConcurrent: 4\n`);
 
 		const config = await loadConfig(tempDir);
 		// Local override wins
@@ -173,10 +170,7 @@ agents:
 	test("config.local.yaml works when config.yaml does not exist", async () => {
 		await ensureLegioDir();
 		// No config.yaml, only config.local.yaml
-		await writeFile(
-			join(tempDir, ".legio", "config.local.yaml"),
-			`agents:\n  maxConcurrent: 3\n`,
-		);
+		await writeFile(join(tempDir, ".legio", "config.local.yaml"), `agents:\n  maxConcurrent: 3\n`);
 
 		const config = await loadConfig(tempDir);
 		expect(config.agents.maxConcurrent).toBe(3);
@@ -190,10 +184,7 @@ agents:
 project:
   canonicalBranch: main
 `);
-		await writeFile(
-			join(tempDir, ".legio", "config.local.yaml"),
-			`agents:\n  maxConcurrent: -1\n`,
-		);
+		await writeFile(join(tempDir, ".legio", "config.local.yaml"), `agents:\n  maxConcurrent: -1\n`);
 
 		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
 	});
@@ -373,10 +364,7 @@ describe("resolveProjectRoot", () => {
 	test("returns startDir when .legio/config.yaml exists there", async () => {
 		repoDir = await createTempGitRepo();
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(
-			join(repoDir, ".legio", "config.yaml"),
-			"project:\n  canonicalBranch: main\n",
-		);
+		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
 
 		const result = await resolveProjectRoot(repoDir);
 		expect(result).toBe(repoDir);
@@ -387,21 +375,12 @@ describe("resolveProjectRoot", () => {
 		// Resolve symlinks (macOS /var -> /private/var) to match git's output
 		repoDir = await realpath(repoDir);
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(
-			join(repoDir, ".legio", "config.yaml"),
-			"project:\n  canonicalBranch: main\n",
-		);
+		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
 
 		// Create a worktree like legio sling does
 		const worktreeDir = join(repoDir, ".legio", "worktrees", "test-agent");
 		await mkdir(join(repoDir, ".legio", "worktrees"), { recursive: true });
-		await runGitInDir(repoDir, [
-			"worktree",
-			"add",
-			"-b",
-			"legio/test-agent/task-1",
-			worktreeDir,
-		]);
+		await runGitInDir(repoDir, ["worktree", "add", "-b", "legio/test-agent/task-1", worktreeDir]);
 
 		// resolveProjectRoot from the worktree should return the main repo
 		const result = await resolveProjectRoot(worktreeDir);
@@ -415,23 +394,14 @@ describe("resolveProjectRoot", () => {
 		// Commit .legio/config.yaml so the worktree gets a copy via git
 		// (this is what legio init does — the file is tracked)
 		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(
-			join(repoDir, ".legio", "config.yaml"),
-			"project:\n  canonicalBranch: main\n",
-		);
+		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
 		await runGitInDir(repoDir, ["add", ".legio/config.yaml"]);
 		await runGitInDir(repoDir, ["commit", "-m", "add legio config"]);
 
 		// Create a worktree — it will now have .legio/config.yaml from git
 		const worktreeDir = join(repoDir, ".legio", "worktrees", "mail-scout");
 		await mkdir(join(repoDir, ".legio", "worktrees"), { recursive: true });
-		await runGitInDir(repoDir, [
-			"worktree",
-			"add",
-			"-b",
-			"legio/mail-scout/task-1",
-			worktreeDir,
-		]);
+		await runGitInDir(repoDir, ["worktree", "add", "-b", "legio/mail-scout/task-1", worktreeDir]);
 
 		// Must resolve to main repo root, NOT the worktree
 		// (even though worktree has its own .legio/config.yaml)

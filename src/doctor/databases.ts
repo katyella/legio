@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
 /**
@@ -120,9 +120,7 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 
 			for (const tableName of dbSpec.tables) {
 				const tableExists = db
-					.prepare(
-						"SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name=?",
-					)
+					.prepare("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name=?")
 					.get(tableName) as { count: number } | undefined;
 
 				if (!tableExists || tableExists.count === 0) {
@@ -134,9 +132,9 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 				const requiredCols =
 					dbSpec.requiredColumns[tableName as keyof typeof dbSpec.requiredColumns];
 				if (requiredCols) {
-					const columns = db
-						.prepare(`PRAGMA table_info(${tableName})`)
-						.all() as Array<{ name: string }>;
+					const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
+						name: string;
+					}>;
 					const existingCols = new Set(columns.map((c) => c.name));
 
 					for (const reqCol of requiredCols) {
@@ -211,4 +209,3 @@ export const checkDatabases: DoctorCheckFn = (_config, legioDir): DoctorCheck[] 
 
 	return checks;
 };
-

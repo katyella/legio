@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
 import type { SessionCheckpoint } from "../types.ts";
 import { clearCheckpoint, loadCheckpoint, saveCheckpoint } from "./checkpoint.ts";

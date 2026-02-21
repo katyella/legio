@@ -295,9 +295,9 @@ export function createEventStore(dbPath: string): EventStore {
 
 		purge(opts: { all?: boolean; olderThanMs?: number; agentName?: string }): number {
 			if (opts.all) {
-				const countRow = db
-					.prepare("SELECT COUNT(*) as cnt FROM events")
-					.get() as { cnt: number } | undefined;
+				const countRow = db.prepare("SELECT COUNT(*) as cnt FROM events").get() as
+					| { cnt: number }
+					| undefined;
 				const count = countRow?.cnt ?? 0;
 				db.prepare("DELETE FROM events").run();
 				return count;

@@ -312,9 +312,7 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	// Old tier1Enabled → new tier0Enabled (mechanical daemon)
 	wd.tier0Enabled = wd.tier1Enabled;
 	wd.tier1Enabled = undefined;
-	process.stderr.write(
-		"[legio] DEPRECATED: watchdog.tier1Enabled → use watchdog.tier0Enabled\n",
-	);
+	process.stderr.write("[legio] DEPRECATED: watchdog.tier1Enabled → use watchdog.tier0Enabled\n");
 
 	// Old tier1IntervalMs → new tier0IntervalMs (mechanical daemon)
 	if ("tier1IntervalMs" in wd) {
@@ -329,9 +327,7 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	if ("tier2Enabled" in wd) {
 		wd.tier1Enabled = wd.tier2Enabled;
 		wd.tier2Enabled = undefined;
-		process.stderr.write(
-			"[legio] DEPRECATED: watchdog.tier2Enabled → use watchdog.tier1Enabled\n",
-		);
+		process.stderr.write("[legio] DEPRECATED: watchdog.tier2Enabled → use watchdog.tier1Enabled\n");
 	}
 }
 
@@ -441,13 +437,14 @@ function validateConfig(config: LegioConfig): void {
  *
  * Merge order: DEFAULT_CONFIG <- config.yaml <- config.local.yaml
  */
-async function mergeLocalConfig(
-	resolvedRoot: string,
-	config: LegioConfig,
-): Promise<LegioConfig> {
+async function mergeLocalConfig(resolvedRoot: string, config: LegioConfig): Promise<LegioConfig> {
 	const localPath = join(resolvedRoot, LEGIO_DIR, CONFIG_LOCAL_FILENAME);
 
-	if (!(await access(localPath).then(() => true).catch(() => false))) {
+	if (
+		!(await access(localPath)
+			.then(() => true)
+			.catch(() => false))
+	) {
 		return config;
 	}
 
@@ -473,10 +470,7 @@ async function mergeLocalConfig(
 
 	migrateDeprecatedWatchdogKeys(parsed);
 
-	return deepMerge(
-		config as unknown as Record<string, unknown>,
-		parsed,
-	) as unknown as LegioConfig;
+	return deepMerge(config as unknown as Record<string, unknown>, parsed) as unknown as LegioConfig;
 }
 
 /**
@@ -549,7 +543,9 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 	defaults.project.name = resolvedRoot.split("/").pop() ?? "unknown";
 
 	// Try to read the config file
-	const exists = await access(configPath).then(() => true).catch(() => false);
+	const exists = await access(configPath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		// No config file — use defaults, but still check for local overrides

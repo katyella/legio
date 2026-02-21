@@ -5,21 +5,25 @@
  * No mocks -- tests exercise the actual RunStore and SessionStore.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {access, mkdir, mkdtemp, readFile, rm, unlink, writeFile} from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import type { SessionStore } from "../sessions/store.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
 import type { AgentSession, InsertRun, RunStore } from "../types.ts";
+
 /** Test helper: create a file accessor for checking existence and reading content. */
 function fileAccessor(path: string) {
 	return {
-		exists: () => access(path).then(() => true, () => false),
+		exists: () =>
+			access(path).then(
+				() => true,
+				() => false,
+			),
 		text: () => readFile(path, "utf-8"),
 	};
 }
-
 
 let tempDir: string;
 let legioDir: string;

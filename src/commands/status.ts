@@ -115,7 +115,12 @@ export async function gatherStatus(
 		try {
 			const mailDbPath = join(root, ".legio", "mail.db");
 			let mailDbExists = false;
-			try { await access(mailDbPath); mailDbExists = true; } catch { /* not found */ }
+			try {
+				await access(mailDbPath);
+				mailDbExists = true;
+			} catch {
+				/* not found */
+			}
 			if (mailDbExists) {
 				mailStore = createMailStore(mailDbPath);
 				const unread = mailStore.getAll({ to: agentName, unread: true });
@@ -139,7 +144,12 @@ export async function gatherStatus(
 		try {
 			const metricsDbPath = join(root, ".legio", "metrics.db");
 			let metricsDbExists = false;
-			try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+			try {
+				await access(metricsDbPath);
+				metricsDbExists = true;
+			} catch {
+				/* not found */
+			}
 			if (metricsDbExists) {
 				const metricsStore = createMetricsStore(metricsDbPath);
 				recentMetricsCount = metricsStore.getRecentSessions(100).length;

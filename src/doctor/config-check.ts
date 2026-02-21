@@ -148,11 +148,10 @@ async function checkCanonicalBranchExists(config: LegioConfig): Promise<DoctorCh
 
 	try {
 		const exitCode = await new Promise<number>((resolve, reject) => {
-			const proc = spawn(
-				"git",
-				["rev-parse", "--verify", `refs/heads/${branchName}`],
-				{ cwd: config.project.root, stdio: ["ignore", "ignore", "ignore"] },
-			);
+			const proc = spawn("git", ["rev-parse", "--verify", `refs/heads/${branchName}`], {
+				cwd: config.project.root,
+				stdio: ["ignore", "ignore", "ignore"],
+			});
 			proc.on("close", (code) => resolve(code ?? 1));
 			proc.on("error", reject);
 		});

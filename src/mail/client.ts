@@ -44,7 +44,12 @@ export interface MailClient {
 	checkInject(agentName: string): string;
 
 	/** List messages with optional filters. */
-	list(filters?: { from?: string; to?: string; unread?: boolean; audience?: string }): MailMessage[];
+	list(filters?: {
+		from?: string;
+		to?: string;
+		unread?: boolean;
+		audience?: string;
+	}): MailMessage[];
 
 	/** Mark a message as read by ID. Returns whether the message was already read. */
 	markRead(id: string): { alreadyRead: boolean };

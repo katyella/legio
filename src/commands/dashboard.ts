@@ -131,7 +131,12 @@ export async function loadDashboardData(root: string): Promise<DashboardData> {
 	try {
 		const mailDbPath = join(root, ".legio", "mail.db");
 		let mailDbExists = false;
-		try { await access(mailDbPath); mailDbExists = true; } catch { /* not found */ }
+		try {
+			await access(mailDbPath);
+			mailDbExists = true;
+		} catch {
+			/* not found */
+		}
 		if (mailDbExists) {
 			const mailStore = createMailStore(mailDbPath);
 			recentMail = mailStore.getAll().slice(0, 5);
@@ -163,7 +168,12 @@ export async function loadDashboardData(root: string): Promise<DashboardData> {
 	try {
 		const metricsDbPath = join(root, ".legio", "metrics.db");
 		let metricsDbExists = false;
-		try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+		try {
+			await access(metricsDbPath);
+			metricsDbExists = true;
+		} catch {
+			/* not found */
+		}
 		if (metricsDbExists) {
 			const store = createMetricsStore(metricsDbPath);
 			const sessions = store.getRecentSessions(100);

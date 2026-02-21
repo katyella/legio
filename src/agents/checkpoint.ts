@@ -50,7 +50,9 @@ export async function loadCheckpoint(
 	agentName: string,
 ): Promise<SessionCheckpoint | null> {
 	const filePath = join(agentsDir, agentName, CHECKPOINT_FILENAME);
-	const exists = await access(filePath).then(() => true).catch(() => false);
+	const exists = await access(filePath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		return null;

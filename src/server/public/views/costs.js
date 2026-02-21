@@ -1,8 +1,8 @@
 // CostsView — Usage report with charts, tables, and live snapshots
 // Preact+HTM component, no build step required.
 
-import { html, useCallback, useEffect, useMemo, useState } from "../lib/preact-setup.js";
 import { fetchJson } from "../lib/api.js";
+import { html, useCallback, useEffect, useMemo, useState } from "../lib/preact-setup.js";
 import { timeAgo } from "../lib/utils.js";
 
 // ---------------------------------------------------------------------------
@@ -335,13 +335,10 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 	// When timeWindow changes, fetch filtered data from all 3 endpoints
 	useEffect(() => {
-		const sinceIso =
-			timeWindow !== null ? new Date(Date.now() - timeWindow).toISOString() : null;
+		const sinceIso = timeWindow !== null ? new Date(Date.now() - timeWindow).toISOString() : null;
 		const enc = sinceIso ? encodeURIComponent(sinceIso) : null;
 
-		const metricsUrl = enc
-			? `/api/metrics?since=${enc}&limit=1000`
-			: "/api/metrics?limit=1000";
+		const metricsUrl = enc ? `/api/metrics?since=${enc}&limit=1000` : "/api/metrics?limit=1000";
 		const modelUrl = enc ? `/api/metrics/by-model?since=${enc}` : "/api/metrics/by-model";
 		const dateUrl = enc ? `/api/metrics/by-date?since=${enc}` : "/api/metrics/by-date";
 
@@ -523,14 +520,16 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 			</div>
 
 			<!-- Model Usage Breakdown (show when data available) -->
-			${modelData.length > 0
-				? html`
+			${
+				modelData.length > 0
+					? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Model Usage</div>
 						<${ModelBreakdown} modelData=${modelData} />
 					</div>
 				`
-				: null}
+					: null
+			}
 
 			<!-- Cost by Agent Bar Chart -->
 			<div class="bg-surface border border-border rounded-sm p-4">
@@ -539,14 +538,16 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 			</div>
 
 			<!-- Date Chart (show when data available) -->
-			${dateData.length > 0
-				? html`
+			${
+				dateData.length > 0
+					? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Daily Cost Trend</div>
 						<${DateChart} dateData=${dateData} />
 					</div>
 				`
-				: null}
+					: null
+			}
 
 			<!-- Token Distribution -->
 			<div class="bg-surface border border-border rounded-sm p-4">
@@ -555,14 +556,16 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 			</div>
 
 			<!-- Cost by Capability (only if more than one capability) -->
-			${uniqueCaps.size > 1
-				? html`
+			${
+				uniqueCaps.size > 1
+					? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Cost by Capability</div>
 						<${CapabilityChart} metrics=${safeMetrics} />
 					</div>
 				`
-				: null}
+					: null
+			}
 
 			<!-- Detailed Costs Table -->
 			<div class="bg-surface border border-border rounded-sm p-4">
@@ -614,8 +617,9 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 			</div>
 
 			<!-- Live Snapshots (only when data exists) -->
-			${safeSnapshots.length > 0
-				? html`
+			${
+				safeSnapshots.length > 0
+					? html`
 					<div class="bg-surface border border-border rounded-sm p-4">
 						<div class="text-gray-500 uppercase text-xs tracking-wider mb-3">
 							Active Agent Token Usage
@@ -639,7 +643,8 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 						</div>
 					</div>
 				`
-				: null}
+					: null
+			}
 		</div>
 	`;
 }

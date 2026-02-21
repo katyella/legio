@@ -6,14 +6,13 @@
  * Like reading a combined log — all agents' events merged by timestamp.
  */
 
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
 import { color } from "../logging/color.ts";
 import type { EventType, StoredEvent } from "../types.ts";
-import { access, readFile } from "node:fs/promises";
-
 
 /** Labels and colors for each event type. */
 const EVENT_LABELS: Record<EventType, { label: string; color: string }> = {
@@ -288,7 +287,12 @@ export async function replayCommand(args: string[]): Promise<void> {
 	// Open event store
 	const eventsDbPath = join(legioDir, "events.db");
 	let eventsDbExists = false;
-	try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+	try {
+		await access(eventsDbPath);
+		eventsDbExists = true;
+	} catch {
+		/* not found */
+	}
 	if (!eventsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");

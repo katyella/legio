@@ -3,8 +3,15 @@
 // 2-panel layout: session sidebar (left) + message feed + input (right).
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
-import { html, useState, useEffect, useRef, useCallback, useLayoutEffect } from "../lib/preact-setup.js";
 import { fetchJson, postJson } from "../lib/api.js";
+import {
+	html,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "../lib/preact-setup.js";
 import { timeAgo } from "../lib/utils.js";
 
 /**
@@ -110,26 +117,32 @@ export function RawChatView() {
 	}, []);
 
 	// ── Select session ────────────────────────────────────────────────────────
-	const handleSelectSession = useCallback((id) => {
-		if (id === activeSessionId) return;
-		setActiveSessionId(id);
-		setError("");
-	}, [activeSessionId]);
+	const handleSelectSession = useCallback(
+		(id) => {
+			if (id === activeSessionId) return;
+			setActiveSessionId(id);
+			setError("");
+		},
+		[activeSessionId],
+	);
 
 	// ── Delete session ────────────────────────────────────────────────────────
-	const handleDeleteSession = useCallback(async (e, id) => {
-		e.stopPropagation();
-		try {
-			await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
-			setSessions((prev) => prev.filter((s) => s.id !== id));
-			if (activeSessionId === id) {
-				setActiveSessionId(null);
-				setMessages([]);
+	const handleDeleteSession = useCallback(
+		async (e, id) => {
+			e.stopPropagation();
+			try {
+				await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
+				setSessions((prev) => prev.filter((s) => s.id !== id));
+				if (activeSessionId === id) {
+					setActiveSessionId(null);
+					setMessages([]);
+				}
+			} catch (err) {
+				setError(err.message || "Failed to delete session");
 			}
-		} catch (err) {
-			setError(err.message || "Failed to delete session");
-		}
-	}, [activeSessionId]);
+		},
+		[activeSessionId],
+	);
 
 	// ── Send message ──────────────────────────────────────────────────────────
 	const handleSend = useCallback(async () => {
@@ -152,10 +165,9 @@ export function RawChatView() {
 		setMessages((prev) => [...prev, tempUserMsg]);
 
 		try {
-			const assistantMsg = await postJson(
-				`/api/chat/sessions/${activeSessionId}/messages`,
-				{ content },
-			);
+			const assistantMsg = await postJson(`/api/chat/sessions/${activeSessionId}/messages`, {
+				content,
+			});
 			// Replace temp user message with real messages from server
 			setMessages((prev) => {
 				const withoutTemp = prev.filter((m) => !m._temp);
@@ -209,24 +221,25 @@ export function RawChatView() {
 
 				<!-- Session list -->
 				<div class="flex-1 overflow-y-auto">
-					${sessionsLoading
-						? html`<div class="px-3 py-4 text-xs text-[#555]">Loading...</div>`
-						: sessions.length === 0
-							? html`<div class="px-3 py-4 text-xs text-[#555]">No sessions yet</div>`
-							: sessions.map((session) => {
-								const isActive = session.id === activeSessionId;
-								const title = session.title
-									? session.title.length > 28
-										? `${session.title.slice(0, 28)}\u2026`
-										: session.title
-									: "Untitled";
-								return html`
+					${
+						sessionsLoading
+							? html`<div class="px-3 py-4 text-xs text-[#555]">Loading...</div>`
+							: sessions.length === 0
+								? html`<div class="px-3 py-4 text-xs text-[#555]">No sessions yet</div>`
+								: sessions.map((session) => {
+										const isActive = session.id === activeSessionId;
+										const title = session.title
+											? session.title.length > 28
+												? `${session.title.slice(0, 28)}\u2026`
+												: session.title
+											: "Untitled";
+										return html`
 									<div
 										key=${session.id}
-										class=${"group flex items-start gap-1 px-3 py-2.5 cursor-pointer hover:bg-[#1a1a1a] border-l-2 transition-colors " +
-											(isActive
-												? "bg-[#1a1a1a] border-[#E64415]"
-												: "border-transparent")}
+										class=${
+											"group flex items-start gap-1 px-3 py-2.5 cursor-pointer hover:bg-[#1a1a1a] border-l-2 transition-colors " +
+											(isActive ? "bg-[#1a1a1a] border-[#E64415]" : "border-transparent")
+										}
 										onClick=${() => handleSelectSession(session.id)}
 									>
 										<div class="flex-1 min-w-0">
@@ -234,11 +247,13 @@ export function RawChatView() {
 												${title}
 											</div>
 											<div class="flex items-center gap-1.5 mt-0.5">
-												${session.model
-													? html`<span class="text-[10px] bg-[#1a1a1a] border border-[#333] text-[#666] px-1 rounded font-mono">
+												${
+													session.model
+														? html`<span class="text-[10px] bg-[#1a1a1a] border border-[#333] text-[#666] px-1 rounded font-mono">
 														${session.model.split("-").slice(-2).join("-")}
 													</span>`
-													: null}
+														: null
+												}
 												<span class="text-[10px] text-[#555]">${formatDate(session.updatedAt || session.createdAt)}</span>
 											</div>
 										</div>
@@ -249,7 +264,7 @@ export function RawChatView() {
 										>\u00D7</button>
 									</div>
 								`;
-							})
+									})
 					}
 				</div>
 			</div>
@@ -261,17 +276,19 @@ export function RawChatView() {
 				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-3 flex-shrink-0">
 					<span class="text-sm font-semibold text-[#e5e5e5]">Claude Chat</span>
 					<span class="text-xs text-[#555]">\u2022 direct</span>
-					${activeSession?.model
-						? html`<span class="ml-auto text-xs bg-[#1a1a1a] border border-[#2a2a2a] text-[#888] px-2 py-0.5 rounded font-mono">
+					${
+						activeSession?.model
+							? html`<span class="ml-auto text-xs bg-[#1a1a1a] border border-[#2a2a2a] text-[#888] px-2 py-0.5 rounded font-mono">
 							${activeSession.model}
 						</span>`
-						: html`<span class="ml-auto text-xs text-[#555] font-mono">${defaultModel}</span>`
+							: html`<span class="ml-auto text-xs text-[#555] font-mono">${defaultModel}</span>`
 					}
 				</div>
 
 				<!-- Content area -->
-				${!configAvailable
-					? html`
+				${
+					!configAvailable
+						? html`
 						<div class="flex-1 flex items-center justify-center p-8">
 							<div class="max-w-sm text-center">
 								<div class="text-2xl mb-3">\u{1F511}</div>
@@ -283,8 +300,8 @@ export function RawChatView() {
 							</div>
 						</div>
 					`
-					: !activeSessionId
-						? html`
+						: !activeSessionId
+							? html`
 							<div class="flex-1 flex items-center justify-center p-8">
 								<div class="text-center">
 									<div class="text-2xl mb-3">\u{1F4AC}</div>
@@ -292,20 +309,21 @@ export function RawChatView() {
 								</div>
 							</div>
 						`
-						: html`
+							: html`
 							<!-- Message feed -->
 							<div
 								class="flex-1 overflow-y-auto p-4 space-y-3 min-h-0"
 								ref=${feedRef}
 								onScroll=${handleFeedScroll}
 							>
-								${messagesLoading
-									? html`<div class="flex items-center justify-center h-full text-xs text-[#555]">Loading messages...</div>`
-									: messages.length === 0
-										? html`<div class="flex items-center justify-center h-full text-xs text-[#555]">No messages yet — say hello!</div>`
-										: messages.map((msg) => {
-											const isUser = msg.role === "user";
-											return html`
+								${
+									messagesLoading
+										? html`<div class="flex items-center justify-center h-full text-xs text-[#555]">Loading messages...</div>`
+										: messages.length === 0
+											? html`<div class="flex items-center justify-center h-full text-xs text-[#555]">No messages yet — say hello!</div>`
+											: messages.map((msg) => {
+													const isUser = msg.role === "user";
+													return html`
 												<div
 													key=${msg.id}
 													class=${"flex " + (isUser ? "justify-end" : "justify-start")}
@@ -317,9 +335,11 @@ export function RawChatView() {
 																? "bg-[#E64415] text-white rounded-br-sm"
 																: "bg-[#1a1a1a] border border-[#2a2a2a] text-[#e5e5e5] rounded-bl-sm")
 														}>
-															${msg._temp && msg.role === "user"
-																? html`<span class="opacity-70">${msg.content}</span>`
-																: msg.content}
+															${
+																msg._temp && msg.role === "user"
+																	? html`<span class="opacity-70">${msg.content}</span>`
+																	: msg.content
+															}
 														</div>
 														<div class=${"mt-0.5 text-[10px] text-[#555] " + (isUser ? "text-right" : "text-left")}>
 															${timeAgo(msg.createdAt)}
@@ -327,17 +347,19 @@ export function RawChatView() {
 													</div>
 												</div>
 											`;
-										})
+												})
 								}
-								${sending
-									? html`
+								${
+									sending
+										? html`
 										<div class="flex justify-start">
 											<div class="bg-[#1a1a1a] border border-[#2a2a2a] px-3 py-2 rounded-lg rounded-bl-sm">
 												<span class="text-xs text-[#666] italic">Claude is thinking\u2026</span>
 											</div>
 										</div>
 									`
-									: null}
+										: null
+								}
 							</div>
 
 							<!-- Input area -->

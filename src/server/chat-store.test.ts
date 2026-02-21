@@ -5,8 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createChatStore } from "./chat-store.ts";
 import type { ChatStore } from "./chat-store.ts";
+import { createChatStore } from "./chat-store.ts";
 
 describe("ChatStore", () => {
 	let store: ChatStore;

@@ -6,10 +6,10 @@
  * spawnClaude is NOT mocked — we rely on it failing naturally in tests.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { buildTriagePrompt, classifyResponse, triageAgent } from "./triage.ts";
 
 describe("classifyResponse", () => {

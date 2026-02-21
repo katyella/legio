@@ -118,10 +118,7 @@ async function resolveLegioBin(): Promise<string> {
 		return scriptPath;
 	}
 
-	throw new LegioError(
-		"Cannot resolve legio binary path for background launch",
-		"WATCH_ERROR",
-	);
+	throw new LegioError("Cannot resolve legio binary path for background launch", "WATCH_ERROR");
 }
 
 /**

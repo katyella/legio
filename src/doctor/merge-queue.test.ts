@@ -1,8 +1,8 @@
-import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createMergeQueue } from "../merge/queue.ts";
 import type { LegioConfig } from "../types.ts";
 import { checkMergeQueue } from "./merge-queue.ts";

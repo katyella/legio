@@ -1,4 +1,4 @@
-import { access, constants, readFile, readdir } from "node:fs/promises";
+import { access, constants, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentManifest } from "../types.ts";
 import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
@@ -19,10 +19,7 @@ async function pathExists(path: string): Promise<boolean> {
  * Directory structure checks.
  * Validates that .legio/ and its subdirectories exist with correct permissions.
  */
-export const checkStructure: DoctorCheckFn = async (
-	_config,
-	legioDir,
-): Promise<DoctorCheck[]> => {
+export const checkStructure: DoctorCheckFn = async (_config, legioDir): Promise<DoctorCheck[]> => {
 	const checks: DoctorCheck[] = [];
 
 	// Check 1: .legio/ directory exists

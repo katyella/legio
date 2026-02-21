@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import {access, mkdir, mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { watchCommand } from "./watch.ts";
 
 /**
@@ -116,7 +116,10 @@ describe("watchCommand", () => {
 		await writeFile(pidFilePath, "999999\n");
 
 		// Verify the stale PID file exists before the test
-		const fileBeforeExists = await access(pidFilePath).then(() => true, () => false);
+		const fileBeforeExists = await access(pidFilePath).then(
+			() => true,
+			() => false,
+		);
 		expect(fileBeforeExists).toBe(true);
 
 		// Try to start in background mode
@@ -136,7 +139,10 @@ describe("watchCommand", () => {
 		// OR replaced with a new PID.
 
 		// Let's check: the file should either not exist, OR contain a different PID
-		const fileAfterExists = await access(pidFilePath).then(() => true, () => false);
+		const fileAfterExists = await access(pidFilePath).then(
+			() => true,
+			() => false,
+		);
 		if (fileAfterExists) {
 			const content = await readFile(pidFilePath, "utf-8");
 			expect(content.trim()).not.toBe("999999");

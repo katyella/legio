@@ -1,14 +1,13 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import {access, mkdir, readFile, writeFile} from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createSessionStore } from "../sessions/store.ts";
 import { cleanupTempDir, createTempGitRepo, runGitInDir } from "../test-helpers.ts";
 import type { AgentSession } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
 import { worktreeCommand } from "./worktree.ts";
-import { spawn } from "node:child_process";
-
 
 /**
  * Tests for `legio worktree` command.
@@ -314,7 +313,10 @@ describe("worktreeCommand", () => {
 			expect(out).toContain("Cleaned 1 worktree");
 
 			// Verify the worktree directory is gone
-			const worktreeExists = await access(worktreePath).then(() => true, () => false);
+			const worktreeExists = await access(worktreePath).then(
+				() => true,
+				() => false,
+			);
 			expect(worktreeExists).toBe(false);
 
 			// Verify the branch is deleted

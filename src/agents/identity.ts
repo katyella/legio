@@ -287,7 +287,9 @@ export async function createIdentity(baseDir: string, identity: AgentIdentity): 
  */
 export async function loadIdentity(baseDir: string, name: string): Promise<AgentIdentity | null> {
 	const filePath = join(baseDir, name, IDENTITY_FILENAME);
-	const exists = await access(filePath).then(() => true).catch(() => false);
+	const exists = await access(filePath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		return null;

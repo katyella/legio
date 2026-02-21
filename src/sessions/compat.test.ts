@@ -5,10 +5,10 @@
  * Tests file-based migration behavior, so temp files are required (not :memory:).
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { openSessionStore } from "./compat.ts";
 
 let tempDir: string;

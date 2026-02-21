@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, vi, test } from "vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createSessionStore } from "../sessions/store.ts";
 import type { LegioConfig } from "../types.ts";
 import type { ConsistencyCheckDeps } from "./consistency.ts";

@@ -2,9 +2,9 @@
 // Reusable sortable table: column definitions, sort state, click-to-sort headers.
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
+import htm from "https://esm.sh/htm@latest";
 import { h } from "https://esm.sh/preact@latest";
 import { useState } from "https://esm.sh/preact@latest/hooks";
-import htm from "https://esm.sh/htm@latest";
 
 const html = htm.bind(h);
 
@@ -60,10 +60,13 @@ export function DataTable({ columns, data, defaultSort, onRowClick }) {
 								>
 									<span class="flex items-center gap-1">
 										${col.label}
-										${col.sortable && sortKey === col.key &&
-										html`<span class="text-[#E64415]">
+										${
+											col.sortable &&
+											sortKey === col.key &&
+											html`<span class="text-[#E64415]">
 											${sortDir === "asc" ? "↑" : "↓"}
-										</span>`}
+										</span>`
+										}
 									</span>
 								</th>
 							`,
@@ -84,15 +87,16 @@ export function DataTable({ columns, data, defaultSort, onRowClick }) {
 								${columns.map(
 									(col) => html`
 										<td key=${col.key} class="px-3 py-2 text-[#e5e5e5]">
-											${col.render ? col.render(row[col.key], row) : row[col.key] ?? ""}
+											${col.render ? col.render(row[col.key], row) : (row[col.key] ?? "")}
 										</td>
 									`,
 								)}
 							</tr>
 						`,
 					)}
-					${sortedData.length === 0 &&
-					html`
+					${
+						sortedData.length === 0 &&
+						html`
 						<tr>
 							<td
 								colspan=${columns.length}
@@ -101,7 +105,8 @@ export function DataTable({ columns, data, defaultSort, onRowClick }) {
 								No data
 							</td>
 						</tr>
-					`}
+					`
+					}
 				</tbody>
 			</table>
 		</div>

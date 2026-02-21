@@ -51,26 +51,38 @@ export function IssueCard({ issue }) {
 			<div class=${`text-[#e5e5e5] font-medium text-sm mb-1${isClosed ? " line-through" : ""}`}>
 				${truncate(issue.title || "", 60)}
 			</div>
-			${isClosed && issue.closeReason ? html`
+			${
+				isClosed && issue.closeReason
+					? html`
 				<div class="text-[#666] text-xs mb-1 italic">
 					${truncate(issue.closeReason, 80)}
 				</div>
-			` : null}
-			${issue.description ? html`
+			`
+					: null
+			}
+			${
+				issue.description
+					? html`
 				<div class="text-[#999] text-xs mb-2 leading-relaxed">
 					${truncate(issue.description, 120)}
 				</div>
-			` : null}
+			`
+					: null
+			}
 			<div class="flex items-center gap-2 flex-wrap">
 				${issue.type ? html`<span class="text-xs bg-[#2a2a2a] rounded px-1 text-[#999]">${issue.type}</span>` : null}
 				${issue.assignee ? html`<span class="text-[#999] text-xs">${issue.assignee}</span>` : null}
 				${issue.createdAt ? html`<span class="text-[#999] text-xs">${timeAgo(issue.createdAt)}</span>` : null}
 			</div>
-			${hasBlockedBy ? html`
+			${
+				hasBlockedBy
+					? html`
 				<div class="mt-1 text-xs text-red-500">
 					blocked by: ${issue.blockedBy.join(", ")}
 				</div>
-			` : null}
+			`
+					: null
+			}
 		</div>
 	`;
 }

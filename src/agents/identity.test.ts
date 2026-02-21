@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
 import type { AgentIdentity } from "../types.ts";
 import { createIdentity, loadIdentity, updateIdentity } from "./identity.ts";
@@ -31,7 +31,11 @@ describe("identity", () => {
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(tempDir, "test-agent", "identity.yaml");
-			expect(await access(filePath).then(() => true).catch(() => false)).toBe(true);
+			expect(
+				await access(filePath)
+					.then(() => true)
+					.catch(() => false),
+			).toBe(true);
 
 			const content = await readFile(filePath, "utf-8");
 			expect(content).toContain("name: test-agent");
@@ -133,12 +137,20 @@ describe("identity", () => {
 			};
 
 			const agentDir = join(tempDir, "new-agent");
-			expect(await access(agentDir).then(() => true).catch(() => false)).toBe(false);
+			expect(
+				await access(agentDir)
+					.then(() => true)
+					.catch(() => false),
+			).toBe(false);
 
 			await createIdentity(tempDir, identity);
 
 			const filePath = join(agentDir, "identity.yaml");
-			expect(await access(filePath).then(() => true).catch(() => false)).toBe(true);
+			expect(
+				await access(filePath)
+					.then(() => true)
+					.catch(() => false),
+			).toBe(true);
 		});
 
 		test("overwrites existing identity file", async () => {

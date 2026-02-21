@@ -6,6 +6,7 @@
  * Logs are never auto-deleted.
  */
 
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -14,8 +15,6 @@ import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
 import { listWorktrees, removeWorktree } from "../worktree/manager.ts";
 import { isSessionAlive, killSession } from "../worktree/tmux.ts";
-import { access } from "node:fs/promises";
-
 
 function hasFlag(args: string[], flag: string): boolean {
 	return args.includes(flag);
@@ -141,7 +140,12 @@ async function handleClean(args: string[], root: string, json: boolean): Promise
 		if (cleaned.length > 0) {
 			const mailDbPath = join(root, ".legio", "mail.db");
 			let mailDbFileExists = false;
-			try { await access(mailDbPath); mailDbFileExists = true; } catch { /* not found */ }
+			try {
+				await access(mailDbPath);
+				mailDbFileExists = true;
+			} catch {
+				/* not found */
+			}
 			if (mailDbFileExists) {
 				const mailStore = createMailStore(mailDbPath);
 				try {

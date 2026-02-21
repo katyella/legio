@@ -1,7 +1,7 @@
 // views/inspect.js — Per-agent deep inspection view
 // Exports InspectView (Preact component)
 
-import { h, html, useState, useEffect, useRef, useCallback } from "../lib/preact-setup.js";
+import { h, html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 
 // ── Utility functions ──────────────────────────────────────────────────────
 
@@ -258,12 +258,14 @@ export function InspectView({ agentName }) {
 
 			<!-- Token stat cards -->
 			<div class="grid grid-cols-3 gap-2 mb-6">
-				${statCards.map(({ label, value }) => html`
+				${statCards.map(
+					({ label, value }) => html`
 					<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm p-3">
 						<div class="text-[#999] text-xs mb-1">${label}</div>
 						<div class="text-[#e5e5e5] font-mono text-sm">${value}</div>
 					</div>
-				`)}
+				`,
+				)}
 			</div>
 
 			<!-- Tool Stats -->
@@ -279,9 +281,11 @@ export function InspectView({ agentName }) {
 						</tr>
 					</thead>
 					<tbody>
-						${toolStats.length === 0
-							? html`<tr><td colspan="4" class="text-center text-[#999] text-sm px-3 py-4">No tool stats</td></tr>`
-							: toolStats.map((ts) => html`
+						${
+							toolStats.length === 0
+								? html`<tr><td colspan="4" class="text-center text-[#999] text-sm px-3 py-4">No tool stats</td></tr>`
+								: toolStats.map(
+										(ts) => html`
 								<tr class="border-b border-[#2a2a2a] last:border-0">
 									<td class="px-3 py-2">${ts.toolName || ""}</td>
 									<td class="px-3 py-2 text-right font-mono">${ts.count || 0}</td>
@@ -292,7 +296,8 @@ export function InspectView({ agentName }) {
 										${ts.maxDurationMs != null ? formatDuration(ts.maxDurationMs) : "\u2014"}
 									</td>
 								</tr>
-							`)
+							`,
+									)
 						}
 					</tbody>
 				</table>
@@ -301,9 +306,11 @@ export function InspectView({ agentName }) {
 			<!-- Recent Tool Calls timeline -->
 			<h3 class="text-sm font-semibold text-[#999] uppercase tracking-wide mb-2">Recent Tool Calls</h3>
 			<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm mb-6">
-				${recentToolCalls.length === 0
-					? html`<div class="text-center text-[#999] text-sm px-3 py-4">No recent tool calls</div>`
-					: recentToolCalls.map((tc) => html`
+				${
+					recentToolCalls.length === 0
+						? html`<div class="text-center text-[#999] text-sm px-3 py-4">No recent tool calls</div>`
+						: recentToolCalls.map(
+								(tc) => html`
 						<div class="flex items-center gap-3 px-3 py-2 border-b border-[#2a2a2a] last:border-0 text-sm">
 							<span class="font-mono text-[#999] text-xs w-20 shrink-0">
 								${formatTimestamp(tc.timestamp)}
@@ -316,7 +323,8 @@ export function InspectView({ agentName }) {
 								${tc.durationMs != null ? formatDuration(tc.durationMs) : "\u2014"}
 							</span>
 						</div>
-					`)
+					`,
+							)
 				}
 			</div>
 
@@ -346,19 +354,23 @@ export function InspectView({ agentName }) {
 					onScroll=${handleOutputScroll}
 					class="max-h-[40vh] overflow-y-auto p-3"
 				>
-					${termOutput
-						? html`<pre
+					${
+						termOutput
+							? html`<pre
 								class="text-[#e5e5e5] text-xs leading-relaxed whitespace-pre-wrap break-words m-0 font-mono"
 							>${termOutput}</pre>`
-						: html`<div class="text-[#444] text-sm font-mono text-center py-4">
+							: html`<div class="text-[#444] text-sm font-mono text-center py-4">
 								No output
-							</div>`}
+							</div>`
+					}
 				</div>
-				${termError
-					? html`<div class="px-3 py-1.5 bg-[#1a0a0a] border-t border-red-900">
+				${
+					termError
+						? html`<div class="px-3 py-1.5 bg-[#1a0a0a] border-t border-red-900">
 							<span class="text-xs text-red-400 font-mono">${termError}</span>
 						</div>`
-					: null}
+						: null
+				}
 				<div class="border-t border-[#2a2a2a] p-3">
 					<div class="flex items-center gap-2">
 						<span class="text-[#E64415] font-mono text-sm shrink-0 select-none">$</span>

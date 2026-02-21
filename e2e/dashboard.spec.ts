@@ -59,10 +59,7 @@ test("dashboard renders the Metrics section header", async ({ page, serverUrl })
 // Empty state text
 // ---------------------------------------------------------------------------
 
-test("agents table shows 'No agents' when no agent sessions exist", async ({
-	page,
-	serverUrl,
-}) => {
+test("agents table shows 'No agents' when no agent sessions exist", async ({ page, serverUrl }) => {
 	await goToDashboard(page, serverUrl);
 	await expect(page.locator("text=No agents")).toBeVisible({ timeout: 10_000 });
 });

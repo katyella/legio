@@ -121,7 +121,9 @@ export function createManifestLoader(manifestPath: string, agentBaseDir: string)
 
 	return {
 		async load(): Promise<AgentManifest> {
-			const exists = await access(manifestPath).then(() => true).catch(() => false);
+			const exists = await access(manifestPath)
+				.then(() => true)
+				.catch(() => false);
 
 			if (!exists) {
 				throw new AgentError(`Agent manifest not found: ${manifestPath}`);
@@ -177,7 +179,9 @@ export function createManifestLoader(manifestPath: string, agentBaseDir: string)
 			// Verify that all referenced .md files exist
 			for (const [name, def] of Object.entries(agents)) {
 				const filePath = join(agentBaseDir, def.file);
-				const mdExists = await access(filePath).then(() => true).catch(() => false);
+				const mdExists = await access(filePath)
+					.then(() => true)
+					.catch(() => false);
 
 				if (!mdExists) {
 					throw new AgentError(

@@ -6,10 +6,7 @@ import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
  * Version compatibility checks.
  * Validates legio CLI version, config schema version, database schema versions.
  */
-export const checkVersion: DoctorCheckFn = async (
-	_config,
-	_legioDir,
-): Promise<DoctorCheck[]> => {
+export const checkVersion: DoctorCheckFn = async (_config, _legioDir): Promise<DoctorCheck[]> => {
 	const checks: DoctorCheck[] = [];
 
 	// Determine legio tool root (not the target project)
@@ -33,7 +30,9 @@ export const checkVersion: DoctorCheckFn = async (
 async function checkCurrentVersion(toolRoot: string): Promise<DoctorCheck> {
 	try {
 		const packageJsonPath = join(toolRoot, "package.json");
-		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as { version?: string };
+		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as {
+			version?: string;
+		};
 
 		if (!packageJson.version) {
 			return {
@@ -68,7 +67,9 @@ async function checkVersionSync(toolRoot: string): Promise<DoctorCheck> {
 	try {
 		// Read package.json version
 		const packageJsonPath = join(toolRoot, "package.json");
-		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as { version?: string };
+		const packageJson = JSON.parse(await readFile(packageJsonPath, "utf-8")) as {
+			version?: string;
+		};
 		const pkgVersion = packageJson.version;
 
 		if (!pkgVersion) {

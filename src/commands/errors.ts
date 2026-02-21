@@ -206,7 +206,12 @@ export async function errorsCommand(args: string[]): Promise<void> {
 	// Open event store
 	const eventsDbPath = join(legioDir, "events.db");
 	let eventsDbExists = false;
-	try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+	try {
+		await access(eventsDbPath);
+		eventsDbExists = true;
+	} catch {
+		/* not found */
+	}
 	if (!eventsDbExists) {
 		if (json) {
 			process.stdout.write("[]\n");

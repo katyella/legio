@@ -194,7 +194,12 @@ export async function gatherInspectData(
 
 		const eventsDbPath = join(legioDir, "events.db");
 		let eventsDbExists = false;
-		try { await access(eventsDbPath); eventsDbExists = true; } catch { /* not found */ }
+		try {
+			await access(eventsDbPath);
+			eventsDbExists = true;
+		} catch {
+			/* not found */
+		}
 		if (eventsDbExists) {
 			const eventStore = createEventStore(eventsDbPath);
 			try {
@@ -225,7 +230,12 @@ export async function gatherInspectData(
 		let tokenUsage: InspectData["tokenUsage"] = null;
 		const metricsDbPath = join(legioDir, "metrics.db");
 		let metricsDbExists = false;
-		try { await access(metricsDbPath); metricsDbExists = true; } catch { /* not found */ }
+		try {
+			await access(metricsDbPath);
+			metricsDbExists = true;
+		} catch {
+			/* not found */
+		}
 		if (metricsDbExists) {
 			const metricsStore = createMetricsStore(metricsDbPath);
 			try {

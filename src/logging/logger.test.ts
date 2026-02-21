@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, vi, test, type MockInstance } from "vitest";
 import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from "vitest";
 import type { LogEvent } from "../types.ts";
 import { createLogger } from "./logger.ts";
 

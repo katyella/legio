@@ -2,9 +2,9 @@
 // Modal dialog for spawning a new agent via POST /api/agents/spawn.
 // Visibility controlled by appState.showSpawnDialog signal.
 
-import { html, useState, useCallback, useEffect } from "../lib/preact-setup.js";
-import { appState } from "../lib/state.js";
 import { postJson } from "../lib/api.js";
+import { html, useCallback, useEffect, useState } from "../lib/preact-setup.js";
+import { appState } from "../lib/state.js";
 
 const INPUT_CLASS =
 	"w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5] placeholder-[#666] outline-none focus:border-[#E64415]";
@@ -166,17 +166,25 @@ export function SpawnDialog() {
 						/>
 					</div>
 
-					${error ? html`
+					${
+						error
+							? html`
 						<div class="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-2 py-1">
 							${error}
 						</div>
-					` : null}
+					`
+							: null
+					}
 
-					${success ? html`
+					${
+						success
+							? html`
 						<div class="text-xs text-green-400 bg-green-900/20 border border-green-800/40 rounded px-2 py-1">
 							${success}
 						</div>
-					` : null}
+					`
+							: null
+					}
 
 					<div class="flex items-center justify-end gap-2 pt-1">
 						<button

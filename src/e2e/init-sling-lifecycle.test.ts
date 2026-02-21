@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 /** Test helper: check whether a file exists using Node.js fs/promises. */
 async function fileExists(path: string): Promise<boolean> {
@@ -14,6 +14,7 @@ async function fileExists(path: string): Promise<boolean> {
 function fileText(path: string): Promise<string> {
 	return readFile(path, "utf-8");
 }
+
 import { createManifestLoader } from "../agents/manifest.ts";
 import { writeOverlay } from "../agents/overlay.ts";
 import { initCommand } from "../commands/init.ts";

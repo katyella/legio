@@ -341,7 +341,11 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 			return rows.map(rowToMetrics);
 		},
 
-		getSessionsFiltered(opts: { since?: string; until?: string; limit?: number }): SessionMetrics[] {
+		getSessionsFiltered(opts: {
+			since?: string;
+			until?: string;
+			limit?: number;
+		}): SessionMetrics[] {
 			const rows = filteredStmt.all({
 				since: opts.since ?? null,
 				until: opts.until ?? null,

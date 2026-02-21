@@ -192,9 +192,7 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 
 			if (!checkRunning(child.pid)) {
 				await removeServerPid(projectRoot);
-				process.stderr.write(
-					"Daemon process exited immediately — port may already be in use\n",
-				);
+				process.stderr.write("Daemon process exited immediately — port may already be in use\n");
 				process.exit(1);
 			}
 

@@ -1400,14 +1400,9 @@ describe("resolveJsonlConflict", () => {
 		const withId = '{"id":"mx-001","recorded_at":"2026-01-01T00:00:00Z","description":"has id"}';
 		const noId = '{"recorded_at":"2026-01-02T00:00:00Z","description":"no id field"}';
 
-		const content = [
-			"<<<<<<< HEAD",
-			withId,
-			"=======",
-			noId,
-			">>>>>>> feature-branch",
-			"",
-		].join("\n");
+		const content = ["<<<<<<< HEAD", withId, "=======", noId, ">>>>>>> feature-branch", ""].join(
+			"\n",
+		);
 
 		const result = resolveJsonlConflict(content);
 		expect(result).not.toBeNull();

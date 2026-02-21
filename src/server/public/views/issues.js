@@ -1,10 +1,10 @@
 // views/issues.js — Kanban board for beads issues
 // Exports IssuesView (Preact component) and sets window.renderIssues (legacy shim)
 
-import { h, html, useState, useEffect } from "../lib/preact-setup.js";
-import { fetchJson } from "../lib/api.js";
-import { appState } from "../lib/state.js";
 import { IssueCard } from "../components/issue-card.js";
+import { fetchJson } from "../lib/api.js";
+import { h, html, useEffect, useState } from "../lib/preact-setup.js";
+import { appState } from "../lib/state.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -60,9 +60,11 @@ function Column({ title, issues, borderClass }) {
 				<span class="bg-[#2a2a2a] text-[#999] text-xs rounded-full px-2">${issues.length}</span>
 			</div>
 			<div class="flex flex-col gap-2">
-				${issues.length === 0
-					? html`<div class="text-[#999] text-sm text-center py-4">No issues</div>`
-					: issues.map((issue) => html`<${IssueCard} key=${issue.id} issue=${issue} />`)}
+				${
+					issues.length === 0
+						? html`<div class="text-[#999] text-sm text-center py-4">No issues</div>`
+						: issues.map((issue) => html`<${IssueCard} key=${issue.id} issue=${issue} />`)
+				}
 			</div>
 		</div>
 	`;
@@ -84,7 +86,7 @@ export function IssuesView() {
 	useEffect(() => {
 		let cancelled = false;
 		fetchJson("/api/issues")
-			.then(data => {
+			.then((data) => {
 				if (!cancelled) {
 					setFetchedIssues(data ?? []);
 					// Update signal so other consumers see the data
@@ -94,18 +96,18 @@ export function IssuesView() {
 			.catch(() => {
 				if (!cancelled) setFetchedIssues([]);
 			});
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	// Prefer signal (non-empty) over fetched data
-	const issues = (signalIssues && signalIssues.length > 0)
-		? signalIssues
-		: (fetchedIssues ?? []);
+	const issues = signalIssues && signalIssues.length > 0 ? signalIssues : (fetchedIssues ?? []);
 
 	const filtered =
 		priorityFilter == null ? issues : issues.filter((i) => i.priority === priorityFilter);
 
-	const visibleIssues = showClosed ? filtered : filtered.filter(i => i.status !== "closed");
+	const visibleIssues = showClosed ? filtered : filtered.filter((i) => i.status !== "closed");
 	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
 
 	const filterButtons = [null, 0, 1, 2, 3, 4];
@@ -120,9 +122,11 @@ export function IssuesView() {
 					return html`
 						<button
 							key=${label}
-							class=${active
-								? "px-2 py-1 text-xs rounded-sm border border-[#E64415] text-[#E64415] bg-[#E64415]/10"
-								: "px-2 py-1 text-xs rounded-sm border border-[#2a2a2a] text-[#999] hover:border-[#444]"}
+							class=${
+								active
+									? "px-2 py-1 text-xs rounded-sm border border-[#E64415] text-[#E64415] bg-[#E64415]/10"
+									: "px-2 py-1 text-xs rounded-sm border border-[#2a2a2a] text-[#999] hover:border-[#444]"
+							}
 							onClick=${() => setPriorityFilter(p)}
 						>
 							${label}
@@ -131,9 +135,11 @@ export function IssuesView() {
 				})}
 				<div class="ml-2 pl-2 border-l border-[#2a2a2a]">
 					<button
-						class=${showClosed
-							? "px-2 py-1 text-xs rounded-sm border border-green-700 text-green-400 bg-green-900/20"
-							: "px-2 py-1 text-xs rounded-sm border border-[#2a2a2a] text-[#999] hover:border-[#444]"}
+						class=${
+							showClosed
+								? "px-2 py-1 text-xs rounded-sm border border-green-700 text-green-400 bg-green-900/20"
+								: "px-2 py-1 text-xs rounded-sm border border-[#2a2a2a] text-[#999] hover:border-[#444]"
+						}
 						onClick=${() => setShowClosed(!showClosed)}
 					>
 						${showClosed ? "Hide Closed" : "Show Closed"}
@@ -162,11 +168,14 @@ function renderIssueCardHtml(issue) {
 	const opacityClass = isClosed ? " opacity-50" : "";
 	const idColorClass = hasBlockedBy ? "text-red-400" : "text-[#999]";
 	const blockedIcon = hasBlockedBy ? `<span class="text-xs">⚠️</span> ` : "";
-	const closedBadge = isClosed ? `<span class="text-xs bg-green-900/40 text-green-400 rounded px-1 ml-1">Closed</span>` : "";
-	const titleClass = isClosed ? "line-through" : "";
-	const closeReasonHtml = isClosed && issue.closeReason
-		? `<div class="text-[#666] text-xs mb-1 italic">${escapeHtml(truncate(issue.closeReason, 80))}</div>`
+	const closedBadge = isClosed
+		? `<span class="text-xs bg-green-900/40 text-green-400 rounded px-1 ml-1">Closed</span>`
 		: "";
+	const titleClass = isClosed ? "line-through" : "";
+	const closeReasonHtml =
+		isClosed && issue.closeReason
+			? `<div class="text-[#666] text-xs mb-1 italic">${escapeHtml(truncate(issue.closeReason, 80))}</div>`
+			: "";
 	return `
 		<div class="bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${opacityClass}" style="border-left-color: ${borderColor}">
 			<div class="flex items-start justify-between gap-2 mb-1">
@@ -201,17 +210,15 @@ function renderColumnHtml(title, issues, borderClass) {
 		</div>`;
 }
 
-window.renderIssues = function (appState, el) {
+window.renderIssues = (appState, el) => {
 	const issues = appState.issues || [];
 	const priorityFilter = el.dataset.priorityFilter || "all";
 	const showClosed = el.dataset.showClosed !== "false";
 
 	const filtered =
-		priorityFilter === "all"
-			? issues
-			: issues.filter((i) => String(i.priority) === priorityFilter);
+		priorityFilter === "all" ? issues : issues.filter((i) => String(i.priority) === priorityFilter);
 
-	const visibleIssues = showClosed ? filtered : filtered.filter(i => i.status !== "closed");
+	const visibleIssues = showClosed ? filtered : filtered.filter((i) => i.status !== "closed");
 	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
 
 	const filterButtons = [

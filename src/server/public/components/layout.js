@@ -2,8 +2,8 @@
 // App shell: NavBar, WsIndicator, Layout wrapper.
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
-import { h } from "https://esm.sh/preact@latest";
 import htm from "https://esm.sh/htm@latest";
+import { h } from "https://esm.sh/preact@latest";
 
 const html = htm.bind(h);
 

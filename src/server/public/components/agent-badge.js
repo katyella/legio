@@ -2,8 +2,8 @@
 // Inline badge: agent name + state color dot + capability label.
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
-import { h } from "https://esm.sh/preact@latest";
 import htm from "https://esm.sh/htm@latest";
+import { h } from "https://esm.sh/preact@latest";
 
 const html = htm.bind(h);
 
@@ -31,8 +31,7 @@ export function AgentBadge({ name, state, capability }) {
 		<span class="inline-flex items-center gap-1.5">
 			<span class=${`${dotColor} leading-none`}>●</span>
 			<span class="font-medium text-[#e5e5e5] text-sm">${name}</span>
-			${capability &&
-			html`<span class="text-xs text-gray-500">${capability}</span>`}
+			${capability && html`<span class="text-xs text-gray-500">${capability}</span>`}
 		</span>
 	`;
 }

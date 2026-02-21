@@ -6,10 +6,10 @@
  * of terminal state and multiple data sources.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { dashboardCommand } from "./dashboard.ts";
 

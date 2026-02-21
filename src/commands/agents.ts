@@ -4,13 +4,12 @@
  * Discover and query agents by capability.
  */
 
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { type AgentSession, SUPPORTED_CAPABILITIES } from "../types.ts";
-import { readFile } from "node:fs/promises";
-
 
 /**
  * Parse a named flag value from args.

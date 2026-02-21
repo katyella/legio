@@ -287,9 +287,9 @@ export function createSessionStore(dbPath: string): SessionStore {
 
 		purge(opts: { all?: boolean; state?: AgentState; agent?: string }): number {
 			if (opts.all) {
-				const countRow = db
-					.prepare("SELECT COUNT(*) as cnt FROM sessions")
-					.get() as { cnt: number } | undefined;
+				const countRow = db.prepare("SELECT COUNT(*) as cnt FROM sessions").get() as
+					| { cnt: number }
+					| undefined;
 				const count = countRow?.cnt ?? 0;
 				db.prepare("DELETE FROM sessions").run();
 				return count;

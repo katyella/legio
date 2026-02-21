@@ -111,10 +111,7 @@ test("clicking Dashboard nav link renders the Dashboard view", async ({ page, se
 	await expect(page.locator("text=Agents").first()).toBeVisible({ timeout: 10_000 });
 });
 
-test("clicking Chat nav link from Dashboard returns to Chat view", async ({
-	page,
-	serverUrl,
-}) => {
+test("clicking Chat nav link from Dashboard returns to Chat view", async ({ page, serverUrl }) => {
 	await page.goto(`${serverUrl}#dashboard`);
 	await waitForApp(page);
 

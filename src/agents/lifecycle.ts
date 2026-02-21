@@ -12,7 +12,9 @@ const HANDOFFS_FILENAME = "handoffs.json";
  */
 async function loadHandoffs(agentsDir: string, agentName: string): Promise<SessionHandoff[]> {
 	const filePath = join(agentsDir, agentName, HANDOFFS_FILENAME);
-	const exists = await access(filePath).then(() => true).catch(() => false);
+	const exists = await access(filePath)
+		.then(() => true)
+		.catch(() => false);
 
 	if (!exists) {
 		return [];

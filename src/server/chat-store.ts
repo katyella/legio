@@ -112,9 +112,9 @@ export function createChatStore(dbPath: string): ChatStore {
 		},
 
 		getSession(id: string): ChatSession | null {
-			const row = db
-				.prepare("SELECT * FROM chat_sessions WHERE id = $id")
-				.get({ id }) as ChatSessionRow | undefined;
+			const row = db.prepare("SELECT * FROM chat_sessions WHERE id = $id").get({ id }) as
+				| ChatSessionRow
+				| undefined;
 			return row ? rowToSession(row) : null;
 		},
 

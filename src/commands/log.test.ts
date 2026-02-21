@@ -1,16 +1,21 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 /** Test helper: create a file accessor for checking existence and reading content. */
 function fileAccessor(path: string) {
 	return {
-		exists: () => access(path).then(() => true, () => false),
+		exists: () =>
+			access(path).then(
+				() => true,
+				() => false,
+			),
 		text: () => readFile(path, "utf-8"),
 	};
 }
+
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMailClient } from "../mail/client.ts";
@@ -124,12 +129,12 @@ describe("logCommand", () => {
 	});
 
 	test("invalid event name throws ValidationError", async () => {
-		await expect(
-			logCommand(["invalid-event", "--agent", "test-agent"]),
-		).rejects.toThrow(ValidationError);
-		await expect(
-			logCommand(["invalid-event", "--agent", "test-agent"]),
-		).rejects.toThrow("Invalid event");
+		await expect(logCommand(["invalid-event", "--agent", "test-agent"])).rejects.toThrow(
+			ValidationError,
+		);
+		await expect(logCommand(["invalid-event", "--agent", "test-agent"])).rejects.toThrow(
+			"Invalid event",
+		);
 	});
 
 	test("missing --agent flag throws ValidationError", async () => {
@@ -422,7 +427,12 @@ describe("logCommand", () => {
 			await writeFile(currentRunPath, "run-test-001");
 
 			// Verify current-run.txt exists before test
-			expect(await access(currentRunPath).then(() => true, () => false)).toBe(true);
+			expect(
+				await access(currentRunPath).then(
+					() => true,
+					() => false,
+				),
+			).toBe(true);
 
 			// Call session-end
 			await logCommand(["session-end", "--agent", "coordinator"]);
@@ -437,7 +447,12 @@ describe("logCommand", () => {
 			expect(run?.completedAt).toBeTruthy();
 
 			// Verify: current-run.txt is deleted (create fresh file reference)
-			expect(await access(currentRunPath).then(() => true, () => false)).toBe(false);
+			expect(
+				await access(currentRunPath).then(
+					() => true,
+					() => false,
+				),
+			).toBe(false);
 		});
 
 		test("session-end does not fail when no active run for coordinator", async () => {
@@ -1216,7 +1231,6 @@ describe("logCommand", () => {
 		const markerPath = join(tempDir, ".legio", "pending-nudges", "coordinator.json");
 		expect(await fileAccessor(markerPath).exists()).toBe(true);
 	});
-
 });
 
 /**

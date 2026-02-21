@@ -5,6 +5,7 @@
 
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
+import { agentActivityLog, appState } from "../lib/state.js";
 import {
 	agentColor,
 	groupActivityMessages,
@@ -13,7 +14,6 @@ import {
 	stateIcon,
 	timeAgo,
 } from "../lib/utils.js";
-import { agentActivityLog, appState } from "../lib/state.js";
 
 function stripAnsi(str) {
 	return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, "");
@@ -29,7 +29,10 @@ function diffCapture(baselineText, currentText) {
 	for (let i = currentLines.length - anchorLen; i >= 0; i--) {
 		let match = true;
 		for (let j = 0; j < anchorLen; j++) {
-			if (currentLines[i + j] !== anchor[j]) { match = false; break; }
+			if (currentLines[i + j] !== anchor[j]) {
+				match = false;
+				break;
+			}
 		}
 		if (match) {
 			return currentLines.slice(i + anchorLen).join("\n");
@@ -134,16 +137,11 @@ function AgentRoster({ agents, mail, events }) {
 								// Filter mail for this agent
 								const agentMail = mail
 									.filter((m) => m.from === agent.agentName || m.to === agent.agentName)
-									.sort(
-										(a, b) =>
-											new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-									)
+									.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 									.slice(0, 5);
 
 								// Filter events for this agent
-								const agentEvents = events
-									.filter((e) => e.agent === agent.agentName)
-									.slice(0, 5);
+								const agentEvents = events.filter((e) => e.agent === agent.agentName).slice(0, 5);
 
 								return html`
 									<div
@@ -285,9 +283,7 @@ function buildProgressNarration(agents) {
 
 	const booting = agents.filter((a) => a.state === "booting");
 	const working = agents.filter((a) => a.state === "working");
-	const completed = agents.filter(
-		(a) => a.state === "completed" || a.state === "done",
-	);
+	const completed = agents.filter((a) => a.state === "completed" || a.state === "done");
 
 	const total = agents.length;
 
@@ -365,9 +361,8 @@ function CoordinatorChat({ mail }) {
 						!coordMessages.some(
 							(rm) =>
 								rm.body === pm.body &&
-								Math.abs(
-									new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
-								) < 60000,
+								Math.abs(new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime()) <
+									60000,
 						),
 				),
 			);
@@ -525,9 +520,7 @@ function CoordinatorChat({ mail }) {
 		// Check for /command trigger — only when input starts with / and no space yet
 		if (value.startsWith("/") && value.indexOf(" ") === -1) {
 			const filter = value.slice(1).toLowerCase();
-			const filtered = SLASH_COMMANDS.filter(
-				(c) => !filter || c.cmd.slice(1).startsWith(filter),
-			);
+			const filtered = SLASH_COMMANDS.filter((c) => !filter || c.cmd.slice(1).startsWith(filter));
 			if (filtered.length > 0) {
 				setDropdown({ visible: true, items: filtered, selectedIndex: 0, type: "command" });
 				return;
@@ -687,21 +680,21 @@ function CoordinatorChat({ mail }) {
 										>
 											<div class="flex items-center gap-1 mb-1">
 												<span class="text-xs text-[#999]">
-													${isFromUser ? "You" : (msg.from || "unknown")}
+													${isFromUser ? "You" : msg.from || "unknown"}
 												</span>
 												<span class="text-xs text-[#555]">
-													${isSending
-														? "\u00b7 sending\u2026"
-														: `\u00b7 ${timeAgo(msg.createdAt)}`}
+													${isSending ? "\u00b7 sending\u2026" : `\u00b7 ${timeAgo(msg.createdAt)}`}
 												</span>
 											</div>
 											<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
-												${isCommand
-													? html`<span
+												${
+													isCommand
+														? html`<span
 																class="text-xs px-1 py-0.5 rounded bg-[#2a2a2a] text-[#888] font-mono mr-1"
 															>cmd</span
 														><span class="font-mono">${msg.body || ""}</span>`
-													: (msg.body || "")}
+														: msg.body || ""
+												}
 											</div>
 										</div>
 									</div>
@@ -717,9 +710,10 @@ function CoordinatorChat({ mail }) {
 										<span class="text-xs text-[#999]">coordinator</span>
 										<span class="text-xs text-[#555] animate-pulse">\u00b7 working\u2026</span>
 									</div>
-									${streamText
-										? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
-										: html`<div class="flex items-center gap-2 text-sm text-[#666]">
+									${
+										streamText
+											? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
+											: html`<div class="flex items-center gap-2 text-sm text-[#666]">
 											<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
 										</div>`
 									}
@@ -739,17 +733,18 @@ function CoordinatorChat({ mail }) {
 								<div
 									class="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded shadow-lg max-h-48 overflow-y-auto z-50"
 								>
-									${dropdown.items.map((item, i) =>
-										html`
+									${dropdown.items.map(
+										(item, i) =>
+											html`
 											<div
-												key=${dropdown.type === "mention"
-													? (item.agentName ?? item.name ?? String(i))
-													: item.cmd}
+												key=${
+													dropdown.type === "mention"
+														? (item.agentName ?? item.name ?? String(i))
+														: item.cmd
+												}
 												class=${
 													"flex items-center gap-2 px-3 py-2 cursor-pointer text-sm text-[#e5e5e5] " +
-													(i === dropdown.selectedIndex
-														? "bg-[#E64415]/20"
-														: "hover:bg-[#2a2a2a]")
+													(i === dropdown.selectedIndex ? "bg-[#E64415]/20" : "hover:bg-[#2a2a2a]")
 												}
 												onMouseDown=${(e) => {
 													e.preventDefault();

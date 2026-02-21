@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, vi, test, type MockInstance } from "vitest";
+import { afterEach, describe, expect, type MockInstance, test, vi } from "vitest";
 import type { LogEvent } from "../types.ts";
 import { setQuiet } from "./color.ts";
 import { formatLogLine, printToConsole } from "./reporter.ts";
