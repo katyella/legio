@@ -33,19 +33,29 @@ function truncate(str, maxLen) {
 export function IssueCard({ issue }) {
 	const borderColor = priorityBorderColors[issue.priority] ?? "#6b7280";
 	const hasBlockedBy = Array.isArray(issue.blockedBy) && issue.blockedBy.length > 0;
+	const isClosed = issue.status === "closed";
 
 	return html`
 		<div
-			class="bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3"
+			class=${`bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${isClosed ? " opacity-50" : ""}`}
 			style=${{ borderLeftColor: borderColor }}
 		>
 			<div class="flex items-start justify-between gap-2 mb-1">
-				<span class="text-[#999] text-xs font-mono">${issue.id || ""}</span>
+				<span class="flex items-center gap-1">
+					${hasBlockedBy ? html`<span class="text-xs">⚠️</span>` : null}
+					<span class=${`text-xs font-mono${hasBlockedBy ? " text-red-400" : " text-[#999]"}`}>${issue.id || ""}</span>
+					${isClosed ? html`<span class="text-xs bg-green-900/40 text-green-400 rounded px-1">Closed</span>` : null}
+				</span>
 				${issue.priority != null ? html`<span class="text-[#999] text-xs">P${issue.priority}</span>` : null}
 			</div>
-			<div class="text-[#e5e5e5] font-medium text-sm mb-1">
+			<div class=${`text-[#e5e5e5] font-medium text-sm mb-1${isClosed ? " line-through" : ""}`}>
 				${truncate(issue.title || "", 60)}
 			</div>
+			${isClosed && issue.closeReason ? html`
+				<div class="text-[#666] text-xs mb-1 italic">
+					${truncate(issue.closeReason, 80)}
+				</div>
+			` : null}
 			${issue.description ? html`
 				<div class="text-[#999] text-xs mb-2 leading-relaxed">
 					${truncate(issue.description, 120)}
