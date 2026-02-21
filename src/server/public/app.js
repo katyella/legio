@@ -60,7 +60,7 @@ function Router({ view, param }) {
 		case 'command':   return html`<${CommandView} />`;
 		case 'dashboard': return html`<${DashboardView} agents=${appState.agents.value} mail=${appState.mail.value} mergeQueue=${appState.mergeQueue.value} status=${appState.status.value} />`;
 		case 'costs':     return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
-		case 'issues':    return html`<${IssuesView} />`;
+		case 'tasks':     return html`<${IssuesView} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
 		default:          return html`<${CommandView} />`;
@@ -73,7 +73,7 @@ const NAV_LINKS = [
 	{ href: '#command',   label: 'Command',   view: 'command' },
 	{ href: '#dashboard', label: 'Dashboard', view: 'dashboard' },
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
-	{ href: '#issues',    label: 'Issues',    view: 'issues' },
+	{ href: '#tasks',     label: 'Tasks',     view: 'tasks' },
 	{ href: '#strategy',  label: 'Strategy',  view: 'strategy' },
 ];
 
@@ -128,7 +128,18 @@ function App() {
 	const [setupStatus, setSetupStatus] = useState(null);
 
 	useEffect(() => {
-		const onHashChange = () => setRoute(parseHash(location.hash));
+		const onHashChange = () => {
+			const hash = location.hash;
+			if (hash === '#issues' || hash === 'issues') {
+				window.location.hash = '#tasks';
+				return; // will re-trigger the hash change handler
+			}
+			setRoute(parseHash(hash));
+		};
+		// Redirect legacy #issues hash on initial load
+		if (location.hash === '#issues' || location.hash === 'issues') {
+			window.location.hash = '#tasks';
+		}
 		window.addEventListener('hashchange', onHashChange);
 		return () => window.removeEventListener('hashchange', onHashChange);
 	}, []);
