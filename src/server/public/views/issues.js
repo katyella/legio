@@ -151,7 +151,8 @@ function renderIssueCardHtml(issue) {
 				<span class="text-[#999] text-xs font-mono">${escapeHtml(issue.id || "")}</span>
 				${issue.priority != null ? `<span class="text-[#999] text-xs">P${issue.priority}</span>` : ""}
 			</div>
-			<div class="text-[#e5e5e5] font-medium text-sm mb-2">${escapeHtml(truncate(issue.title || "", 60))}</div>
+			<div class="text-[#e5e5e5] font-medium text-sm mb-1">${escapeHtml(truncate(issue.title || "", 60))}</div>
+		${issue.description ? `<div class="text-[#999] text-xs mb-2 leading-relaxed">${escapeHtml(truncate(issue.description, 120))}</div>` : ""}
 			<div class="flex items-center gap-2 flex-wrap">
 				${issue.type ? `<span class="text-xs bg-[#2a2a2a] rounded px-1 text-[#999]">${escapeHtml(issue.type)}</span>` : ""}
 				${issue.assignee ? `<span class="text-[#999] text-xs">${escapeHtml(issue.assignee)}</span>` : ""}

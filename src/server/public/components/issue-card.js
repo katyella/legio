@@ -43,9 +43,14 @@ export function IssueCard({ issue }) {
 				<span class="text-[#999] text-xs font-mono">${issue.id || ""}</span>
 				${issue.priority != null ? html`<span class="text-[#999] text-xs">P${issue.priority}</span>` : null}
 			</div>
-			<div class="text-[#e5e5e5] font-medium text-sm mb-2">
+			<div class="text-[#e5e5e5] font-medium text-sm mb-1">
 				${truncate(issue.title || "", 60)}
 			</div>
+			${issue.description ? html`
+				<div class="text-[#999] text-xs mb-2 leading-relaxed">
+					${truncate(issue.description, 120)}
+				</div>
+			` : null}
 			<div class="flex items-center gap-2 flex-wrap">
 				${issue.type ? html`<span class="text-xs bg-[#2a2a2a] rounded px-1 text-[#999]">${issue.type}</span>` : null}
 				${issue.assignee ? html`<span class="text-[#999] text-xs">${issue.assignee}</span>` : null}
