@@ -96,29 +96,37 @@ export async function createSession(
 	command: string,
 	env?: Record<string, string>,
 ): Promise<number> {
-	// Build environment exports for the tmux session
-	const exports: string[] = [];
+	// Clear Claude Code nesting detection so child Claude Code instances
+	// don't refuse to start with "cannot be launched inside another session".
+	// This MUST be part of the shell command (not tmux -e) because we need
+	// to *unset* vars inherited from the parent process environment.
+	const shellPrefix = "unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT";
+	const wrappedCommand = `${shellPrefix} && ${command}`;
 
-	// Ensure PATH includes the legio binary directory
-	// so that hooks calling `legio` inside the session can find it
+	// Build tmux args. Environment variables are passed via `-e KEY=VALUE`
+	// flags (tmux 3.2+) instead of shell `export` commands to avoid
+	// ERR_STREAM_DESTROYED in Claude Code v2.1.50, which is triggered when
+	// shell variable expansion (e.g., $PATH) produces very long command
+	// strings that corrupt the internal TUI stream.
+	const tmuxArgs = ["new-session", "-d", "-s", name, "-c", cwd];
+
+	// Ensure PATH includes the legio binary directory so hooks can find `legio`
 	const legioBinDir = await detectLegioBinDir();
 	if (legioBinDir) {
-		exports.push(`export PATH="${legioBinDir}:$PATH"`);
+		const currentPath = process.env.PATH ?? "";
+		tmuxArgs.push("-e", `PATH=${legioBinDir}:${currentPath}`);
 	}
 
-	// Add any additional environment variables
+	// Pass additional environment variables
 	if (env) {
 		for (const [key, value] of Object.entries(env)) {
-			exports.push(`export ${key}="${value}"`);
+			tmuxArgs.push("-e", `${key}=${value}`);
 		}
 	}
 
-	const wrappedCommand = exports.length > 0 ? `${exports.join(" && ")} && ${command}` : command;
+	tmuxArgs.push(wrappedCommand);
 
-	const { exitCode, stderr } = await runCommand(
-		["tmux", "new-session", "-d", "-s", name, "-c", cwd, wrappedCommand],
-		cwd,
-	);
+	const { exitCode, stderr } = await runCommand(["tmux", ...tmuxArgs], cwd);
 
 	if (exitCode !== 0) {
 		throw new AgentError(`Failed to create tmux session "${name}": ${stderr.trim()}`, {

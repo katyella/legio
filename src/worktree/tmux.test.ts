@@ -106,14 +106,18 @@ describe("createSession", () => {
 		const args = tmuxCallArgs[1] as string[];
 		expect(command).toBe("tmux");
 		expect(args[0]).toBe("new-session");
-		expect(args[2]).toBe("-s");
-		expect(args[3]).toBe("my-session");
-		expect(args[4]).toBe("-c");
-		expect(args[5]).toBe("/work/dir");
-		// The command should be wrapped with PATH export
-		const wrappedCmd = args[6] as string;
+		expect(args).toContain("-s");
+		expect(args).toContain("my-session");
+		expect(args).toContain("-c");
+		expect(args).toContain("/work/dir");
+		// The command is the last arg, wrapped with unset prefix
+		const wrappedCmd = args[args.length - 1] as string;
 		expect(wrappedCmd).toContain("echo hello");
-		expect(wrappedCmd).toContain("export PATH=");
+		// PATH is injected via -e flag, not shell export
+		expect(args).toContain("-e");
+		const eIndex = args.indexOf("-e");
+		const pathArg = args[eIndex + 1] as string;
+		expect(pathArg).toMatch(/^PATH=.*\/usr\/local\/bin/);
 
 		const opts = tmuxCallArgs[2] as { cwd: string };
 		expect(opts.cwd).toBe("/work/dir");
@@ -242,10 +246,10 @@ describe("createSession", () => {
 		const pid = await createSession("fallback-agent", "/tmp", "echo test");
 		expect(pid).toBe(5555);
 
-		// The tmux command should contain the original command
+		// The tmux command (last arg) should contain the original command
 		const tmuxCallArgs = mockSpawn.mock.calls[1] as unknown[];
 		const args = tmuxCallArgs[1] as string[];
-		const tmuxCmd = args[6] as string;
+		const tmuxCmd = args[args.length - 1] as string;
 		expect(tmuxCmd).toContain("echo test");
 	});
 });

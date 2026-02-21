@@ -1,10 +1,22 @@
 #!/usr/bin/env node
-import { register } from "node:module";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-// Register tsx as a TypeScript ESM loader so Node.js can execute .ts files directly.
-// Requires Node.js >= 20.6 (22+ recommended). tsx must be a runtime dependency.
-// Use import.meta.url (not pathToFileURL("./")) so resolution is relative to this
-// shim file, not the process CWD — which is critical when legio is installed globally.
-register("tsx/esm", import.meta.url);
+// Bootstrap shim: re-exec Node with --import tsx so TypeScript files load
+// natively. tsx >= 4.21 dropped support for module.register() on Node >= 23,
+// requiring --import instead. The env guard prevents infinite re-exec.
 
-await import("../src/index.ts");
+if (process.env.__LEGIO_TSX_LOADED) {
+	await import("../src/index.ts");
+} else {
+	const scriptPath = fileURLToPath(import.meta.url);
+	const result = spawnSync(
+		process.execPath,
+		["--import", "tsx", scriptPath, ...process.argv.slice(2)],
+		{
+			stdio: "inherit",
+			env: { ...process.env, __LEGIO_TSX_LOADED: "1" },
+		},
+	);
+	process.exit(result.status ?? 1);
+}

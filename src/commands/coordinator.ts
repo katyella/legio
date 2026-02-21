@@ -13,7 +13,7 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { access, mkdir, readFile, unlink } from "node:fs/promises";
+import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -361,13 +361,18 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// coordinator knows its role, hierarchy rules, and delegation patterns
 		// (legio-gaio, legio-0kwf).
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "coordinator.md");
-		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
+		// Build a settings JSON file that: (1) skips the bypass-permissions
+		// confirmation dialog, and (2) injects the agent definition as a system
+		// prompt suffix. Using --settings with a file avoids Claude Code's
+		// ERR_STREAM_DESTROYED crash when --append-system-prompt receives large
+		// inline payloads (14KB+).
+		const settings: Record<string, unknown> = { skipDangerousModePermissionPrompt: true };
 		if (await fileExists(agentDefPath)) {
-			const agentDef = await readFile(agentDefPath, "utf-8");
-			// Single-quote the content for safe shell expansion (only escape single quotes)
-			const escaped = agentDef.replace(/'/g, "'\\''");
-			claudeCmd += ` --append-system-prompt '${escaped}'`;
+			settings.appendSystemPrompt = await readFile(agentDefPath, "utf-8");
 		}
+		const settingsPath = join(legioDir, `settings-${COORDINATOR_NAME}.json`);
+		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
+		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await tmux.createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: COORDINATOR_NAME,
 		});

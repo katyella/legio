@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -27,6 +27,15 @@ import { createSession, isSessionAlive, killSession, sendKeys } from "../worktre
 
 /** Default monitor agent name. */
 const MONITOR_NAME = "monitor";
+
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /**
  * Build the tmux session name for the monitor.
@@ -129,17 +138,18 @@ async function startMonitor(args: string[]): Promise<void> {
 		const manifest = await manifestLoader.load();
 		const model = resolveModel(config, manifest, "monitor", "sonnet");
 
-		// Spawn tmux session at project root with Claude Code (interactive mode).
-		// Inject the monitor base definition via --append-system-prompt.
+		// Build settings JSON file to skip the bypass dialog and inject the
+		// agent definition. Avoids --append-system-prompt's ERR_STREAM_DESTROYED
+		// crash with large payloads on Claude Code v2.1.50.
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "monitor.md");
-		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
-		try {
-			const agentDef = await readFile(agentDefPath, "utf-8");
-			const escaped = agentDef.replace(/'/g, "'\\''");
-			claudeCmd += ` --append-system-prompt '${escaped}'`;
-		} catch {
-			// agent def file not found, proceed without system prompt
+		const legioDir = join(projectRoot, ".legio");
+		const settings: Record<string, unknown> = { skipDangerousModePermissionPrompt: true };
+		if (await fileExists(agentDefPath)) {
+			settings.appendSystemPrompt = await readFile(agentDefPath, "utf-8");
 		}
+		const settingsPath = join(legioDir, `settings-${MONITOR_NAME}.json`);
+		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
+		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: MONITOR_NAME,
 		});

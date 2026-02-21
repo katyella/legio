@@ -466,7 +466,7 @@ describe("startCoordinator", () => {
 		expect(content).toContain("LEGIO_AGENT_NAME");
 	});
 
-	test("injects agent definition via --append-system-prompt when agent-defs/coordinator.md exists", async () => {
+	test("injects agent definition via --settings file when agent-defs/coordinator.md exists", async () => {
 		// Deploy a coordinator agent definition
 		const agentDefsDir = join(legioDir, "agent-defs");
 		await mkdir(agentDefsDir, { recursive: true });
@@ -481,8 +481,17 @@ describe("startCoordinator", () => {
 
 		expect(calls.createSession).toHaveLength(1);
 		const cmd = calls.createSession[0]?.command ?? "";
-		expect(cmd).toContain("--append-system-prompt");
-		expect(cmd).toContain("# Coordinator Agent");
+		// Agent def is written to a settings JSON file and passed via --settings
+		// to avoid Claude Code's ERR_STREAM_DESTROYED with large inline payloads
+		expect(cmd).toContain("--settings");
+		expect(cmd).toContain("settings-coordinator.json");
+
+		// Verify the settings file was written with the agent def
+		const { readFileSync } = await import("node:fs");
+		const settingsPath = join(legioDir, "settings-coordinator.json");
+		const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
+		expect(settings.appendSystemPrompt).toContain("# Coordinator Agent");
+		expect(settings.skipDangerousModePermissionPrompt).toBe(true);
 	});
 
 	test("reads model from manifest instead of hardcoding", async () => {

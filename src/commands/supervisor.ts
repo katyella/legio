@@ -12,7 +12,7 @@
  * - Multiple supervisors can run concurrently (distinguished by --name)
  */
 
-import { mkdir, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
@@ -23,6 +23,15 @@ import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
 import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
+
+async function fileExists(path: string): Promise<boolean> {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 /**
  * Build the supervisor startup beacon.
@@ -191,18 +200,19 @@ async function startSupervisor(args: string[]): Promise<void> {
 		const manifest = await manifestLoader.load();
 		const model = resolveModel(config, manifest, "supervisor", "opus");
 
-		// Spawn tmux session at project root with Claude Code (interactive mode).
-		// Inject the supervisor base definition via --append-system-prompt.
+		// Build settings JSON file to skip the bypass dialog and inject the
+		// agent definition. Avoids --append-system-prompt's ERR_STREAM_DESTROYED
+		// crash with large payloads on Claude Code v2.1.50.
 		const tmuxSession = `legio-${config.project.name}-supervisor-${flags.name}`;
 		const agentDefPath = join(projectRoot, ".legio", "agent-defs", "supervisor.md");
-		let claudeCmd = `claude --model ${model} --dangerously-skip-permissions`;
-		try {
-			const agentDef = await readFile(agentDefPath, "utf-8");
-			const escaped = agentDef.replace(/'/g, "'\\''");
-			claudeCmd += ` --append-system-prompt '${escaped}'`;
-		} catch {
-			// agent def file not found, proceed without system prompt
+		const legioDir = join(projectRoot, ".legio");
+		const settings: Record<string, unknown> = { skipDangerousModePermissionPrompt: true };
+		if (await fileExists(agentDefPath)) {
+			settings.appendSystemPrompt = await readFile(agentDefPath, "utf-8");
 		}
+		const settingsPath = join(legioDir, `settings-${flags.name}.json`);
+		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
+		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: flags.name,
 		});

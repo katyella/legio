@@ -460,8 +460,15 @@ export async function slingCommand(args: string[]): Promise<void> {
 		}
 
 		// 12. Create tmux session running claude in interactive mode
+		// Write a settings JSON file to skip the bypass-permissions dialog.
+		const settingsPath = join(legioDir, `settings-${name}.json`);
+		await writeFile(
+			settingsPath,
+			JSON.stringify({ skipDangerousModePermissionPrompt: true }),
+			"utf-8",
+		);
 		const tmuxSessionName = `legio-${config.project.name}-${name}`;
-		const claudeCmd = `claude --model ${agentDef.model} --dangerously-skip-permissions`;
+		const claudeCmd = `claude --model ${agentDef.model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSessionName, worktreePath, claudeCmd, {
 			LEGIO_AGENT_NAME: name,
 			LEGIO_WORKTREE_PATH: worktreePath,
