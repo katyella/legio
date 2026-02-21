@@ -5,8 +5,6 @@ import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
-import type { AutopilotState } from "../types.ts";
-
 export interface WebSocketData {
 	connectedAt: string;
 }
@@ -19,7 +17,6 @@ interface Snapshot {
 		mergeQueue: unknown[];
 		metricsSummary: { totalSessions: number; avgDuration: number };
 		runs: { active: unknown | null };
-		autopilot?: AutopilotState | null;
 	};
 	timestamp: string;
 }
@@ -33,10 +30,7 @@ export interface WebSocketManager {
 	broadcastEvent(event: { type: string; data?: unknown }): void;
 }
 
-export function createWebSocketManager(
-	legioDir: string,
-	getAutopilotState?: () => AutopilotState | null,
-): WebSocketManager {
+export function createWebSocketManager(legioDir: string): WebSocketManager {
 	const clients = new Set<WebSocket>();
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 	let lastSnapshot = "";
@@ -113,11 +107,6 @@ export function createWebSocketManager(
 			}
 		} catch {
 			/* db may not exist */
-		}
-
-		// Autopilot state (from injected callback)
-		if (getAutopilotState) {
-			data.autopilot = getAutopilotState();
 		}
 
 		return {
