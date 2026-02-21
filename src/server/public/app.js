@@ -5,7 +5,6 @@ import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import { html } from 'htm/preact';
 import { appState, setLastUpdated } from './lib/state.js';
-import { CommandView } from './views/command.js';
 import { DashboardView } from './views/dashboard.js';
 import { IssuesView } from './views/issues.js';
 import { InspectView } from './views/inspect.js';
@@ -48,29 +47,27 @@ export async function initData() {
 // ===== Hash Router Helpers =====
 
 function parseHash(hash) {
-	const withoutHash = (hash || '#command').replace(/^#\/?/, '');
+	const withoutHash = (hash || '#dashboard').replace(/^#\/?/, '');
 	const parts = withoutHash.split('/');
-	return { view: parts[0] || 'command', param: parts[1] ?? null };
+	return { view: parts[0] || 'dashboard', param: parts[1] ?? null };
 }
 
 // ===== Router =====
 
 function Router({ view, param }) {
 	switch (view) {
-		case 'command':   return html`<${CommandView} />`;
-		case 'dashboard': return html`<${DashboardView} agents=${appState.agents.value} mail=${appState.mail.value} mergeQueue=${appState.mergeQueue.value} status=${appState.status.value} />`;
+		case 'dashboard': return html`<${DashboardView} />`;
 		case 'costs':     return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
 		case 'tasks':     return html`<${IssuesView} />`;
 		case 'inspect':   return html`<${InspectView} agentName=${param} />`;
 		case 'strategy':  return html`<${StrategyView} />`;
-		default:          return html`<${CommandView} />`;
+		default:          return html`<${DashboardView} />`;
 	}
 }
 
 // ===== Layout =====
 
 const NAV_LINKS = [
-	{ href: '#command',   label: 'Command',   view: 'command' },
 	{ href: '#dashboard', label: 'Dashboard', view: 'dashboard' },
 	{ href: '#costs',     label: 'Costs',     view: 'costs' },
 	{ href: '#tasks',     label: 'Tasks',     view: 'tasks' },
@@ -134,11 +131,19 @@ function App() {
 				window.location.hash = '#tasks';
 				return; // will re-trigger the hash change handler
 			}
+			if (hash === '#command' || hash === 'command') {
+				window.location.hash = '#dashboard';
+				return; // will re-trigger the hash change handler
+			}
 			setRoute(parseHash(hash));
 		};
 		// Redirect legacy #issues hash on initial load
 		if (location.hash === '#issues' || location.hash === 'issues') {
 			window.location.hash = '#tasks';
+		}
+		// Redirect legacy #command hash on initial load
+		if (location.hash === '#command' || location.hash === 'command') {
+			window.location.hash = '#dashboard';
 		}
 		window.addEventListener('hashchange', onHashChange);
 		return () => window.removeEventListener('hashchange', onHashChange);
