@@ -155,8 +155,11 @@ export const MAIL_MESSAGE_TYPES: readonly MailMessageType[] = [
 	"assign",
 ] as const;
 
-/** Audience for a mail message: who should see it. */
+/** Audience targeting for mail messages. */
 export type MailAudience = "human" | "agent" | "both";
+
+/** Runtime array of valid audience values for CHECK constraint generation. */
+export const MAIL_AUDIENCE_VALUES: readonly MailAudience[] = ["human", "agent", "both"] as const;
 
 export interface MailMessage {
 	id: string; // "msg-" + nanoid(12)
@@ -169,6 +172,7 @@ export interface MailMessage {
 	audience: MailAudience; // Who should see this message
 	threadId: string | null; // Conversation threading
 	payload: string | null; // JSON-encoded structured data for protocol messages
+	audience: MailAudience; // Intended audience: "human", "agent", or "both"
 	read: boolean;
 	createdAt: string; // ISO timestamp
 }

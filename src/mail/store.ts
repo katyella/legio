@@ -19,7 +19,12 @@ export interface MailStore {
 		},
 	): MailMessage;
 	getUnread(agentName: string): MailMessage[];
-	getAll(filters?: { from?: string; to?: string; unread?: boolean }): MailMessage[];
+	getAll(filters?: {
+		from?: string;
+		to?: string;
+		unread?: boolean;
+		audience?: string;
+	}): MailMessage[];
 	getById(id: string): MailMessage | null;
 	getByThread(threadId: string): MailMessage[];
 	markRead(id: string): void;
@@ -40,6 +45,7 @@ interface MessageRow {
 	audience: string;
 	thread_id: string | null;
 	payload: string | null;
+	audience: string;
 	read: number;
 	created_at: string;
 }
@@ -59,6 +65,7 @@ CREATE TABLE IF NOT EXISTS messages (
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
+  audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both')),
   read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`;
@@ -94,18 +101,22 @@ function migrateSchema(db: InstanceType<typeof Database>): void {
 		return;
 	}
 
-	// If has CHECK + payload + protocol types but missing audience → add audience column only
-	if (hasCheckConstraints && hasPayloadColumn && hasProtocolTypes && !hasAudienceColumn) {
-		db.exec("ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'agent'");
-		return;
-	}
-
 	// If only missing the payload column (has correct CHECK constraints), use ALTER TABLE
 	if (hasCheckConstraints && hasProtocolTypes && !hasPayloadColumn) {
 		db.exec("ALTER TABLE messages ADD COLUMN payload TEXT");
-		if (!hasAudienceColumn) {
-			db.exec("ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'agent'");
-		}
+		// Fall through to check for audience column below
+	}
+
+	// If only missing the audience column (other constraints already correct), use ALTER TABLE
+	if (hasCheckConstraints && hasProtocolTypes && !hasAudienceColumn) {
+		db.exec(
+			"ALTER TABLE messages ADD COLUMN audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both'))",
+		);
+		return;
+	}
+
+	// If already up to date after adding payload, we're done
+	if (hasCheckConstraints && hasPayloadColumn && hasProtocolTypes && hasAudienceColumn) {
 		return;
 	}
 
@@ -126,6 +137,7 @@ CREATE TABLE messages (
   priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
   thread_id TEXT,
   payload TEXT,
+  audience TEXT NOT NULL DEFAULT 'both' CHECK(audience IN ('human','agent','both')),
   read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`);
@@ -133,12 +145,12 @@ CREATE TABLE messages (
 		const oldHasPayload = row.sql.includes("payload");
 		const payloadSelect = oldHasPayload ? "payload" : "NULL";
 		db.exec(`
-INSERT INTO messages (id, from_agent, to_agent, subject, body, type, audience, priority, thread_id, payload, read, created_at)
+INSERT INTO messages (id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, audience, read, created_at)
 SELECT id, from_agent, to_agent, subject, body,
   CASE WHEN type IN (${validTypes}) THEN type ELSE 'status' END,
   'agent',
   CASE WHEN priority IN ('low','normal','high','urgent') THEN priority ELSE 'normal' END,
-  thread_id, ${payloadSelect}, read, created_at
+  thread_id, ${payloadSelect}, 'both', read, created_at
 FROM messages_old`);
 		db.exec("DROP TABLE messages_old");
 		db.exec("COMMIT");
@@ -180,6 +192,7 @@ function rowToMessage(row: MessageRow): MailMessage {
 		priority: row.priority as MailMessage["priority"],
 		threadId: row.thread_id,
 		payload: row.payload,
+		audience: row.audience as MailMessage["audience"],
 		read: row.read === 1,
 		createdAt: row.created_at,
 	};
@@ -212,9 +225,9 @@ export function createMailStore(dbPath: string): MailStore {
 	// Prepare statements for all queries
 	const insertStmt = db.prepare(`
 		INSERT INTO messages
-			(id, from_agent, to_agent, subject, body, type, audience, priority, thread_id, payload, read, created_at)
+			(id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, audience, read, created_at)
 		VALUES
-			($id, $from_agent, $to_agent, $subject, $body, $type, $audience, $priority, $thread_id, $payload, $read, $created_at)
+			($id, $from_agent, $to_agent, $subject, $body, $type, $priority, $thread_id, $payload, $audience, $read, $created_at)
 	`);
 
 	const getByIdStmt = db.prepare(`
@@ -238,6 +251,7 @@ export function createMailStore(dbPath: string): MailStore {
 		from?: string;
 		to?: string;
 		unread?: boolean;
+		audience?: string;
 	}): MailMessage[] {
 		const conditions: string[] = [];
 		const params: Record<string, string | number> = {};
@@ -253,6 +267,10 @@ export function createMailStore(dbPath: string): MailStore {
 		if (filters?.unread !== undefined) {
 			conditions.push("read = $read");
 			params.read = filters.unread ? 0 : 1;
+		}
+		if (filters?.audience !== undefined) {
+			conditions.push("audience = $audience");
+			params.audience = filters.audience;
 		}
 
 		const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -271,7 +289,7 @@ export function createMailStore(dbPath: string): MailStore {
 			const id = message.id || `msg-${randomId()}`;
 			const createdAt = new Date().toISOString();
 			const payload = message.payload ?? null;
-			const audience = message.audience ?? "agent";
+			const audience = message.audience ?? "both";
 
 			try {
 				insertStmt.run({
@@ -285,6 +303,7 @@ export function createMailStore(dbPath: string): MailStore {
 					priority: message.priority,
 					thread_id: message.threadId,
 					payload,
+					audience,
 					read: 0,
 					created_at: createdAt,
 				});
@@ -310,7 +329,12 @@ export function createMailStore(dbPath: string): MailStore {
 			return rows.map(rowToMessage);
 		},
 
-		getAll(filters?: { from?: string; to?: string; unread?: boolean }): MailMessage[] {
+		getAll(filters?: {
+			from?: string;
+			to?: string;
+			unread?: boolean;
+			audience?: string;
+		}): MailMessage[] {
 			return buildFilterQuery(filters);
 		},
 

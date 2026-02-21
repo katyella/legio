@@ -21,7 +21,14 @@ import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
-import type { EventLevel, MailMessage, MergeEntry, RunStatus, StrategyFile } from "../types.ts";
+import type {
+	EventLevel,
+	MailAudience,
+	MailMessage,
+	MergeEntry,
+	RunStatus,
+	StrategyFile,
+} from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
@@ -259,6 +266,10 @@ export async function handleApiRequest(
 
 		const threadId = typeof obj.threadId === "string" ? obj.threadId : null;
 
+		const audienceRaw = typeof obj.audience === "string" ? obj.audience : "both";
+		const validAudiences: readonly string[] = ["human", "agent", "both"];
+		const audience = (validAudiences.includes(audienceRaw) ? audienceRaw : "both") as MailAudience;
+
 		const dbPath = join(legioDir, "mail.db");
 		const store = createMailStore(dbPath);
 		try {
@@ -271,6 +282,7 @@ export async function handleApiRequest(
 				type: mailType,
 				priority,
 				threadId,
+				audience,
 			});
 			wsManager?.broadcastEvent({ type: "mail_new", data: message });
 			return jsonResponse(message, 201);
@@ -777,9 +789,10 @@ export async function handleApiRequest(
 		const to = url.searchParams.get("to") ?? undefined;
 		const unreadStr = url.searchParams.get("unread");
 		const unread = unreadStr !== null ? unreadStr === "true" : undefined;
+		const audience = url.searchParams.get("audience") ?? undefined;
 		const store = createMailStore(dbPath);
 		try {
-			return jsonResponse(store.getAll({ from, to, unread }));
+			return jsonResponse(store.getAll({ from, to, unread, audience }));
 		} finally {
 			store.close();
 		}
@@ -806,9 +819,12 @@ export async function handleApiRequest(
 			return jsonResponse([]);
 		}
 		const agentFilter = url.searchParams.get("agent") ?? undefined;
+		const audience = url.searchParams.get("audience") ?? undefined;
 		const store = createMailStore(dbPath);
 		try {
-			const messages = store.getAll();
+			const allMessages = store.getAll();
+			const messages =
+				audience !== undefined ? allMessages.filter((m) => m.audience === audience) : allMessages;
 
 			// Group messages by normalized agent pair (sorted alphabetically)
 			const groups = new Map<string, { participants: [string, string]; messages: MailMessage[] }>();
