@@ -71,6 +71,7 @@ export const SUPPORTED_CAPABILITIES = [
 	"coordinator",
 	"supervisor",
 	"monitor",
+	"gateway",
 	"cto",
 ] as const;
 
