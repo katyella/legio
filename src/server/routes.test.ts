@@ -2663,3 +2663,240 @@ describe("POST /api/chat/sessions/:id/messages", () => {
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/gateway/status
+// ---------------------------------------------------------------------------
+
+describe("GET /api/gateway/status", () => {
+	it("returns stopped when no sessions.db exists", async () => {
+		const res = await dispatch("/api/gateway/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(false);
+		expect(body.tmuxSession).toBeUndefined();
+	});
+
+	it("returns running when gateway session exists with working state", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-001",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/gateway/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(true);
+		expect(body.tmuxSession).toBe("legio-test-gateway");
+	});
+
+	it("returns stopped when gateway session is in zombie state", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-002",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway",
+			state: "zombie",
+			pid: null,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatch("/api/gateway/status");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as { running: boolean; tmuxSession?: string };
+		expect(body.running).toBe(false);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/gateway/start
+// ---------------------------------------------------------------------------
+
+describe("POST /api/gateway/start", () => {
+	it("returns well-formed response (success or graceful error from legio)", async () => {
+		const res = await dispatchPost("/api/gateway/start", {});
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/gateway/start", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with gateway_start on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/gateway/start", {}),
+			legioDir,
+			projectRoot,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("gateway_start");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/gateway/stop
+// ---------------------------------------------------------------------------
+
+describe("POST /api/gateway/stop", () => {
+	it("returns well-formed response (success or graceful error from legio)", async () => {
+		const res = await dispatchPost("/api/gateway/stop", {});
+		expect([200, 500]).toContain(res.status);
+		const body = (await json(res)) as Record<string, unknown>;
+		expect(body).toBeDefined();
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/gateway/stop", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("calls wsManager.broadcastEvent with gateway_stop on success", async () => {
+		const events: Array<{ type: string; data?: unknown }> = [];
+		const mockWsManager = {
+			broadcastEvent(event: { type: string; data?: unknown }) {
+				events.push(event);
+			},
+		};
+
+		const res = await handleApiRequest(
+			makePostRequest("/api/gateway/stop", {}),
+			legioDir,
+			projectRoot,
+			mockWsManager,
+		);
+
+		if (res.status === 200) {
+			expect(events.length).toBe(1);
+			expect(events[0]?.type).toBe("gateway_stop");
+		}
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/gateway/chat
+// ---------------------------------------------------------------------------
+
+describe("POST /api/gateway/chat", () => {
+	it("returns 400 when text field is missing", async () => {
+		const res = await dispatchPost("/api/gateway/chat", {});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 when text field is empty string", async () => {
+		const res = await dispatchPost("/api/gateway/chat", { text: "   " });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/gateway/chat", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("returns 404 when gateway is not running (no sessions.db)", async () => {
+		const res = await dispatchPost("/api/gateway/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("not running");
+	});
+
+	it("returns 404 when gateway session is in zombie state", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-chat-001",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway",
+			state: "zombie",
+			pid: null,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatchPost("/api/gateway/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+	});
+});
