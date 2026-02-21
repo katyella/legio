@@ -1,7 +1,9 @@
 // views/issues.js — Kanban board for beads issues
 // Exports IssuesView (Preact component) and sets window.renderIssues (legacy shim)
 
-import { h, html, useState } from "../lib/preact-setup.js";
+import { h, html, useState, useEffect } from "../lib/preact-setup.js";
+import { fetchJson } from "../lib/api.js";
+import { appState } from "../lib/state.js";
 import { IssueCard } from "../components/issue-card.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -67,9 +69,36 @@ function Column({ title, issues, borderClass }) {
 
 // ── Preact component: IssuesView ───────────────────────────────────────────
 
-export function IssuesView({ issues = [] }) {
+export function IssuesView() {
 	// null = show all priorities
 	const [priorityFilter, setPriorityFilter] = useState(null);
+
+	// Read from signal (establishes subscription if auto-tracking works)
+	const signalIssues = appState.issues.value;
+
+	// Also fetch on mount as fallback
+	const [fetchedIssues, setFetchedIssues] = useState(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		fetchJson("/api/issues")
+			.then(data => {
+				if (!cancelled) {
+					setFetchedIssues(data ?? []);
+					// Update signal so other consumers see the data
+					appState.issues.value = data ?? [];
+				}
+			})
+			.catch(() => {
+				if (!cancelled) setFetchedIssues([]);
+			});
+		return () => { cancelled = true; };
+	}, []);
+
+	// Prefer signal (non-empty) over fetched data
+	const issues = (signalIssues && signalIssues.length > 0)
+		? signalIssues
+		: (fetchedIssues ?? []);
 
 	const filtered =
 		priorityFilter == null ? issues : issues.filter((i) => i.priority === priorityFilter);
