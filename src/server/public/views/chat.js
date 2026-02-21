@@ -229,7 +229,13 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 	// In chat mode, hide protocol/activity messages
 	if (chatMode === "chat") {
-		filteredMessages = filteredMessages.filter((m) => !isActivityMessage(m));
+		filteredMessages = filteredMessages.filter((m) => {
+			// Use audience field when available (new API), fall back to type heuristic (backward compat)
+			if (m.audience) {
+				return m.audience === "human" || m.audience === "both";
+			}
+			return !isActivityMessage(m);
+		});
 	}
 
 	// Root messages: no threadId, or threadId equals their own id
@@ -360,7 +366,9 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 	// Render a single message as ActivityCard or MessageBubble based on type.
 	function renderMessage(msg, showName, compact) {
-		if (isActivityMessage(msg)) {
+		// Use audience field when available, fall back to type-based detection
+		const isActivity = msg.audience ? msg.audience === "agent" : isActivityMessage(msg);
+		if (isActivity) {
 			return html`<${ActivityCard}
 				key=${msg.id}
 				event=${msg}
