@@ -155,6 +155,9 @@ export const MAIL_MESSAGE_TYPES: readonly MailMessageType[] = [
 	"assign",
 ] as const;
 
+/** Audience for a mail message: who should see it. */
+export type MailAudience = "human" | "agent" | "both";
+
 export interface MailMessage {
 	id: string; // "msg-" + nanoid(12)
 	from: string; // Agent name
@@ -163,6 +166,7 @@ export interface MailMessage {
 	body: string;
 	priority: "low" | "normal" | "high" | "urgent";
 	type: MailMessageType;
+	audience: MailAudience; // Who should see this message
 	threadId: string | null; // Conversation threading
 	payload: string | null; // JSON-encoded structured data for protocol messages
 	read: boolean;

@@ -15,7 +15,7 @@ import { isGroupAddress, resolveGroupAddress } from "../mail/broadcast.ts";
 import { createMailClient } from "../mail/client.ts";
 import { createMailStore } from "../mail/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import type { MailMessage, MailMessageType } from "../types.ts";
+import type { MailAudience, MailMessage, MailMessageType } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { nudgeAgent } from "./nudge.ts";
 
@@ -83,9 +83,10 @@ function getPositionalArgs(args: string[]): string[] {
 function formatMessage(msg: MailMessage): string {
 	const readMarker = msg.read ? " " : "*";
 	const priorityTag = msg.priority !== "normal" ? ` [${msg.priority.toUpperCase()}]` : "";
+	const audienceTag = msg.audience !== "agent" ? ` [${msg.audience}]` : "";
 	const lines: string[] = [
 		`${readMarker} ${msg.id}  From: ${msg.from} → To: ${msg.to}${priorityTag}`,
-		`  Subject: ${msg.subject}  (${msg.type})`,
+		`  Subject: ${msg.subject}  (${msg.type}${audienceTag})`,
 		`  ${msg.body}`,
 	];
 	if (msg.payload !== null) {
@@ -281,9 +282,11 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	const from = getFlag(args, "--agent") ?? getFlag(args, "--from") ?? "orchestrator";
 	const rawPayload = getFlag(args, "--payload");
 	const VALID_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+	const VALID_AUDIENCES = ["human", "agent", "both"] as const;
 
 	const rawType = getFlag(args, "--type") ?? "status";
 	const rawPriority = getFlag(args, "--priority") ?? "normal";
+	const rawAudience = getFlag(args, "--audience");
 
 	if (!MAIL_MESSAGE_TYPES.includes(rawType as MailMessage["type"])) {
 		throw new ValidationError(
@@ -297,9 +300,16 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			{ field: "priority", value: rawPriority },
 		);
 	}
+	if (rawAudience !== undefined && !VALID_AUDIENCES.includes(rawAudience as MailAudience)) {
+		throw new ValidationError(
+			`Invalid --audience "${rawAudience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
+			{ field: "audience", value: rawAudience },
+		);
+	}
 
 	const type = rawType as MailMessage["type"];
 	const priority = rawPriority as MailMessage["priority"];
+	const audience = rawAudience as MailAudience | undefined;
 
 	// Validate JSON payload if provided
 	let payload: string | undefined;
@@ -340,7 +350,16 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			try {
 				// Fan out: send individual message to each recipient
 				for (const recipient of recipients) {
-					const id = client.send({ from, to: recipient, subject, body, type, priority, payload });
+					const id = client.send({
+						from,
+						to: recipient,
+						subject,
+						body,
+						type,
+						priority,
+						audience,
+						payload,
+					});
 					messageIds.push(id);
 
 					// Record mail_sent event for each individual message (fire-and-forget)
@@ -437,7 +456,7 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	// Single-recipient message (existing logic)
 	const client = openClient(cwd);
 	try {
-		const id = client.send({ from, to, subject, body, type, priority, payload });
+		const id = client.send({ from, to, subject, body, type, priority, audience, payload });
 
 		// Record mail_sent event to EventStore (fire-and-forget)
 		try {
@@ -496,14 +515,11 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 			});
 			// Smart push: if recipient is idle, also deliver direct tmux nudge
 			if (await isAgentIdle(cwd, to)) {
-				await nudgeAgent(
-					cwd,
-					to,
-					`[mail from ${from}] ${nudgeReason}: ${subject}`,
-					true,
-				).catch(() => {
-					/* non-fatal: pending marker is the reliable path */
-				});
+				await nudgeAgent(cwd, to, `[mail from ${from}] ${nudgeReason}: ${subject}`, true).catch(
+					() => {
+						/* non-fatal: pending marker is the reliable path */
+					},
+				);
 			}
 			if (!hasFlag(args, "--json")) {
 				process.stdout.write(
@@ -751,6 +767,7 @@ Subcommands:
              --to <agent>  --subject <text>  --body <text>
              [--from <name>] [--agent <name> (alias for --from)]
              [--type <type>] [--priority <low|normal|high|urgent>]
+             [--audience <human|agent|both>]
              [--payload <json>] [--json]
            Types: status, question, result, error (semantic)
                   worker_done, merge_ready, merged, merge_failed,

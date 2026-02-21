@@ -1,9 +1,11 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { MailError } from "../errors.ts";
 import type { MailMessage } from "../types.ts";
+import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { createMailStore, type MailStore } from "./store.ts";
 
 describe("createMailStore", () => {
@@ -653,6 +655,161 @@ describe("createMailStore", () => {
 			const all = store.getAll();
 			expect(all).toHaveLength(1);
 			expect(all[0]?.payload).toBe(payload);
+		});
+	});
+
+	describe("audience column", () => {
+		test("defaults audience to agent when not provided", () => {
+			const msg = store.insert({
+				id: "msg-default-audience",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+
+			const fetched = store.getById(msg.id);
+			expect(fetched?.audience).toBe("agent");
+		});
+
+		test("stores explicit audience value 'both'", () => {
+			const msg = store.insert({
+				id: "msg-both-audience",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "both",
+			});
+
+			const fetched = store.getById(msg.id);
+			expect(fetched?.audience).toBe("both");
+		});
+
+		test("stores human audience", () => {
+			const msg = store.insert({
+				id: "msg-human-audience",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+
+			const fetched = store.getById(msg.id);
+			expect(fetched?.audience).toBe("human");
+		});
+
+		test("rejects invalid audience at DB level", () => {
+			expect(() =>
+				store.insert({
+					id: "msg-bad-audience",
+					from: "agent-a",
+					to: "orchestrator",
+					subject: "test",
+					body: "body",
+					type: "status",
+					priority: "normal",
+					threadId: null,
+					audience: "invalid" as MailMessage["audience"],
+				}),
+			).toThrow();
+		});
+
+		test("returns audience in getUnread results", () => {
+			store.insert({
+				id: "msg-unread-audience",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "both",
+			});
+
+			const unread = store.getUnread("orchestrator");
+			expect(unread).toHaveLength(1);
+			expect(unread[0]?.audience).toBe("both");
+		});
+
+		test("returns audience in getAll results", () => {
+			store.insert({
+				id: "msg-all-audience",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+
+			const all = store.getAll();
+			expect(all).toHaveLength(1);
+			expect(all[0]?.audience).toBe("human");
+		});
+
+		test("migrates existing table without audience column to add audience with default 'agent'", () => {
+			// Create a DB with the old schema (has CHECK + payload + protocol types, but no audience)
+			const oldDbPath = join(tempDir, "mail-migrate-audience.db");
+			const oldDb = new Database(oldDbPath);
+			oldDb.pragma("journal_mode = WAL");
+			const validTypes = MAIL_MESSAGE_TYPES.map((t) => `'${t}'`).join(",");
+			oldDb.exec(`
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  from_agent TEXT NOT NULL,
+  to_agent TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'status' CHECK(type IN (${validTypes})),
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','urgent')),
+  thread_id TEXT,
+  payload TEXT,
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+)`);
+			oldDb
+				.prepare(
+					`INSERT INTO messages (id, from_agent, to_agent, subject, body, type, priority, thread_id, payload, read, created_at)
+VALUES ('msg-pre-migration', 'agent-a', 'orchestrator', 'old msg', 'body', 'status', 'normal', NULL, NULL, 0, '2024-01-01T00:00:00.000Z')`,
+				)
+				.run();
+			oldDb.close();
+
+			// Reopen with createMailStore — should migrate and add audience column
+			const migratedStore = createMailStore(oldDbPath);
+			const msg = migratedStore.getById("msg-pre-migration");
+			expect(msg).not.toBeNull();
+			expect(msg?.audience).toBe("agent"); // Default applied to old row
+
+			// New inserts should also work correctly
+			const newMsg = migratedStore.insert({
+				id: "msg-post-migration",
+				from: "agent-b",
+				to: "orchestrator",
+				subject: "new",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "both",
+			});
+			expect(newMsg.audience).toBe("both");
+
+			migratedStore.close();
 		});
 	});
 });
