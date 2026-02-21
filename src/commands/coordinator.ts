@@ -20,9 +20,10 @@ import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
+import { HeadlessCoordinator } from "../server/headless.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
-import type { AgentSession } from "../types.ts";
+import type { AgentSession, HeadlessCoordinatorConfig } from "../types.ts";
 import { isProcessRunning } from "../watchdog/health.ts";
 import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
 
@@ -79,6 +80,16 @@ async function fileExists(path: string): Promise<boolean> {
 	}
 }
 
+/** Minimal interface required from a HeadlessCoordinator for DI testing. */
+export interface HeadlessCoordinatorHandle {
+	start(): void;
+	write(input: string): void;
+	stop(): Promise<void>;
+	getPid(): number | null;
+	isRunning(): boolean;
+	on(event: "exit", listener: (code: number) => void): this;
+}
+
 /** Dependency injection for testing. Uses real implementations when omitted. */
 export interface CoordinatorDeps {
 	_tmux?: {
@@ -101,6 +112,9 @@ export interface CoordinatorDeps {
 		start: (args: string[]) => Promise<{ pid: number } | null>;
 		stop: () => Promise<boolean>;
 		isRunning: () => Promise<boolean>;
+	};
+	_headless?: {
+		create: (config: HeadlessCoordinatorConfig) => HeadlessCoordinatorHandle;
 	};
 	_sleep?: (ms: number) => Promise<void>;
 }
@@ -295,6 +309,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 	const shouldAttach = resolveAttach(args, !!process.stdout.isTTY);
 	const watchdogFlag = args.includes("--watchdog");
 	const monitorFlag = args.includes("--monitor");
+	const headlessFlag = args.includes("--headless");
 	const cwd = process.cwd();
 	const config = await loadConfig(cwd);
 	const projectRoot = config.project.root;
@@ -373,6 +388,87 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		const settingsPath = join(legioDir, `settings-${COORDINATOR_NAME}.json`);
 		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
 		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
+
+		if (headlessFlag) {
+			// ----------------------------------------------------------------
+			// Headless path: spawn via HeadlessCoordinator (no tmux)
+			// ----------------------------------------------------------------
+			const headlessFactory = deps._headless ?? {
+				create: (cfg: HeadlessCoordinatorConfig) => new HeadlessCoordinator(cfg),
+			};
+			const headless = headlessFactory.create({
+				command: claudeCmd,
+				cwd: projectRoot,
+				env: { LEGIO_AGENT_NAME: COORDINATOR_NAME },
+			});
+
+			headless.start();
+			const headlessPid = headless.getPid();
+
+			// Write PID file for later stop/status operations
+			if (headlessPid !== null) {
+				const pidFilePath = join(legioDir, "headless-coordinator.pid");
+				await writeFile(pidFilePath, String(headlessPid), "utf-8");
+			}
+
+			// Record session with tmuxSession="headless" to distinguish from tmux sessions
+			const headlessSession: AgentSession = {
+				id: `session-${Date.now()}-${COORDINATOR_NAME}`,
+				agentName: COORDINATOR_NAME,
+				capability: "coordinator",
+				worktreePath: projectRoot,
+				branchName: config.project.canonicalBranch,
+				beadId: "",
+				tmuxSession: "headless",
+				state: "booting",
+				pid: headlessPid,
+				parentAgent: null,
+				depth: 0,
+				runId: null,
+				startedAt: new Date().toISOString(),
+				lastActivity: new Date().toISOString(),
+				escalationLevel: 0,
+				stalledSince: null,
+			};
+
+			store.upsert(headlessSession);
+
+			// Send startup beacon via stdin after initialization delay
+			await sleep(3_000);
+			const headlessBeacon = buildCoordinatorBeacon();
+			try {
+				headless.write(`${headlessBeacon}\n`);
+			} catch {
+				// stdin may not be available if process exited early
+			}
+
+			const headlessOutput = {
+				agentName: COORDINATOR_NAME,
+				capability: "coordinator",
+				headless: true,
+				projectRoot,
+				pid: headlessPid,
+			};
+
+			if (json) {
+				process.stdout.write(`${JSON.stringify(headlessOutput)}\n`);
+			} else {
+				process.stdout.write("Coordinator started (headless)\n");
+				process.stdout.write(`  Root:    ${projectRoot}\n`);
+				process.stdout.write(`  PID:     ${headlessPid ?? "unknown"}\n`);
+			}
+
+			// Keep process alive until the headless coordinator exits
+			await new Promise<void>((resolve) => {
+				headless.on("exit", () => resolve());
+			});
+
+			return;
+		}
+
+		// ----------------------------------------------------------------
+		// Tmux path: existing behavior
+		// ----------------------------------------------------------------
 		const pid = await tmux.createSession(tmuxSession, projectRoot, claudeCmd, {
 			LEGIO_AGENT_NAME: COORDINATOR_NAME,
 		});
@@ -498,10 +594,42 @@ async function stopCoordinator(args: string[], deps: CoordinatorDeps = {}): Prom
 			});
 		}
 
-		// Kill tmux session with process tree cleanup
-		const alive = await tmux.isSessionAlive(session.tmuxSession);
-		if (alive) {
-			await tmux.killSession(session.tmuxSession);
+		if (session.tmuxSession === "headless") {
+			// ----------------------------------------------------------------
+			// Headless stop: read PID from file and kill the process
+			// ----------------------------------------------------------------
+			const pidFilePath = join(legioDir, "headless-coordinator.pid");
+			let headlessPid: number | null = null;
+			try {
+				const pidText = await readFile(pidFilePath, "utf-8");
+				const parsed = Number.parseInt(pidText.trim(), 10);
+				if (!Number.isNaN(parsed) && parsed > 0) {
+					headlessPid = parsed;
+				}
+			} catch {
+				// PID file may not exist — process may already be dead
+			}
+
+			if (headlessPid !== null && isProcessRunning(headlessPid)) {
+				try {
+					process.kill(headlessPid, 15); // SIGTERM
+				} catch {
+					// ignore — process may have already exited
+				}
+			}
+
+			// Clean up PID file
+			try {
+				await unlink(pidFilePath);
+			} catch {
+				// File may already be gone
+			}
+		} else {
+			// Kill tmux session with process tree cleanup
+			const alive = await tmux.isSessionAlive(session.tmuxSession);
+			if (alive) {
+				await tmux.killSession(session.tmuxSession);
+			}
 		}
 
 		// Always attempt to stop watchdog
@@ -610,19 +738,27 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 			return;
 		}
 
-		const alive = await tmux.isSessionAlive(session.tmuxSession);
+		const isHeadless = session.tmuxSession === "headless";
 
-		// Reconcile state: if session says active but tmux is dead, update.
-		// We already filtered out completed/zombie states above, so if tmux is dead
+		// For headless sessions, liveness is determined by PID; for tmux sessions, by session.
+		let alive: boolean;
+		if (isHeadless) {
+			alive = session.pid !== null && isProcessRunning(session.pid);
+		} else {
+			alive = await tmux.isSessionAlive(session.tmuxSession);
+		}
+
+		// Reconcile state: if session says active but process/tmux is dead, update.
+		// We already filtered out completed/zombie states above, so if dead
 		// this session needs to be marked as zombie.
 		if (!alive) {
 			store.updateState(COORDINATOR_NAME, "zombie");
 			store.updateLastActivity(COORDINATOR_NAME);
 			session.state = "zombie";
 		}
-
 		const status = {
 			running: alive,
+			headless: isHeadless,
 			sessionId: session.id,
 			state: session.state,
 			tmuxSession: session.tmuxSession,
@@ -664,6 +800,7 @@ Start options:
   --attach                 Always attach to tmux session after start
   --no-attach              Never attach to tmux session after start
                            Default: attach when running in an interactive TTY
+  --headless               Start without tmux — use PTY subprocess (no terminal UI)
   --watchdog               Auto-start watchdog daemon with coordinator
   --monitor                Auto-start monitor agent (Tier 2) with coordinator
 

@@ -4,6 +4,7 @@ import * as http from "node:http";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import type { HeadlessCoordinator } from "./headless.ts";
 import { createWebSocketManager, type WebSocketData } from "./websocket.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -118,6 +119,17 @@ export async function createServer(
 
 	const wsManager = createWebSocketManager(legioDir);
 
+	// Headless coordinator state — shared across all requests
+	let headlessCoordinator: HeadlessCoordinator | null = null;
+	const headlessState = {
+		get coordinator(): HeadlessCoordinator | null {
+			return headlessCoordinator;
+		},
+		setCoordinator(c: HeadlessCoordinator | null): void {
+			headlessCoordinator = c;
+		},
+	};
+
 	const httpServer = http.createServer(async (req, res) => {
 		try {
 			const urlStr = `http://${req.headers.host ?? "localhost"}${req.url ?? "/"}`;
@@ -140,6 +152,10 @@ export async function createServer(
 							legioDir: string,
 							root: string,
 							wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
+							headless?: {
+								coordinator: HeadlessCoordinator | null;
+								setCoordinator: (c: HeadlessCoordinator | null) => void;
+							} | null,
 						): Promise<Response>;
 					};
 					const { handleApiRequest } = (await import("./routes.ts")) as RoutesModule;
@@ -162,7 +178,7 @@ export async function createServer(
 						body: body.length > 0 ? body.toString("utf8") : undefined,
 					});
 
-					const webRes = await handleApiRequest(webReq, legioDir, root, wsManager);
+					const webRes = await handleApiRequest(webReq, legioDir, root, wsManager, headlessState);
 					await sendWebResponse(webRes, res);
 				} catch (err) {
 					const message = err instanceof Error ? err.message : "Internal server error";
@@ -257,6 +273,12 @@ export async function createServer(
 			wsManager.stopPolling();
 			wss.close();
 			httpServer.close();
+			// Stop headless coordinator if running
+			if (headlessCoordinator?.isRunning()) {
+				headlessCoordinator.stop().catch(() => {
+					// ignore stop errors during server shutdown
+				});
+			}
 		},
 	};
 }
