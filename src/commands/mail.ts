@@ -19,17 +19,6 @@ import type { MailAudience, MailMessage, MailMessageType } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { nudgeAgent } from "./nudge.ts";
 
-/**
- * Protocol message types that require immediate recipient attention.
- * These trigger auto-nudge regardless of priority level.
- */
-const AUTO_NUDGE_TYPES: ReadonlySet<MailMessageType> = new Set([
-	"worker_done",
-	"merge_ready",
-	"error",
-	"escalation",
-	"merge_failed",
-]);
 
 /** Valid audience values for mail messages. */
 const VALID_AUDIENCES = ["human", "agent", "both"] as const;
@@ -472,28 +461,24 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 						// Event recording failure is non-fatal
 					}
 
-					// Auto-nudge for each individual message
-					const shouldNudge =
-						priority === "urgent" || priority === "high" || AUTO_NUDGE_TYPES.has(type);
-					if (shouldNudge) {
-						const nudgeReason = AUTO_NUDGE_TYPES.has(type) ? type : `${priority} priority`;
-						await writePendingNudge(cwd, recipient, {
-							from,
-							reason: nudgeReason,
-							subject,
-							messageId: id,
+					// Auto-nudge for each individual message (always fire for all types/priorities)
+					const nudgeReason = type;
+					await writePendingNudge(cwd, recipient, {
+						from,
+						reason: nudgeReason,
+						subject,
+						messageId: id,
+					});
+					// Smart push: if recipient is idle, also deliver direct tmux nudge
+					if (await isAgentIdle(cwd, recipient)) {
+						await nudgeAgent(
+							cwd,
+							recipient,
+							`[mail from ${from}] ${nudgeReason}: ${subject}`,
+							true,
+						).catch(() => {
+							/* non-fatal: pending marker is the reliable path */
 						});
-						// Smart push: if recipient is idle, also deliver direct tmux nudge
-						if (await isAgentIdle(cwd, recipient)) {
-							await nudgeAgent(
-								cwd,
-								recipient,
-								`[mail from ${from}] ${nudgeReason}: ${subject}`,
-								true,
-							).catch(() => {
-								/* non-fatal: pending marker is the reliable path */
-							});
-						}
 					}
 				}
 			} finally {
@@ -581,31 +566,28 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 		// causing SIGKILL (exit 137) and "request interrupted" errors (legio-ii1o).
 		// The message is already in the DB — the UserPromptSubmit hook's
 		// `mail check --inject` will surface it on the next prompt cycle.
-		// The pending nudge marker ensures the message gets a priority banner.
-		const shouldNudge = priority === "urgent" || priority === "high" || AUTO_NUDGE_TYPES.has(type);
-		if (shouldNudge) {
-			const nudgeReason = AUTO_NUDGE_TYPES.has(type) ? type : `${priority} priority`;
-			await writePendingNudge(cwd, to, {
-				from,
-				reason: nudgeReason,
-				subject,
-				messageId: id,
-			});
-			// Smart push: if recipient is idle, also deliver direct tmux nudge
-			if (await isAgentIdle(cwd, to)) {
-				await nudgeAgent(cwd, to, `[mail from ${from}] ${nudgeReason}: ${subject}`, true).catch(
-					() => {
-						/* non-fatal: pending marker is the reliable path */
-					},
-				);
-			}
-			if (!hasFlag(args, "--json")) {
-				process.stdout.write(
-					`📢 Queued nudge for "${to}" (${nudgeReason}, delivered on next prompt)\n`,
-				);
-			}
+		// Auto-nudge fires for ALL message types and priorities — no type/priority gate.
+		// The nudge mechanism has debounce protection to prevent rapid-fire nudges.
+		const nudgeReason = type;
+		await writePendingNudge(cwd, to, {
+			from,
+			reason: nudgeReason,
+			subject,
+			messageId: id,
+		});
+		// Smart push: if recipient is idle, also deliver direct tmux nudge
+		if (await isAgentIdle(cwd, to)) {
+			await nudgeAgent(cwd, to, `[mail from ${from}] ${nudgeReason}: ${subject}`, true).catch(
+				() => {
+					/* non-fatal: pending marker is the reliable path */
+				},
+			);
 		}
-
+		if (!hasFlag(args, "--json")) {
+			process.stdout.write(
+				`📢 Queued nudge for "${to}" (${nudgeReason}, delivered on next prompt)\n`,
+			);
+		}
 		// Reviewer coverage check for merge_ready (advisory warning)
 		if (type === "merge_ready") {
 			try {

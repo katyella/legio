@@ -274,7 +274,7 @@ describe("mailCommand", () => {
 
 			const marker = JSON.parse(await readFile(markerPath, "utf-8"));
 			expect(marker.from).toBe("orchestrator");
-			expect(marker.reason).toBe("urgent priority");
+			expect(marker.reason).toBe("status");
 			expect(marker.subject).toBe("Fix NOW");
 			expect(marker.messageId).toBeTruthy();
 			expect(marker.createdAt).toBeTruthy();
@@ -308,7 +308,7 @@ describe("mailCommand", () => {
 			}
 
 			const marker = JSON.parse(await readFile(markerPath, "utf-8"));
-			expect(marker.reason).toBe("high priority");
+			expect(marker.reason).toBe("status");
 		});
 
 		test("worker_done type writes pending nudge marker regardless of priority", async () => {
@@ -341,17 +341,21 @@ describe("mailCommand", () => {
 			expect(marker.from).toBe("builder-1");
 		});
 
-		test("normal priority non-protocol message does NOT write marker", async () => {
+		test("normal priority message writes pending nudge marker (always-nudge)", async () => {
 			await mailCommand(["send", "--to", "builder-1", "--subject", "FYI", "--body", "Just a note"]);
 
-			const nudgeDir = join(tempDir, ".legio", "pending-nudges");
-			try {
-				const files = await readdir(nudgeDir);
-				// No marker should exist for this normal-priority status message
-				expect(files.filter((f) => f === "builder-1.json")).toHaveLength(0);
-			} catch {
-				// Directory doesn't exist — that's fine, means no markers
+			// All messages now write a pending nudge marker regardless of type/priority
+			const markerPath = join(tempDir, ".legio", "pending-nudges", "builder-1.json");
+			{
+				let exists = false;
+				try {
+					await access(markerPath);
+					exists = true;
+				} catch {}
+				expect(exists).toBe(true);
 			}
+			const marker = JSON.parse(await readFile(markerPath, "utf-8")) as { reason: string };
+			expect(marker.reason).toBe("status");
 		});
 
 		test("mail check --inject surfaces pending nudge banner", async () => {
@@ -373,8 +377,9 @@ describe("mailCommand", () => {
 			await mailCommand(["check", "--inject", "--agent", "builder-1"]);
 
 			// Should contain the priority banner from the pending nudge
+			// reason is now the message type (default "status"), not the priority level
 			expect(output).toContain("PRIORITY");
-			expect(output).toContain("urgent priority");
+			expect(output).toContain("status");
 			expect(output).toContain("Critical fix");
 
 			// Should also contain the actual message (from mail check)
@@ -1105,7 +1110,7 @@ describe("mailCommand", () => {
 				reason: string;
 				subject: string;
 			};
-			expect(nudge1.reason).toBe("urgent priority");
+			expect(nudge1.reason).toBe("status");
 			expect(nudge1.subject).toBe("Urgent task");
 		});
 
@@ -1427,12 +1432,13 @@ describe("mailCommand", () => {
 			expect(nudgeEvent).toBeUndefined();
 		});
 
-		test("normal priority message never triggers direct nudge regardless of busy state", async () => {
-			// No busy marker = idle, but normal priority means no nudge at all
+		test("normal priority message triggers direct nudge when agent is idle (always-nudge)", async () => {
+			// No busy marker = idle; all messages now trigger nudge regardless of priority
 			await mailCommand(["send", "--to", "builder-1", "--subject", "FYI", "--body", "Just a note"]);
 
+			// nudgeAgent is called for idle agents for all message types
 			const nudgeEvent = await findNudgeEvent(join(tempDir, ".legio", "events.db"));
-			expect(nudgeEvent).toBeUndefined();
+			expect(nudgeEvent).toBeDefined();
 		});
 
 		test("busy marker is per-agent: idle agent gets direct nudge, busy agent does not", async () => {
