@@ -450,7 +450,7 @@ function AgentRoster({ agents, mail, events }) {
 // CoordinatorChat
 // ---------------------------------------------------------------------------
 
-function CoordinatorChat({ mail }) {
+function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 	const [input, setInput] = useState("");
 	const [sending, setSending] = useState(false);
 	const [sendError, setSendError] = useState("");
@@ -469,30 +469,52 @@ function CoordinatorChat({ mail }) {
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
 	const baselineCaptureRef = useRef(null);
+	const [chatTarget, setChatTarget] = useState("coordinator");
+	const neitherRunning = !coordRunning && !gwRunning;
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
 		" placeholder-[#666] outline-none focus:border-[#E64415]";
 
-	// Filter coordinator-related messages, sorted oldest first
+	// Filter target-related messages, sorted oldest first
 	const coordMessages = [...mail]
-		.filter(
-			(m) =>
-				m.from === "orchestrator" ||
-				m.from === "coordinator" ||
-				m.to === "orchestrator" ||
-				m.to === "coordinator",
+		.filter((m) =>
+			chatTarget === "coordinator"
+				? m.from === "orchestrator" ||
+					m.from === "coordinator" ||
+					m.to === "orchestrator" ||
+					m.to === "coordinator"
+				: m.from === "gateway" || m.to === "gateway",
 		)
 		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-	// Count of messages FROM coordinator — used to detect coordinator responses
-	const fromCoordCount = coordMessages.filter(
-		(m) => m.from === "orchestrator" || m.from === "coordinator",
+	// Count of messages FROM active target — used to detect responses
+	const fromTargetCount = coordMessages.filter((m) =>
+		chatTarget === "coordinator"
+			? m.from === "orchestrator" || m.from === "coordinator"
+			: m.from === "gateway",
 	).length;
 
-	// Detect new coordinator responses → clear thinking + matched pending messages
+	// Auto-select the only running target; clear state when target switches
 	useEffect(() => {
-		if (fromCoordCount > prevFromCoordCountRef.current) {
+		if (coordRunning && !gwRunning) {
+			setChatTarget("coordinator");
+		} else if (!coordRunning && gwRunning) {
+			setChatTarget("gateway");
+		}
+	}, [coordRunning, gwRunning]);
+
+	// Reset stream + thinking state when chat target changes
+	useEffect(() => {
+		prevFromCoordCountRef.current = 0;
+		setThinking(false);
+		setStreamText("");
+		baselineCaptureRef.current = null;
+	}, [chatTarget]);
+
+	// Detect new target responses → clear thinking + matched pending messages
+	useEffect(() => {
+		if (fromTargetCount > prevFromCoordCountRef.current) {
 			setThinking(false);
 			setPendingMessages((prev) =>
 				prev.filter(
@@ -506,10 +528,10 @@ function CoordinatorChat({ mail }) {
 				),
 			);
 		}
-		prevFromCoordCountRef.current = fromCoordCount;
-	}, [fromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
+		prevFromCoordCountRef.current = fromTargetCount;
+	}, [fromTargetCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Poll terminal capture while coordinator is thinking
+	// Poll terminal capture while thinking
 	useEffect(() => {
 		if (!thinking) {
 			setStreamText("");
@@ -521,7 +543,7 @@ function CoordinatorChat({ mail }) {
 
 		async function pollCapture() {
 			try {
-				const res = await fetch("/api/terminal/capture?agent=coordinator&lines=80");
+				const res = await fetch(`/api/terminal/capture?agent=${chatTarget}&lines=80`);
 				if (!res.ok || cancelled) return;
 				const data = await res.json();
 				const output = stripAnsi(data.output || "");
@@ -546,7 +568,7 @@ function CoordinatorChat({ mail }) {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, [thinking]);
+	}, [thinking, chatTarget]);
 
 	// Transform agent activity log entries into feed-compatible objects
 	const activityEntries = agentActivityLog.value.map((event, i) => ({
@@ -596,7 +618,7 @@ function CoordinatorChat({ mail }) {
 		const pending = {
 			id: pendingId,
 			from: "you",
-			to: "coordinator",
+			to: chatTarget,
 			body: text,
 			createdAt: new Date().toISOString(),
 			status: "sending",
@@ -604,13 +626,17 @@ function CoordinatorChat({ mail }) {
 		setPendingMessages((prev) => [...prev, pending]);
 
 		try {
-			await postJson("/api/terminal/send", { agent: "coordinator", text });
+			if (chatTarget === "gateway") {
+				await postJson("/api/gateway/chat", { text });
+			} else {
+				await postJson("/api/terminal/send", { agent: "coordinator", text });
+			}
 			try {
 				await postJson("/api/audit", {
 					type: "command",
 					source: "web_ui",
 					summary: text,
-					agent: "coordinator",
+					agent: chatTarget,
 				});
 			} catch (_e) {
 				// intentionally ignored
@@ -628,7 +654,7 @@ function CoordinatorChat({ mail }) {
 		} finally {
 			setSending(false);
 		}
-	}, [input, sending]);
+	}, [input, sending, chatTarget]);
 
 	// Detect @-mention and /command triggers from input text and update dropdown state
 	const handleInput = useCallback((e) => {
@@ -736,9 +762,27 @@ function CoordinatorChat({ mail }) {
 	return html`
 		<div class="flex flex-col h-full min-h-0">
 			<!-- Header -->
-			<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0">
-				<span class="text-sm font-medium text-[#e5e5e5]">Coordinator</span>
-				<span class="ml-2 text-xs text-[#555]">Recent messages</span>
+			<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0 flex items-center gap-2">
+				<span class="text-sm font-medium text-[#e5e5e5]">
+					${chatTarget === "coordinator" ? "Coordinator" : "Gateway"}
+				</span>
+				<span class="ml-1 text-xs text-[#555]">Recent messages</span>
+				${
+					coordRunning && gwRunning
+						? html`
+						<div class="ml-auto flex gap-1">
+							<button
+								class=${"text-xs px-2 py-1 rounded " + (chatTarget === "coordinator" ? "bg-[#E64415]/20 text-white" : "text-[#666] hover:text-[#999]")}
+								onClick=${() => setChatTarget("coordinator")}
+							>Coordinator</button>
+							<button
+								class=${"text-xs px-2 py-1 rounded " + (chatTarget === "gateway" ? "bg-[#E64415]/20 text-white" : "text-[#666] hover:text-[#999]")}
+								onClick=${() => setChatTarget("gateway")}
+							>Gateway</button>
+						</div>
+					`
+						: null
+				}
 			</div>
 
 			<!-- Message feed -->
@@ -751,7 +795,9 @@ function CoordinatorChat({ mail }) {
 					groupedMessages.length === 0
 						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
-							No coordinator messages yet
+							${neitherRunning
+								? "Start coordinator or gateway to chat"
+								: `No ${chatTarget} messages yet`}
 						</div>
 					`
 						: groupedMessages.map((msg) => {
@@ -837,7 +883,7 @@ function CoordinatorChat({ mail }) {
 						<div class="flex justify-start">
 							<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
 								<div class="flex items-center gap-1 mb-1">
-									<span class="text-xs text-[#999]">coordinator</span>
+									<span class="text-xs text-[#999]">${chatTarget}</span>
 									<span class="text-xs text-[#555] animate-pulse">\u00b7 working\u2026</span>
 								</div>
 								${
@@ -913,16 +959,20 @@ function CoordinatorChat({ mail }) {
 						<input
 							ref=${inputRef}
 							type="text"
-							placeholder="Send command to coordinator\u2026"
+							placeholder=${neitherRunning
+								? "Start coordinator or gateway to chat\u2026"
+								: chatTarget === "coordinator"
+									? "Send command to coordinator\u2026"
+									: "Send message to gateway\u2026"}
 							value=${input}
 							onInput=${handleInput}
 							onKeyDown=${handleKeyDown}
-							disabled=${sending}
+							disabled=${sending || neitherRunning}
 							class=${`${inputClass} flex-1 min-w-0`}
 						/>
 						<button
 							onClick=${handleSend}
-							disabled=${sending || !input.trim()}
+							disabled=${sending || !input.trim() || neitherRunning}
 							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none shrink-0"
 						>
 							${sending ? "\u2026" : "Send"}
@@ -1103,6 +1153,8 @@ export function DashboardView() {
 	const [activityEvents, setActivityEvents] = useState([]);
 	const [mail, setMail] = useState([]);
 	const [mergeQueue, setMergeQueue] = useState([]);
+	const [coordRunning, setCoordRunning] = useState(false);
+	const [gwRunning, setGwRunning] = useState(false);
 
 	// Poll event store every 5s
 	useEffect(() => {
@@ -1181,6 +1233,31 @@ export function DashboardView() {
 		};
 	}, []);
 
+	// Poll coordinator/gateway status for chat routing
+	useEffect(() => {
+		let cancelled = false;
+		async function fetchStatuses() {
+			try {
+				const [coordData, gwData] = await Promise.all([
+					fetchJson("/api/coordinator/status").catch(() => null),
+					fetchJson("/api/gateway/status").catch(() => null),
+				]);
+				if (!cancelled) {
+					setCoordRunning(coordData?.running === true);
+					setGwRunning(gwData?.running === true);
+				}
+			} catch (_err) {
+				// non-fatal
+			}
+		}
+		fetchStatuses();
+		const interval = setInterval(fetchStatuses, 5000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, []);
+
 	const agents = appState.agents.value;
 	const status = appState.status.value;
 
@@ -1193,7 +1270,7 @@ export function DashboardView() {
 					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
 					style="flex: 58 1 0%"
 				>
-					<${CoordinatorChat} mail=${mail} />
+					<${CoordinatorChat} mail=${mail} coordRunning=${coordRunning} gwRunning=${gwRunning} />
 				</div>
 
 				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MergeQueue -->
