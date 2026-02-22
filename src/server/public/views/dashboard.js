@@ -495,6 +495,15 @@ function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 			: m.from === "gateway",
 	).length;
 
+	// Consume pendingChatContext from issue click-through
+	useEffect(() => {
+		const ctx = appState.pendingChatContext.value;
+		if (!ctx) return;
+		setInput(`Discuss issue ${ctx.issueId}: ${ctx.title}\n${ctx.description || ""}`);
+		appState.pendingChatContext.value = null;
+		inputRef.current?.focus();
+	}, [appState.pendingChatContext.value]); // eslint-disable-line react-hooks/exhaustive-deps
+
 	// Auto-select the only running target; clear state when target switches
 	useEffect(() => {
 		if (coordRunning && !gwRunning) {
