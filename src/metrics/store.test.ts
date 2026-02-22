@@ -704,6 +704,34 @@ describe("getSessionsFiltered", () => {
 		expect(results).toEqual([]);
 	});
 
+	test("session started before window but completed within it is returned", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-early-start",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: "2026-01-03T10:00:00Z",
+			}),
+		);
+
+		const results = store.getSessionsFiltered({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.beadId).toBe("task-early-start");
+	});
+
+	test("still-running session (completedAt IS NULL) appears with any time window", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-running",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: null,
+			}),
+		);
+
+		const results = store.getSessionsFiltered({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.beadId).toBe("task-running");
+	});
+
 	test("empty DB returns empty array", () => {
 		const results = store.getSessionsFiltered({});
 		expect(results).toEqual([]);
@@ -804,6 +832,40 @@ describe("getSessionsByModel", () => {
 		expect(results).toHaveLength(1);
 		expect(results[0]?.sessions).toBe(1);
 		expect(results[0]?.estimatedCostUsd).toBeCloseTo(2.0, 5);
+	});
+
+	test("session started before window but completed within it is included in model group", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-early-start",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: "2026-01-03T10:00:00Z",
+				modelUsed: "claude-opus-4-6",
+				estimatedCostUsd: 1.5,
+			}),
+		);
+
+		const results = store.getSessionsByModel({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.model).toBe("claude-opus-4-6");
+		expect(results[0]?.sessions).toBe(1);
+	});
+
+	test("still-running session with time window is included in model group", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-running",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: null,
+				modelUsed: "claude-sonnet-4-6",
+				estimatedCostUsd: 0.5,
+			}),
+		);
+
+		const results = store.getSessionsByModel({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.model).toBe("claude-sonnet-4-6");
+		expect(results[0]?.sessions).toBe(1);
 	});
 
 	test("ordered by estimated_cost_usd DESC", () => {
@@ -919,6 +981,34 @@ describe("getSessionsByDate", () => {
 		});
 		expect(results).toHaveLength(1);
 		expect(results[0]?.date).toBe("2026-01-02");
+	});
+
+	test("session started before window but completed within it is included in date group", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-early-start",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: "2026-01-03T10:00:00Z",
+			}),
+		);
+
+		const results = store.getSessionsByDate({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.date).toBe("2026-01-01");
+	});
+
+	test("still-running session with time window is included in date group", () => {
+		store.recordSession(
+			makeSession({
+				beadId: "task-running",
+				startedAt: "2026-01-01T10:00:00Z",
+				completedAt: null,
+			}),
+		);
+
+		const results = store.getSessionsByDate({ since: "2026-01-02T00:00:00Z" });
+		expect(results).toHaveLength(1);
+		expect(results[0]?.date).toBe("2026-01-01");
 	});
 
 	test("null estimated_cost_usd treated as 0 in sum", () => {
