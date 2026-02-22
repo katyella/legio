@@ -132,6 +132,7 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
      --body "Completed implementation for <task-id>. Quality gates passed." \
      --type worker_done --agent $LEGIO_AGENT_NAME
    ```
+   This automatically nudges your parent lead via tmux — no manual `legio nudge` is needed. The parent is woken from idle immediately.
 7. Run `bd close <task-id> --reason "<summary of implementation>"`.
 8. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
 
