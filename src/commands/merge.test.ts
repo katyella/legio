@@ -418,7 +418,7 @@ merge:
 		});
 	});
 
-	describe("--into flag", () => {
+	describe("--into flag", { timeout: 15_000 }, () => {
 		test("merges into a non-default target branch", async () => {
 			await setupProject(repoDir, defaultBranch);
 

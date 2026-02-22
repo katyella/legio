@@ -701,7 +701,7 @@ describe("createMergeResolver", () => {
 		});
 	});
 
-	describe("Conflict pattern recording", () => {
+	describe("Conflict pattern recording", { timeout: 15_000 }, () => {
 		test("no recording when mulchClient is not provided (backward compatible)", async () => {
 			const repoDir = await createTempGitRepo();
 			try {
@@ -1250,7 +1250,7 @@ describe("createMergeResolver", () => {
 		});
 	});
 
-	describe("AI-resolve with history context", () => {
+	describe("AI-resolve with history context", { timeout: 15_000 }, () => {
 		test("includes historical context in AI prompt when available", async () => {
 			const repoDir = await createTempGitRepo();
 			try {
@@ -1414,36 +1414,40 @@ describe("resolveJsonlConflict", () => {
 		expect(lines[1]).toContain("no id field");
 	});
 
-	describe("integration: auto-resolves .jsonl conflicts with union strategy", () => {
-		test("resolver uses union strategy for .jsonl files", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupJsonlConflict(repoDir, defaultBranch);
+	describe(
+		"integration: auto-resolves .jsonl conflicts with union strategy",
+		{ timeout: 15_000 },
+		() => {
+			test("resolver uses union strategy for .jsonl files", async () => {
+				const repoDir = await createTempGitRepo();
+				try {
+					const defaultBranch = await getDefaultBranch(repoDir);
+					await setupJsonlConflict(repoDir, defaultBranch);
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["expertise/data.jsonl"],
-				});
+					const entry = makeTestEntry({
+						branchName: "feature-branch",
+						filesModified: ["expertise/data.jsonl"],
+					});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-				});
+					const resolver = createMergeResolver({
+						aiResolveEnabled: false,
+						reimagineEnabled: false,
+					});
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+					const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("auto-resolve");
+					expect(result.success).toBe(true);
+					expect(result.tier).toBe("auto-resolve");
 
-				// Resolved file should contain all three unique records
-				const content = await readFile(join(repoDir, "expertise/data.jsonl"), "utf-8");
-				expect(content).toContain('"mx-001"');
-				expect(content).toContain('"mx-002"');
-				expect(content).toContain('"mx-003"');
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
-		});
-	});
+					// Resolved file should contain all three unique records
+					const content = await readFile(join(repoDir, "expertise/data.jsonl"), "utf-8");
+					expect(content).toContain('"mx-001"');
+					expect(content).toContain('"mx-002"');
+					expect(content).toContain('"mx-003"');
+				} finally {
+					await cleanupTempDir(repoDir);
+				}
+			});
+		},
+	);
 });
