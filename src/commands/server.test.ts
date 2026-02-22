@@ -527,3 +527,62 @@ describe("serverCommand status", () => {
 		expect(typeof parsed.port).toBe("number");
 	});
 });
+
+// --- autoStartCoordinator via LEGIO_SERVER_DAEMON ---
+
+describe("serverCommand start — autoStartCoordinator", () => {
+	const originalEnv = process.env.LEGIO_SERVER_DAEMON;
+
+	afterEach(() => {
+		if (originalEnv === undefined) {
+			delete process.env.LEGIO_SERVER_DAEMON;
+		} else {
+			process.env.LEGIO_SERVER_DAEMON = originalEnv;
+		}
+	});
+
+	it("passes autoStartCoordinator=true when LEGIO_SERVER_DAEMON=1", async () => {
+		process.env.LEGIO_SERVER_DAEMON = "1";
+
+		let capturedOpts: { autoStartCoordinator: boolean } | undefined;
+		const deps: ServerDeps = {
+			_startServer: async (opts) => {
+				capturedOpts = opts;
+			},
+		};
+
+		await serverCommand(["start"], deps);
+
+		expect(capturedOpts?.autoStartCoordinator).toBe(true);
+	});
+
+	it("passes autoStartCoordinator=false when LEGIO_SERVER_DAEMON is unset", async () => {
+		delete process.env.LEGIO_SERVER_DAEMON;
+
+		let capturedOpts: { autoStartCoordinator: boolean } | undefined;
+		const deps: ServerDeps = {
+			_startServer: async (opts) => {
+				capturedOpts = opts;
+			},
+		};
+
+		await serverCommand(["start"], deps);
+
+		expect(capturedOpts?.autoStartCoordinator).toBe(false);
+	});
+
+	it("passes autoStartCoordinator=false when LEGIO_SERVER_DAEMON=0", async () => {
+		process.env.LEGIO_SERVER_DAEMON = "0";
+
+		let capturedOpts: { autoStartCoordinator: boolean } | undefined;
+		const deps: ServerDeps = {
+			_startServer: async (opts) => {
+				capturedOpts = opts;
+			},
+		};
+
+		await serverCommand(["start"], deps);
+
+		expect(capturedOpts?.autoStartCoordinator).toBe(false);
+	});
+});
