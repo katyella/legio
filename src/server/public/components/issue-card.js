@@ -2,6 +2,7 @@
 // Used by views/issues.js
 
 import { h, html } from "../lib/preact-setup.js";
+import { appState } from "../lib/state.js";
 
 // Maps priority number → left border color (hex, for inline style)
 const priorityBorderColors = {
@@ -35,10 +36,21 @@ export function IssueCard({ issue }) {
 	const hasBlockedBy = Array.isArray(issue.blockedBy) && issue.blockedBy.length > 0;
 	const isClosed = issue.status === "closed";
 
+	function handleClick() {
+		if (isClosed) return;
+		appState.pendingChatContext.value = {
+			issueId: issue.id,
+			title: issue.title,
+			description: issue.description,
+		};
+		location.hash = "dashboard";
+	}
+
 	return html`
 		<div
-			class=${`bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${isClosed ? " opacity-50" : ""}`}
+			class=${`bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${isClosed ? " opacity-50" : " cursor-pointer hover:border-[#3a3a3a] hover:bg-[#222]"}`}
 			style=${{ borderLeftColor: borderColor }}
+			onClick=${isClosed ? undefined : handleClick}
 		>
 			<div class="flex items-start justify-between gap-2 mb-1">
 				<span class="flex items-center gap-1">

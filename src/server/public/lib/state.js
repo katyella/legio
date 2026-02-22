@@ -27,6 +27,7 @@ export const appState = {
 	showSpawnDialog: signal(false),
 	chatSessions: signal([]),
 	chatActiveSessionId: signal(null),
+	pendingChatContext: signal(null),
 };
 
 export function setConnected(value) {
