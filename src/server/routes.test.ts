@@ -159,6 +159,19 @@ vi.mock("../beads/client.ts", () => ({
 	}),
 }));
 
+// Mock tmux so tests don't interfere with real developer tmux sessions.
+// isSessionAlive defaults to true so that tests which seed an active session
+// (and are not testing the stale-session path) pass through correctly.
+// sendKeys is a no-op — we only test up to the 404 paths here.
+const { mockIsSessionAlive, mockSendKeys } = vi.hoisted(() => ({
+	mockIsSessionAlive: vi.fn().mockResolvedValue(true),
+	mockSendKeys: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../worktree/tmux.ts", () => ({
+	isSessionAlive: mockIsSessionAlive,
+	sendKeys: mockSendKeys,
+}));
+
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1657,6 +1670,40 @@ describe("POST /api/terminal/send", () => {
 		expect(body.error).toContain("nonexistent-agent");
 	});
 
+	it("returns 404 when agent session is in DB but tmux session is not alive", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-terminal-stale-001",
+			agentName: "stale-agent",
+			capability: "builder",
+			worktreePath: "/tmp/wt/stale-agent",
+			branchName: "legio/stale-agent/task-x",
+			beadId: "task-x",
+			tmuxSession: "legio-test-stale-agent",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 1,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		mockIsSessionAlive.mockResolvedValueOnce(false);
+		const res = await dispatchPost("/api/terminal/send", {
+			text: "hello",
+			agent: "stale-agent",
+		});
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("not alive");
+	});
+
 	it("returns 405 for GET requests on /api/terminal/send", async () => {
 		const res = await dispatch("/api/terminal/send");
 		// /api/terminal/send is only POST; GET falls through to the catch-all 404
@@ -2898,5 +2945,36 @@ describe("POST /api/gateway/chat", () => {
 
 		const res = await dispatchPost("/api/gateway/chat", { text: "hello" });
 		expect(res.status).toBe(404);
+	});
+
+	it("returns 404 when gateway session is in DB but tmux session is not alive", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-stale-001",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway-stale",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		mockIsSessionAlive.mockResolvedValueOnce(false);
+		const res = await dispatchPost("/api/gateway/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("not alive");
 	});
 });

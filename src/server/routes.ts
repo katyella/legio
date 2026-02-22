@@ -30,7 +30,7 @@ import type {
 	StrategyFile,
 } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
-import { sendKeys } from "../worktree/tmux.ts";
+import { isSessionAlive, sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
 import { createChatStore } from "./chat-store.ts";
 import { HeadlessCoordinator } from "./headless.ts";
@@ -403,6 +403,10 @@ export async function handleApiRequest(
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
 		if (!tmuxSession) {
 			return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+		}
+
+		if (!(await isSessionAlive(tmuxSession))) {
+			return errorResponse(`Tmux session "${tmuxSession}" is not alive`, 404);
 		}
 
 		try {
@@ -855,6 +859,10 @@ export async function handleApiRequest(
 		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, "gateway");
 		if (!tmuxSession) {
 			return errorResponse("Gateway is not running", 404);
+		}
+
+		if (!(await isSessionAlive(tmuxSession))) {
+			return errorResponse(`Gateway tmux session "${tmuxSession}" is not alive`, 404);
 		}
 
 		try {
