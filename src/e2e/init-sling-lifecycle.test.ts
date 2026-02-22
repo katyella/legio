@@ -37,6 +37,7 @@ const EXPECTED_AGENT_DEFS = [
 	"builder.md",
 	"coordinator.md",
 	"cto.md",
+	"gateway.md",
 	"lead.md",
 	"merger.md",
 	"monitor.md",

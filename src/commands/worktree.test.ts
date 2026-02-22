@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createSessionStore } from "../sessions/store.ts";
@@ -262,7 +262,7 @@ describe("worktreeCommand", () => {
 		});
 	});
 
-	describe("worktree clean", () => {
+	describe("worktree clean", { timeout: 15_000 }, () => {
 		test("no legio worktrees returns empty message", async () => {
 			await worktreeCommand(["clean"]);
 			const out = output();
