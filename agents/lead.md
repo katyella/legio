@@ -138,7 +138,7 @@ Write specs from scout findings and dispatch builders.
 **REVIEW IS NOT OPTIONAL.** Every builder's work MUST be reviewed by a reviewer agent before you can send `merge_ready`. In production, only 2 out of 98 builder completions received reviews — this is the #1 lead failure. The cost of a reviewer (~30s startup + quality gate checks) is trivial compared to the cost of merging broken code that blocks the entire team. You MUST spawn a reviewer for every `worker_done` you receive.
 
 10. **Monitor builders:**
-    - Mail arrives automatically via hook injection. Use `legio status` to check agent states when needed.
+    - Mail arrives automatically via hook injection and auto-nudge. When a builder sends `worker_done` mail, you are immediately nudged via tmux — no polling loop is needed.
     - `legio status` -- check agent states.
     - `bd show <id>` -- check individual task status.
 11. **Handle builder issues:**
