@@ -34,5 +34,7 @@ export default defineConfig({
 	plugins: [bunShims()],
 	test: {
 		include: ["src/**/*.test.ts"],
+		testTimeout: 15_000,
+		hookTimeout: 15_000,
 	},
 });
