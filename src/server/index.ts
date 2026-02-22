@@ -5,6 +5,7 @@ import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import type { HeadlessCoordinator } from "./headless.ts";
+import { handleApiRequest } from "./routes.ts";
 import { createWebSocketManager, type WebSocketData } from "./websocket.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -143,23 +144,9 @@ export async function createServer(
 				return;
 			}
 
-			// API routes — dynamic import so routes.ts can be provided by another builder
+			// API routes
 			if (pathname.startsWith("/api/")) {
 				try {
-					type RoutesModule = {
-						handleApiRequest(
-							req: Request,
-							legioDir: string,
-							root: string,
-							wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
-							headless?: {
-								coordinator: HeadlessCoordinator | null;
-								setCoordinator: (c: HeadlessCoordinator | null) => void;
-							} | null,
-						): Promise<Response>;
-					};
-					const { handleApiRequest } = (await import("./routes.ts")) as RoutesModule;
-
 					const body = await collectBody(req);
 					const headers = new Headers();
 					for (const [key, value] of Object.entries(req.headers)) {
