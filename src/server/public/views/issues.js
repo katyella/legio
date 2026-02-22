@@ -85,19 +85,24 @@ export function IssuesView() {
 
 	useEffect(() => {
 		let cancelled = false;
-		fetchJson("/api/issues")
-			.then((data) => {
-				if (!cancelled) {
-					setFetchedIssues(data ?? []);
-					// Update signal so other consumers see the data
-					appState.issues.value = data ?? [];
-				}
-			})
-			.catch(() => {
-				if (!cancelled) setFetchedIssues([]);
-			});
+		const fetchIssues = () => {
+			fetchJson("/api/issues")
+				.then((data) => {
+					if (!cancelled) {
+						setFetchedIssues(data ?? []);
+						// Update signal so other consumers see the data
+						appState.issues.value = data ?? [];
+					}
+				})
+				.catch(() => {
+					if (!cancelled) setFetchedIssues([]);
+				});
+		};
+		fetchIssues();
+		const interval = setInterval(fetchIssues, 5000);
 		return () => {
 			cancelled = true;
+			clearInterval(interval);
 		};
 	}, []);
 
