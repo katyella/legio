@@ -56,12 +56,13 @@ const SLASH_COMMANDS = [
 
 // Map a persisted chat history message to the feed format
 function mapHistoryMessage(msg) {
+	const ts = msg.createdAt.endsWith("Z") ? msg.createdAt : msg.createdAt + "Z";
 	return {
 		id: msg.id,
 		from: msg.role === "user" ? "you" : "coordinator",
 		to: msg.role === "user" ? "coordinator" : "you",
 		body: msg.content,
-		createdAt: msg.createdAt,
+		createdAt: ts,
 		_persisted: true,
 	};
 }
