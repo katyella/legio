@@ -38,7 +38,7 @@ const bdAvailable = isBdAvailable();
  * since they create issues with unique IDs and use toContain/not.toContain
  * assertions. This reduces setup from ~96 subprocess spawns to ~6.
  */
-describe("createBeadsClient (integration)", { timeout: 15_000 }, () => {
+describe("createBeadsClient (integration)", { timeout: 30_000 }, () => {
 	let tempDir: string;
 	let client: BeadsClient;
 

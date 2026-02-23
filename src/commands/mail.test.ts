@@ -585,15 +585,15 @@ describe("mailCommand", () => {
 			expect(secondOutput).toContain("Message 2");
 		});
 
-		test("mail check with --debounce 500 skips second check within window", async () => {
-			// First check with debounce
+		test("mail check with --debounce skips second check within window", async () => {
+			// First check with debounce (large window to survive concurrency)
 			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
+			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
 			expect(output).toContain("Build task");
 
 			// Second check immediately (within debounce window)
 			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
+			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
 			// Should be skipped silently
 			expect(output).toBe("");
 		});
@@ -670,19 +670,19 @@ describe("mailCommand", () => {
 		});
 
 		test("mail check debounce is per-agent", async () => {
-			// Check for builder-1 with debounce
+			// Check for builder-1 with debounce (large window to survive concurrency)
 			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
+			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
 			expect(output).toContain("Build task");
 
-			// Check for scout-1 immediately (different agent)
+			// Check for scout-1 immediately (different agent, should NOT be debounced)
 			output = "";
-			await mailCommand(["check", "--agent", "scout-1", "--debounce", "500"]);
+			await mailCommand(["check", "--agent", "scout-1", "--debounce", "10000"]);
 			expect(output).toContain("Explore API");
 
 			// Check for builder-1 again (should be debounced)
 			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
+			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
 			expect(output).toBe("");
 		});
 
