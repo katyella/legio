@@ -1,6 +1,11 @@
 version: '1'
 domains:
   - cli
+  - server
+  - frontend
+  - swarm
+  - merge
+  - testing
 governance:
   max_entries: 100
   warn_entries: 150
