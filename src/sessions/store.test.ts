@@ -250,6 +250,66 @@ describe("getByRun", () => {
 	});
 });
 
+// === getByRunIncludeOrphans ===
+
+describe("getByRunIncludeOrphans", () => {
+	test("returns empty array when no sessions exist", () => {
+		expect(store.getByRunIncludeOrphans("run-1")).toEqual([]);
+	});
+
+	test("returns sessions matching runId plus null-runId sessions", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-1" }));
+		store.upsert(makeSession({ agentName: "a2", id: "s-2", runId: "run-1" }));
+		store.upsert(makeSession({ agentName: "a3", id: "s-3", runId: "run-2" }));
+		store.upsert(makeSession({ agentName: "a4", id: "s-4", runId: null }));
+
+		const result = store.getByRunIncludeOrphans("run-1");
+		expect(result).toHaveLength(3);
+		expect(result.map((s) => s.agentName).sort()).toEqual(["a1", "a2", "a4"]);
+	});
+
+	test("does not include sessions from a different run", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-2" }));
+		store.upsert(makeSession({ agentName: "a2", id: "s-2", runId: null }));
+
+		const result = store.getByRunIncludeOrphans("run-1");
+		expect(result).toHaveLength(1);
+		expect(result[0]?.agentName).toBe("a2");
+	});
+
+	test("results are ordered by started_at ascending", () => {
+		store.upsert(
+			makeSession({
+				agentName: "late",
+				id: "s-2",
+				runId: "run-1",
+				startedAt: "2026-01-15T12:00:00.000Z",
+			}),
+		);
+		store.upsert(
+			makeSession({
+				agentName: "orphan",
+				id: "s-3",
+				runId: null,
+				startedAt: "2026-01-15T11:00:00.000Z",
+			}),
+		);
+		store.upsert(
+			makeSession({
+				agentName: "early",
+				id: "s-1",
+				runId: "run-1",
+				startedAt: "2026-01-15T10:00:00.000Z",
+			}),
+		);
+
+		const result = store.getByRunIncludeOrphans("run-1");
+		expect(result[0]?.agentName).toBe("early");
+		expect(result[1]?.agentName).toBe("orphan");
+		expect(result[2]?.agentName).toBe("late");
+	});
+});
+
 // === updateState ===
 
 describe("updateState", () => {
@@ -292,7 +352,7 @@ describe("updateLastActivity", () => {
 		expect(updatedActivity <= after).toBe(true);
 	});
 
-	test("does not modify other fields", () => {
+	test("does not modify other fields for a working session", () => {
 		const original = makeSession({ state: "working", escalationLevel: 2 });
 		store.upsert(original);
 
@@ -302,6 +362,44 @@ describe("updateLastActivity", () => {
 		expect(result?.state).toBe("working");
 		expect(result?.escalationLevel).toBe(2);
 		expect(result?.id).toBe(original.id);
+	});
+
+	test("transitions zombie agent to working state", () => {
+		store.upsert(makeSession({ state: "zombie" }));
+
+		store.updateLastActivity("test-agent");
+
+		const result = store.getByName("test-agent");
+		expect(result?.state).toBe("working");
+	});
+
+	test("resets escalation_level and stalled_since when recovering from zombie", () => {
+		store.upsert(
+			makeSession({
+				state: "zombie",
+				escalationLevel: 3,
+				stalledSince: "2026-01-15T09:00:00.000Z",
+			}),
+		);
+
+		store.updateLastActivity("test-agent");
+
+		const result = store.getByName("test-agent");
+		expect(result?.state).toBe("working");
+		expect(result?.escalationLevel).toBe(0);
+		expect(result?.stalledSince).toBeNull();
+	});
+
+	test("does not affect working, completed, or stalled sessions", () => {
+		for (const state of ["working", "completed", "stalled"] as const) {
+			store.upsert(
+				makeSession({ agentName: `agent-${state}`, id: `s-${state}`, state, escalationLevel: 2 }),
+			);
+			store.updateLastActivity(`agent-${state}`);
+			const result = store.getByName(`agent-${state}`);
+			expect(result?.state).toBe(state);
+			expect(result?.escalationLevel).toBe(2);
+		}
 	});
 });
 

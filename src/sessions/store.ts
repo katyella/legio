@@ -20,6 +20,8 @@ export interface SessionStore {
 	getAll(): AgentSession[];
 	/** Get sessions belonging to a specific run. */
 	getByRun(runId: string): AgentSession[];
+	/** Get sessions belonging to a specific run, including sessions with null runId (orphan persistent agents). */
+	getByRunIncludeOrphans(runId: string): AgentSession[];
 	/** Update only the state of a session. */
 	updateState(agentName: string, state: AgentState): void;
 	/** Update lastActivity to current ISO timestamp. */
@@ -202,12 +204,30 @@ export function createSessionStore(dbPath: string): SessionStore {
 		SELECT * FROM sessions WHERE run_id = $run_id ORDER BY started_at ASC
 	`);
 
+	const getByRunIncludeOrphansStmt = db.prepare(`
+		SELECT * FROM sessions WHERE run_id = $run_id OR run_id IS NULL ORDER BY started_at ASC
+	`);
+
 	const updateStateStmt = db.prepare(`
 		UPDATE sessions SET state = $state WHERE agent_name = $agent_name
 	`);
 
 	const updateLastActivityStmt = db.prepare(`
-		UPDATE sessions SET last_activity = $last_activity WHERE agent_name = $agent_name
+		UPDATE sessions
+		SET last_activity = $last_activity,
+		    state = CASE
+		      WHEN state IN ('booting', 'zombie') THEN 'working'
+		      ELSE state
+		    END,
+		    escalation_level = CASE
+		      WHEN state IN ('booting', 'zombie') THEN 0
+		      ELSE escalation_level
+		    END,
+		    stalled_since = CASE
+		      WHEN state IN ('booting', 'zombie') THEN NULL
+		      ELSE stalled_since
+		    END
+		WHERE agent_name = $agent_name
 	`);
 
 	const updateEscalationStmt = db.prepare(`
@@ -259,6 +279,11 @@ export function createSessionStore(dbPath: string): SessionStore {
 
 		getByRun(runId: string): AgentSession[] {
 			const rows = getByRunStmt.all({ run_id: runId }) as SessionRow[];
+			return rows.map(rowToSession);
+		},
+
+		getByRunIncludeOrphans(runId: string): AgentSession[] {
+			const rows = getByRunIncludeOrphansStmt.all({ run_id: runId }) as SessionRow[];
 			return rows.map(rowToSession);
 		},
 
