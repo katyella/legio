@@ -1,7 +1,7 @@
 // IssueCard — reusable kanban card component
 // Used by views/issues.js
 
-import { h, html } from "../lib/preact-setup.js";
+import { html } from "../lib/preact-setup.js";
 
 // Maps priority number → left border color (hex, for inline style)
 const priorityBorderColors = {
@@ -17,17 +17,17 @@ function timeAgo(isoString) {
 	const diff = Date.now() - new Date(isoString).getTime();
 	if (diff < 0) return "just now";
 	const s = Math.floor(diff / 1000);
-	if (s < 60) return s + "s ago";
+	if (s < 60) return `${s}s ago`;
 	const m = Math.floor(s / 60);
-	if (m < 60) return m + "m ago";
+	if (m < 60) return `${m}m ago`;
 	const hh = Math.floor(m / 60);
-	if (hh < 24) return hh + "h ago";
-	return Math.floor(hh / 24) + "d ago";
+	if (hh < 24) return `${hh}h ago`;
+	return `${Math.floor(hh / 24)}d ago`;
 }
 
 function truncate(str, maxLen) {
 	if (!str) return "";
-	return str.length <= maxLen ? str : str.slice(0, maxLen - 3) + "...";
+	return str.length <= maxLen ? str : `${str.slice(0, maxLen - 3)}...`;
 }
 
 export function IssueCard({ issue }) {
@@ -36,15 +36,14 @@ export function IssueCard({ issue }) {
 	const isClosed = issue.status === "closed";
 
 	function handleClick() {
-		if (isClosed) return;
-		location.hash = "task/" + issue.id;
+		location.hash = `task/${issue.id}`;
 	}
 
 	return html`
 		<div
-			class=${`bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3${isClosed ? " opacity-50" : " cursor-pointer hover:border-[#3a3a3a] hover:bg-[#222]"}`}
+			class=${`bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3 cursor-pointer hover:border-[#3a3a3a] hover:bg-[#222]${isClosed ? " opacity-50" : ""}`}
 			style=${{ borderLeftColor: borderColor }}
-			onClick=${isClosed ? undefined : handleClick}
+			onClick=${handleClick}
 		>
 			<div class="flex items-start justify-between gap-2 mb-1">
 				<span class="flex items-center gap-1">
