@@ -1150,9 +1150,17 @@ export async function handleApiRequest(
 			const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 100) : 100;
 			const store = createMailStore(dbPath);
 			try {
-				const messages = store.getAll({ from: "human", to: agentName, audience: "human" });
-				// getAll returns DESC (newest first); take the most recent `limit` in chronological order
-				return jsonResponse(messages.slice(0, limit).reverse());
+				const humanToAgent = store.getAll({ from: "human", to: agentName });
+				const agentToHuman = store.getAll({ from: agentName, to: "human" });
+				const combined = [...humanToAgent, ...agentToHuman];
+				const seen = new Set<string>();
+				const relevant = combined.filter((m) => {
+					if (seen.has(m.id)) return false;
+					seen.add(m.id);
+					return m.audience === "human" || m.audience === "both";
+				});
+				relevant.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+				return jsonResponse(relevant.slice(-limit));
 			} finally {
 				store.close();
 			}
@@ -1717,9 +1725,17 @@ export async function handleApiRequest(
 		}
 		const store = createMailStore(dbPath);
 		try {
-			const messages = store.getAll({ from: "human", to: "coordinator", audience: "human" });
-			// getAll returns DESC (newest first); take the most recent `limit` in chronological order
-			return jsonResponse(messages.slice(0, limit).reverse());
+			const humanToCoord = store.getAll({ from: "human", to: "coordinator" });
+			const coordToHuman = store.getAll({ from: "coordinator", to: "human" });
+			const combined = [...humanToCoord, ...coordToHuman];
+			const seen = new Set<string>();
+			const relevant = combined.filter((m) => {
+				if (seen.has(m.id)) return false;
+				seen.add(m.id);
+				return m.audience === "human" || m.audience === "both";
+			});
+			relevant.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+			return jsonResponse(relevant.slice(-limit));
 		} finally {
 			store.close();
 		}

@@ -3109,20 +3109,28 @@ describe("GET /api/coordinator/chat/history", () => {
 			threadId: null,
 			audience: "human",
 		});
+		store.insert({
+			id: "chat-msg-003",
+			from: "coordinator",
+			to: "human",
+			subject: "chat",
+			body: "Coordinator response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
 		store.close();
 
 		const res = await dispatch("/api/coordinator/chat/history");
 		expect(res.status).toBe(200);
 		const body = (await json(res)) as Array<{ body: string; from: string; to: string }>;
-		expect(body.length).toBe(2);
-		// Both messages present (millisecond precision may affect order within same second)
+		expect(body.length).toBe(3);
+		// All three messages present (human->coordinator and coordinator->human)
 		const bodies = body.map((m) => m.body);
 		expect(bodies).toContain("First message");
 		expect(bodies).toContain("Second message");
-		for (const msg of body) {
-			expect(msg.from).toBe("human");
-			expect(msg.to).toBe("coordinator");
-		}
+		expect(bodies).toContain("Coordinator response");
 	});
 
 	it("does not include non-human-audience messages", async () => {
@@ -3149,6 +3157,17 @@ describe("GET /api/coordinator/chat/history", () => {
 			priority: "normal",
 			threadId: null,
 			audience: "human",
+		});
+		store.insert({
+			id: "coord-agent-msg-001",
+			from: "coordinator",
+			to: "human",
+			subject: "response",
+			body: "Agent-only coordinator response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
 		});
 		store.close();
 
@@ -3181,6 +3200,90 @@ describe("GET /api/coordinator/chat/history", () => {
 		expect(res.status).toBe(200);
 		const body = (await json(res)) as unknown[];
 		expect(body.length).toBe(3);
+	});
+
+	it("returns bidirectional messages (human-to-coordinator and coordinator-to-human)", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "bidir-coord-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "Human question",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "bidir-coord-002",
+			from: "coordinator",
+			to: "human",
+			subject: "chat",
+			body: "Coordinator answer",
+			type: "result",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string }>;
+		expect(body.length).toBe(2);
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("Human question");
+		expect(bodies).toContain("Coordinator answer");
+	});
+
+	it("excludes messages between unrelated agent pairs", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		// Human to coordinator - should appear
+		store.insert({
+			id: "coord-related-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "To coordinator",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Worker to builder - unrelated pair, should not appear
+		store.insert({
+			id: "coord-unrelated-001",
+			from: "worker",
+			to: "builder",
+			subject: "status",
+			body: "Worker to builder",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Builder to worker - unrelated pair, should not appear
+		store.insert({
+			id: "coord-unrelated-002",
+			from: "builder",
+			to: "worker",
+			subject: "status",
+			body: "Builder to worker",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("To coordinator");
 	});
 });
 
@@ -3348,19 +3451,29 @@ describe("GET /api/agents/:name/chat/history", () => {
 			threadId: null,
 			audience: "human",
 		});
+		// Scout response back to human — should appear
+		store.insert({
+			id: "agent-chat-004",
+			from: "scout-1",
+			to: "human",
+			subject: "chat",
+			body: "Scout response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
 		store.close();
 
 		const res = await dispatch("/api/agents/scout-1/chat/history");
 		expect(res.status).toBe(200);
 		const body = (await json(res)) as Array<{ body: string; to: string }>;
-		expect(body.length).toBe(2);
-		// Both messages present (millisecond precision may affect order within same second)
+		expect(body.length).toBe(3);
+		// All three messages present (human->scout-1 and scout-1->human)
 		const bodies = body.map((m) => m.body);
 		expect(bodies).toContain("First to scout");
 		expect(bodies).toContain("Second to scout");
-		for (const msg of body) {
-			expect(msg.to).toBe("scout-1");
-		}
+		expect(bodies).toContain("Scout response");
 	});
 
 	it("does not include messages with non-human audience", async () => {
@@ -3387,6 +3500,17 @@ describe("GET /api/agents/:name/chat/history", () => {
 			priority: "normal",
 			threadId: null,
 			audience: "human",
+		});
+		store.insert({
+			id: "scout-agent-msg-001",
+			from: "scout-1",
+			to: "human",
+			subject: "response",
+			body: "Agent-only scout response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
 		});
 		store.close();
 
@@ -3419,5 +3543,89 @@ describe("GET /api/agents/:name/chat/history", () => {
 		expect(res.status).toBe(200);
 		const body = (await json(res)) as unknown[];
 		expect(body.length).toBe(2);
+	});
+
+	it("returns bidirectional messages (human-to-agent and agent-to-human)", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "bidir-agent-001",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "Human question to scout",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "bidir-agent-002",
+			from: "scout-1",
+			to: "human",
+			subject: "chat",
+			body: "Scout answer",
+			type: "result",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/agents/scout-1/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string }>;
+		expect(body.length).toBe(2);
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("Human question to scout");
+		expect(bodies).toContain("Scout answer");
+	});
+
+	it("excludes messages between unrelated agent pairs", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		// Human to scout-1 - should appear
+		store.insert({
+			id: "scout-related-001",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "To scout",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Human to builder-1 - different agent, should not appear
+		store.insert({
+			id: "scout-unrelated-001",
+			from: "human",
+			to: "builder-1",
+			subject: "chat",
+			body: "To builder",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// builder-1 to human - different agent, should not appear
+		store.insert({
+			id: "scout-unrelated-002",
+			from: "builder-1",
+			to: "human",
+			subject: "chat",
+			body: "Builder response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/agents/scout-1/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("To scout");
 	});
 });
