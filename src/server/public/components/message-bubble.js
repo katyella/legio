@@ -3,6 +3,7 @@
 // No npm dependencies — uses shared preact-setup.js for version consistency.
 
 import { html } from "../lib/preact-setup.js";
+import { renderMarkdown } from "../lib/markdown.js";
 import { agentColor, timeAgo } from "../lib/utils.js";
 
 /**
@@ -62,7 +63,8 @@ export function MessageBubble({
 				<span class="text-xs text-[#555]">${timeAgo(msg.createdAt)}</span>
 			</div>`
 			}
-			<div class="text-sm text-[#e5e5e5] whitespace-pre-wrap break-words">${msg.body || ""}</div>
+			<div class="text-sm text-[#e5e5e5] break-words chat-markdown"
+			dangerouslySetInnerHTML=${{ __html: renderMarkdown(msg.body) }}></div>
 		</div>
 	`;
 }

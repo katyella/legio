@@ -3,6 +3,7 @@
 // Merges former CommandView and DashboardView into a single unified page.
 
 import { fetchJson, postJson } from "../lib/api.js";
+import { renderMarkdown } from "../lib/markdown.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import { agentActivityLog, appState } from "../lib/state.js";
 import {
@@ -871,16 +872,15 @@ function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 												${isSending ? "\u00b7 sending\u2026" : `\u00b7 ${timeAgo(msg.createdAt)}`}
 											</span>
 										</div>
-										<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
-											${
-												isCommand
-													? html`<span
-															class="text-xs px-1 py-0.5 rounded bg-[#2a2a2a] text-[#888] font-mono mr-1"
-														>cmd</span
-													><span class="font-mono">${msg.body || ""}</span>`
-													: msg.body || ""
-											}
-										</div>
+										${
+											isCommand
+												? html`<div class="text-[#e5e5e5] whitespace-pre-wrap break-words">
+													<span class="text-xs px-1 py-0.5 rounded bg-[#2a2a2a] text-[#888] font-mono mr-1">cmd</span
+													><span class="font-mono">${msg.body || ""}</span>
+												</div>`
+												: html`<div class="text-[#e5e5e5] break-words chat-markdown"
+													dangerouslySetInnerHTML=${{ __html: renderMarkdown(msg.body) }}></div>`
+										}
 									</div>
 								</div>
 							`;
@@ -897,7 +897,8 @@ function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 								</div>
 								${
 									streamText
-										? html`<pre class="text-[#ccc] whitespace-pre-wrap break-words font-mono text-xs max-h-48 overflow-y-auto">${streamText}</pre>`
+										? html`<div class="text-[#ccc] break-words text-xs max-h-48 overflow-y-auto chat-markdown"
+											dangerouslySetInnerHTML=${{ __html: renderMarkdown(streamText) }}></div>`
 										: html`<div class="flex items-center gap-2 text-sm text-[#666]">
 										<span class="animate-pulse">\u25cf\u25cf\u25cf</span>
 									</div>`
