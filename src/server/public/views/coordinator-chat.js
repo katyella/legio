@@ -100,14 +100,21 @@ function TerminalPanel({ chatTarget, thinking }) {
 				const data = await res.json();
 				const output = stripAnsi(data.output || "");
 
-				if (baselineCaptureRef.current === null) {
-					baselineCaptureRef.current = output;
-					return;
-				}
-
-				const delta = diffCapture(baselineCaptureRef.current, output);
-				if (!cancelled && delta.trim()) {
-					setStreamText(delta);
+				if (thinking) {
+					// Streaming mode: diff against baseline to show new output
+					if (baselineCaptureRef.current === null) {
+						baselineCaptureRef.current = output;
+						return;
+					}
+					const delta = diffCapture(baselineCaptureRef.current, output);
+					if (!cancelled && delta.trim()) {
+						setStreamText(delta);
+					}
+				} else {
+					// Expanded viewer mode: show full terminal capture directly
+					if (!cancelled && output.trim()) {
+						setStreamText(output);
+					}
 				}
 			} catch (_err) {
 				// non-fatal — capture may fail if coordinator tmux not ready
