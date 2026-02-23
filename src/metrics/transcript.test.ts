@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
-import { estimateCost, parseTranscriptUsage } from "./transcript.ts";
+import { estimateCost, extractAssistantText, parseTranscriptTexts, parseTranscriptUsage } from "./transcript.ts";
 
 let tempDir: string;
 
@@ -352,5 +352,235 @@ describe("estimateCost", () => {
 			expect(cost).toBeGreaterThan(0.1);
 			expect(cost).toBeLessThan(1.0);
 		}
+	});
+});
+
+// === extractAssistantText ===
+
+describe("extractAssistantText", () => {
+	test("returns text from assistant entry with text content block", () => {
+		const entry = {
+			type: "assistant",
+			message: {
+				model: "claude-opus-4-6",
+				content: [{ type: "text", text: "Hello, how can I help?" }],
+			},
+		};
+		expect(extractAssistantText(entry)).toBe("Hello, how can I help?");
+	});
+
+	test("returns first text block when multiple content blocks", () => {
+		const entry = {
+			type: "assistant",
+			message: {
+				content: [
+					{ type: "tool_use", id: "abc", name: "Bash", input: { command: "ls" } },
+					{ type: "text", text: "I ran a command." },
+				],
+			},
+		};
+		expect(extractAssistantText(entry)).toBe("I ran a command.");
+	});
+
+	test("returns null for non-assistant entry type", () => {
+		const entry = {
+			type: "human",
+			message: { content: [{ type: "text", text: "Hello" }] },
+		};
+		expect(extractAssistantText(entry)).toBeNull();
+	});
+
+	test("returns null when content array has no text blocks", () => {
+		const entry = {
+			type: "assistant",
+			message: {
+				content: [{ type: "tool_use", id: "x", name: "Read", input: {} }],
+			},
+		};
+		expect(extractAssistantText(entry)).toBeNull();
+	});
+
+	test("returns null for entry with no message", () => {
+		const entry = { type: "assistant" };
+		expect(extractAssistantText(entry)).toBeNull();
+	});
+
+	test("returns null for null input", () => {
+		expect(extractAssistantText(null)).toBeNull();
+	});
+
+	test("returns null for non-object input", () => {
+		expect(extractAssistantText("not an object")).toBeNull();
+	});
+
+	test("skips empty text blocks and returns first non-empty one", () => {
+		const entry = {
+			type: "assistant",
+			message: {
+				content: [
+					{ type: "text", text: "" },
+					{ type: "text", text: "Actual response." },
+				],
+			},
+		};
+		expect(extractAssistantText(entry)).toBe("Actual response.");
+	});
+});
+
+// === parseTranscriptTexts ===
+
+describe("parseTranscriptTexts", () => {
+	test("extracts both user and assistant messages", async () => {
+		const path = await writeJsonl("mixed-roles.jsonl", [
+			{
+				type: "human",
+				message: { content: [{ type: "text", text: "What is 2+2?" }] },
+			},
+			{
+				type: "assistant",
+				message: {
+					model: "claude-opus-4-6",
+					content: [{ type: "text", text: "2+2 equals 4." }],
+				},
+			},
+		]);
+
+		const { messages, nextLine } = await parseTranscriptTexts(path);
+
+		expect(messages).toHaveLength(2);
+		expect(messages[0]).toEqual({ role: "user", text: "What is 2+2?" });
+		expect(messages[1]).toEqual({ role: "assistant", text: "2+2 equals 4." });
+		expect(nextLine).toBe(2); // 2 JSON lines; trailing empty excluded from watermark
+	});
+
+	test("returns empty array for file with no human or assistant entries", async () => {
+		const path = await writeJsonl("system-only.jsonl", [
+			{ type: "system", content: "system prompt" },
+		]);
+
+		const { messages } = await parseTranscriptTexts(path);
+		expect(messages).toHaveLength(0);
+	});
+
+	test("skips entries with no text content", async () => {
+		const path = await writeJsonl("no-text.jsonl", [
+			{
+				type: "assistant",
+				message: {
+					content: [{ type: "tool_use", name: "Bash", id: "x", input: {} }],
+				},
+			},
+			{
+				type: "assistant",
+				message: {
+					content: [{ type: "text", text: "Done." }],
+				},
+			},
+		]);
+
+		const { messages } = await parseTranscriptTexts(path);
+		expect(messages).toHaveLength(1);
+		expect(messages[0]).toEqual({ role: "assistant", text: "Done." });
+	});
+
+	test("respects fromLine offset for incremental parsing", async () => {
+		const path = await writeJsonl("incremental.jsonl", [
+			{
+				type: "human",
+				message: { content: [{ type: "text", text: "First message" }] },
+			},
+			{
+				type: "assistant",
+				message: { content: [{ type: "text", text: "First response" }] },
+			},
+			{
+				type: "human",
+				message: { content: [{ type: "text", text: "Second message" }] },
+			},
+			{
+				type: "assistant",
+				message: { content: [{ type: "text", text: "Second response" }] },
+			},
+		]);
+
+		// First call: get all
+		const first = await parseTranscriptTexts(path, 0);
+		expect(first.messages).toHaveLength(4);
+
+		// Second call: start from where first call ended
+		const second = await parseTranscriptTexts(path, first.nextLine);
+		expect(second.messages).toHaveLength(0);
+		expect(second.nextLine).toBe(first.nextLine);
+	});
+
+	test("incremental parsing captures only new messages after offset", async () => {
+		const path = join(tempDir, "growing.jsonl");
+
+		// Write first two entries
+		const lines1 = [
+			{ type: "human", message: { content: [{ type: "text", text: "Hello" }] } },
+			{ type: "assistant", message: { content: [{ type: "text", text: "Hi!" }] } },
+		];
+		await writeFile(path, `${lines1.map((l) => JSON.stringify(l)).join("\n")}\n`, "utf8");
+
+		const first = await parseTranscriptTexts(path, 0);
+		expect(first.messages).toHaveLength(2);
+
+		// Append two more entries
+		const lines2 = [
+			{ type: "human", message: { content: [{ type: "text", text: "How are you?" }] } },
+			{ type: "assistant", message: { content: [{ type: "text", text: "I'm great!" }] } },
+		];
+		const { appendFile } = await import("node:fs/promises");
+		await appendFile(path, `${lines2.map((l) => JSON.stringify(l)).join("\n")}\n`, "utf8");
+
+		// Second call with offset from first call
+		const second = await parseTranscriptTexts(path, first.nextLine);
+		expect(second.messages).toHaveLength(2);
+		expect(second.messages[0]).toEqual({ role: "user", text: "How are you?" });
+		expect(second.messages[1]).toEqual({ role: "assistant", text: "I'm great!" });
+	});
+
+	test("returns empty array for empty file", async () => {
+		const path = join(tempDir, "empty-texts.jsonl");
+		await writeFile(path, "", "utf8");
+
+		const { messages, nextLine } = await parseTranscriptTexts(path);
+		expect(messages).toHaveLength(0);
+		expect(nextLine).toBe(0); // split("") gives [""] — trailing empty excluded → 0
+	});
+
+	test("handles human entry with string content", async () => {
+		const path = await writeJsonl("human-string.jsonl", [
+			{
+				type: "human",
+				message: { content: "Plain string message" },
+			},
+		]);
+
+		const { messages } = await parseTranscriptTexts(path);
+		expect(messages).toHaveLength(1);
+		expect(messages[0]).toEqual({ role: "user", text: "Plain string message" });
+	});
+
+	test("skips malformed JSON lines gracefully", async () => {
+		const path = join(tempDir, "malformed-texts.jsonl");
+		const content = [
+			JSON.stringify({
+				type: "assistant",
+				message: { content: [{ type: "text", text: "Valid" }] },
+			}),
+			"this is not json",
+			JSON.stringify({
+				type: "assistant",
+				message: { content: [{ type: "text", text: "Also valid" }] },
+			}),
+		].join("\n");
+		await writeFile(path, content, "utf8");
+
+		const { messages } = await parseTranscriptTexts(path);
+		expect(messages).toHaveLength(2);
+		expect(messages[0]?.text).toBe("Valid");
+		expect(messages[1]?.text).toBe("Also valid");
 	});
 });

@@ -22,7 +22,7 @@ import { createLogger } from "../logging/logger.ts";
 import { createMailClient } from "../mail/client.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMetricsStore } from "../metrics/store.ts";
-import { estimateCost, parseTranscriptUsage } from "../metrics/transcript.ts";
+import { estimateCost, parseTranscriptTexts, parseTranscriptUsage } from "../metrics/transcript.ts";
 import { createMulchClient, type MulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
@@ -709,6 +709,58 @@ export async function logCommand(args: string[]): Promise<void> {
 							});
 						} catch {
 							// Non-fatal: mulch learn/record should not break session-end handling
+						}
+					}
+
+					// Sync new assistant messages from transcript to chat.db for persistent agents.
+					// Persistent agents (coordinator, monitor, gateway) fire session-end every turn,
+					// so we capture assistant responses incrementally using a line-offset watermark.
+					if (PERSISTENT_CAPABILITIES.has(agentSession.capability) && sessionId) {
+						try {
+							const resolvedTranscript = await resolveTranscriptPath(
+								config.project.root,
+								sessionId,
+								logsBase,
+								agentName,
+							);
+							if (resolvedTranscript) {
+								const offsetPath = join(logsBase, agentName, ".chat-transcript-offset");
+								let fromLine = 0;
+								try {
+									const savedOffset = await readFile(offsetPath, "utf-8");
+									const parsed = Number.parseInt(savedOffset.trim(), 10);
+									if (!Number.isNaN(parsed) && parsed >= 0) {
+										fromLine = parsed;
+									}
+								} catch {
+									// No offset file yet — start from beginning
+								}
+
+								const { messages, nextLine } = await parseTranscriptTexts(
+									resolvedTranscript,
+									fromLine,
+								);
+
+								// Only persist assistant messages — user messages already stored via API
+								const assistantMessages = messages.filter((m) => m.role === "assistant");
+								if (assistantMessages.length > 0) {
+									const chatDbPath = join(config.project.root, ".legio", "chat.db");
+									const { createChatStore } = await import("../server/chat-store.ts");
+									const chatStore = createChatStore(chatDbPath);
+									try {
+										const chatSession = chatStore.getOrCreateCoordinatorSession();
+										for (const msg of assistantMessages) {
+											chatStore.addMessage(chatSession.id, "assistant", msg.text);
+										}
+									} finally {
+										chatStore.close();
+									}
+								}
+
+								await writeFile(offsetPath, String(nextLine));
+							}
+						} catch {
+							// Non-fatal: chat sync should not break session-end handling
 						}
 					}
 				}
