@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
-import { DEFAULT_DOMAIN_MAP, createMulchClient, inferDomainsFromFiles } from "./client.ts";
+import { createMulchClient, inferDomainsFromFiles } from "./client.ts";
 
 // Check if mulch is available
 let hasMulch = false;

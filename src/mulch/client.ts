@@ -153,12 +153,7 @@ function matchGlob(pattern: string, filePath: string): boolean {
 		if (ch === undefined) break;
 		if (ch === "*" && i + 1 < pattern.length && pattern[i + 1] === "*") {
 			// Check for /**/  in the middle of the pattern
-			if (
-				i > 0 &&
-				pattern[i - 1] === "/" &&
-				i + 2 < pattern.length &&
-				pattern[i + 2] === "/"
-			) {
+			if (i > 0 && pattern[i - 1] === "/" && i + 2 < pattern.length && pattern[i + 2] === "/") {
 				// /**/  → match zero or more path segments (consumes the trailing /)
 				regexStr += "(?:.*/)?";
 				i += 3; // skip **/
