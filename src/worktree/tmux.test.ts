@@ -843,9 +843,7 @@ describe("sendKeys", () => {
 	});
 
 	test("error message says 'not found' when session does not exist", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "session not found: dead-agent", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "session not found: dead-agent", 1));
 
 		try {
 			await sendKeys("dead-agent", "echo test");
@@ -858,9 +856,7 @@ describe("sendKeys", () => {
 	});
 
 	test("error message includes stderr for unrecognized tmux errors", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "unexpected tmux protocol error", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "unexpected tmux protocol error", 1));
 
 		try {
 			await sendKeys("agent", "echo test");
@@ -903,9 +899,7 @@ describe("capturePaneContent", () => {
 	});
 
 	test("returns empty string when session does not exist", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "can't find session: gone", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "can't find session: gone", 1));
 
 		const content = await capturePaneContent("gone");
 
@@ -913,9 +907,7 @@ describe("capturePaneContent", () => {
 	});
 
 	test("returns empty string when capture-pane fails", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "no server running", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "no server running", 1));
 
 		const content = await capturePaneContent("any-session");
 
@@ -971,9 +963,7 @@ describe("waitForTuiReady", () => {
 		).resolves.toBeUndefined();
 
 		// Should emit a warning on timeout
-		expect(stderrSpy).toHaveBeenCalledWith(
-			expect.stringContaining("Warning"),
-		);
+		expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("Warning"));
 
 		stderrSpy.mockRestore();
 	});

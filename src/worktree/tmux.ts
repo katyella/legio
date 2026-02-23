@@ -449,16 +449,12 @@ export async function sendKeys(name: string, keys: string): Promise<void> {
 	if (exitCode !== 0) {
 		// Differentiate failure reasons so callers can handle them appropriately.
 		if (stderr.includes("no server running")) {
-			throw new AgentError(
-				`Tmux server not running — cannot send keys to session "${name}"`,
-				{ agentName: name },
-			);
+			throw new AgentError(`Tmux server not running — cannot send keys to session "${name}"`, {
+				agentName: name,
+			});
 		}
 		if (stderr.includes("session not found") || stderr.includes("can't find session")) {
-			throw new AgentError(
-				`Session "${name}" not found — cannot send keys`,
-				{ agentName: name },
-			);
+			throw new AgentError(`Session "${name}" not found — cannot send keys`, { agentName: name });
 		}
 		throw new AgentError(`Failed to send keys to tmux session "${name}": ${stderr.trim()}`, {
 			agentName: name,
