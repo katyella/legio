@@ -383,7 +383,7 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 	);
 
 	const sessionCount = safeMetrics.length;
-	const totalTokens = totals.input + totals.output;
+	const totalTokens = totals.input + totals.output + totals.cacheRead + totals.cacheCreated;
 	const avgCost = totals.cost != null && sessionCount > 0 ? totals.cost / sessionCount : null;
 
 	// Group by capability when requested
