@@ -29,6 +29,12 @@ export interface TranscriptUsage {
 	modelUsed: string | null;
 }
 
+/** A single extracted text message from a transcript entry. */
+export interface TranscriptMessage {
+	role: "user" | "assistant";
+	text: string;
+}
+
 /** Pricing per million tokens (USD). */
 interface ModelPricing {
 	inputPerMTok: number;
@@ -123,6 +129,130 @@ function extractUsageFromEntry(entry: unknown): {
 			typeof u.cache_creation_input_tokens === "number" ? u.cache_creation_input_tokens : 0,
 		model: typeof msg.model === "string" ? msg.model : undefined,
 	};
+}
+
+/**
+ * Extract the first text block content from an assistant transcript entry.
+ * Returns the text string, or null if the entry is not an assistant turn
+ * or contains no text content block.
+ */
+export function extractAssistantText(entry: unknown): string | null {
+	if (typeof entry !== "object" || entry === null) return null;
+
+	const obj = entry as Record<string, unknown>;
+	if (obj.type !== "assistant") return null;
+
+	const message = obj.message;
+	if (typeof message !== "object" || message === null) return null;
+
+	const msg = message as Record<string, unknown>;
+	const content = msg.content;
+
+	if (Array.isArray(content)) {
+		for (const block of content) {
+			if (typeof block === "object" && block !== null) {
+				const b = block as Record<string, unknown>;
+				if (b.type === "text" && typeof b.text === "string" && b.text.length > 0) {
+					return b.text;
+				}
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Extract text content from a human transcript entry.
+ * Returns the first non-empty text block content, or null.
+ */
+function extractHumanText(entry: unknown): string | null {
+	if (typeof entry !== "object" || entry === null) return null;
+
+	const obj = entry as Record<string, unknown>;
+	if (obj.type !== "human") return null;
+
+	const message = obj.message;
+	if (typeof message !== "object" || message === null) return null;
+
+	const msg = message as Record<string, unknown>;
+	const content = msg.content;
+
+	// Content may be a string or an array of blocks
+	if (typeof content === "string" && content.length > 0) {
+		return content;
+	}
+
+	if (Array.isArray(content)) {
+		for (const block of content) {
+			if (typeof block === "object" && block !== null) {
+				const b = block as Record<string, unknown>;
+				if (b.type === "text" && typeof b.text === "string" && b.text.length > 0) {
+					return b.text;
+				}
+			} else if (typeof block === "string" && block.length > 0) {
+				return block;
+			}
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Parse a Claude Code transcript JSONL file and extract text messages.
+ *
+ * Reads from a given line offset (for incremental parsing across calls).
+ * Returns extracted messages with role ("user" | "assistant") and the
+ * next line index to use for the subsequent call.
+ *
+ * @param transcriptPath - Absolute path to the transcript JSONL file
+ * @param fromLine - 0-based line index to start reading from (default 0)
+ * @returns Messages found and the next line index
+ */
+export async function parseTranscriptTexts(
+	transcriptPath: string,
+	fromLine = 0,
+): Promise<{ messages: TranscriptMessage[]; nextLine: number }> {
+	const fileText = await readFile(transcriptPath, "utf-8");
+	const lines = fileText.split("\n");
+
+	// When a JSONL file ends with \n, split() produces a trailing empty element.
+	// Exclude it from the watermark so that appended lines at that position are
+	// correctly processed on the next incremental call.
+	const lastLine = lines[lines.length - 1] ?? "";
+	const nextLine = lastLine.trim().length === 0 ? lines.length - 1 : lines.length;
+
+	const messages: TranscriptMessage[] = [];
+
+	for (let i = fromLine; i < lines.length; i++) {
+		const trimmed = lines[i]?.trim() ?? "";
+		if (trimmed.length === 0) continue;
+
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(trimmed);
+		} catch {
+			continue;
+		}
+
+		if (typeof parsed !== "object" || parsed === null) continue;
+		const obj = parsed as Record<string, unknown>;
+
+		if (obj.type === "assistant") {
+			const text = extractAssistantText(parsed);
+			if (text !== null) {
+				messages.push({ role: "assistant", text });
+			}
+		} else if (obj.type === "human") {
+			const text = extractHumanText(parsed);
+			if (text !== null) {
+				messages.push({ role: "user", text });
+			}
+		}
+	}
+
+	return { messages, nextLine };
 }
 
 /**

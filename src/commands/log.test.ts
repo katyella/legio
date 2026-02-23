@@ -1538,4 +1538,148 @@ try {
 		expect(event.toolName).toBe("Bash");
 		// tool_result is not stored in EventStore (filtered out), but tool_name was parsed correctly
 	});
+
+	test("session-end with --stdin syncs assistant messages from transcript to chat.db for coordinator", async () => {
+		const sessionId = "sess-chat-sync-001";
+
+		// Create coordinator session in sessions.db
+		const dbPath = join(tempDir, ".legio", "sessions.db");
+		const sessStore = createSessionStore(dbPath);
+		sessStore.upsert({
+			id: "session-coord-chat",
+			agentName: "coordinator",
+			capability: "coordinator",
+			worktreePath: tempDir,
+			branchName: "main",
+			beadId: "",
+			tmuxSession: "legio-coordinator",
+			state: "working",
+			pid: 11111,
+			parentAgent: null,
+			depth: 0,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		sessStore.close();
+
+		// Create a transcript file with one human turn and one assistant turn
+		const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
+		const transcriptLines = [
+			JSON.stringify({
+				type: "human",
+				message: { content: [{ type: "text", text: "What can you help me with?" }] },
+			}),
+			JSON.stringify({
+				type: "assistant",
+				message: {
+					model: "claude-opus-4-6",
+					usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+					content: [{ type: "text", text: "I can help you with many things!" }],
+				},
+			}),
+		];
+		await writeFile(transcriptPath, `${transcriptLines.join("\n")}\n`, "utf-8");
+
+		// Pre-create the transcript path cache file so resolveTranscriptPath returns our file
+		const logsAgentDir = join(tempDir, ".legio", "logs", "coordinator");
+		await mkdir(logsAgentDir, { recursive: true });
+		await writeFile(join(logsAgentDir, ".transcript-path"), transcriptPath);
+
+		// Run session-end with --stdin
+		const payload = { session_id: sessionId };
+		const result = await runLogWithStdin("session-end", "coordinator", payload);
+		expect(result.exitCode).toBe(0);
+
+		// Verify chat.db was created and has the assistant message
+		const chatDbPath = join(tempDir, ".legio", "chat.db");
+		expect(await fileAccessor(chatDbPath).exists()).toBe(true);
+
+		const { createChatStore } = await import("../server/chat-store.ts");
+		const chatStore = createChatStore(chatDbPath);
+		const messages = chatStore.getMessages("coordinator");
+		chatStore.close();
+
+		// Should have exactly 1 message: the assistant turn (not the human turn, which is stored via API)
+		expect(messages).toHaveLength(1);
+		expect(messages[0]?.role).toBe("assistant");
+		expect(messages[0]?.content).toBe("I can help you with many things!");
+	});
+
+	test("session-end with --stdin updates chat offset and skips already-processed lines", async () => {
+		const sessionId = "sess-chat-offset-001";
+
+		// Create coordinator session
+		const dbPath = join(tempDir, ".legio", "sessions.db");
+		const sessStore = createSessionStore(dbPath);
+		sessStore.upsert({
+			id: "session-coord-offset",
+			agentName: "coordinator",
+			capability: "coordinator",
+			worktreePath: tempDir,
+			branchName: "main",
+			beadId: "",
+			tmuxSession: "legio-coordinator",
+			state: "working",
+			pid: 22222,
+			parentAgent: null,
+			depth: 0,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		sessStore.close();
+
+		// Create transcript with two turns
+		const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
+		const turn1Lines = [
+			JSON.stringify({ type: "human", message: { content: [{ type: "text", text: "Hello" }] } }),
+			JSON.stringify({
+				type: "assistant",
+				message: { content: [{ type: "text", text: "Hi there!" }] },
+			}),
+		];
+		await writeFile(transcriptPath, `${turn1Lines.join("\n")}\n`, "utf-8");
+
+		const logsAgentDir = join(tempDir, ".legio", "logs", "coordinator");
+		await mkdir(logsAgentDir, { recursive: true });
+		await writeFile(join(logsAgentDir, ".transcript-path"), transcriptPath);
+
+		// First session-end — should capture "Hi there!"
+		const result1 = await runLogWithStdin("session-end", "coordinator", { session_id: sessionId });
+		expect(result1.exitCode).toBe(0);
+
+		// Check offset file was written
+		const offsetPath = join(logsAgentDir, ".chat-transcript-offset");
+		expect(await fileAccessor(offsetPath).exists()).toBe(true);
+
+		// Append a second turn to the transcript
+		const turn2Lines = [
+			JSON.stringify({ type: "human", message: { content: [{ type: "text", text: "What's up?" }] } }),
+			JSON.stringify({
+				type: "assistant",
+				message: { content: [{ type: "text", text: "Just helping!" }] },
+			}),
+		];
+		const { appendFile } = await import("node:fs/promises");
+		await appendFile(transcriptPath, `${turn2Lines.join("\n")}\n`, "utf-8");
+
+		// Second session-end — should only capture "Just helping!"
+		const result2 = await runLogWithStdin("session-end", "coordinator", { session_id: sessionId });
+		expect(result2.exitCode).toBe(0);
+
+		const { createChatStore } = await import("../server/chat-store.ts");
+		const chatStore = createChatStore(join(tempDir, ".legio", "chat.db"));
+		const messages = chatStore.getMessages("coordinator");
+		chatStore.close();
+
+		// Should have 2 assistant messages, one from each session-end call
+		expect(messages).toHaveLength(2);
+		expect(messages[0]?.content).toBe("Hi there!");
+		expect(messages[1]?.content).toBe("Just helping!");
+	});
 });
