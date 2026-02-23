@@ -2978,3 +2978,446 @@ describe("POST /api/gateway/chat", () => {
 		expect(body.error).toContain("not alive");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// POST /api/coordinator/chat
+// ---------------------------------------------------------------------------
+
+describe("POST /api/coordinator/chat", () => {
+	it("returns 400 when text field is missing", async () => {
+		const res = await dispatchPost("/api/coordinator/chat", {});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 when text field is empty string", async () => {
+		const res = await dispatchPost("/api/coordinator/chat", { text: "   " });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/coordinator/chat", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("returns 404 when coordinator is not running (no sessions.db)", async () => {
+		const res = await dispatchPost("/api/coordinator/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("coordinator");
+	});
+
+	it("persists message to mail.db and returns it with correct fields", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-coord-chat-001",
+			agentName: "coordinator",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/coordinator",
+			branchName: "main",
+			beadId: "coord-task",
+			tmuxSession: "legio-test-coordinator",
+			state: "working",
+			pid: 12345,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatchPost("/api/coordinator/chat", { text: "Hello coordinator" });
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as {
+			id: string;
+			from: string;
+			to: string;
+			subject: string;
+			body: string;
+			type: string;
+			audience: string;
+			priority: string;
+		};
+		expect(body.from).toBe("human");
+		expect(body.to).toBe("coordinator");
+		expect(body.subject).toBe("chat");
+		expect(body.body).toBe("Hello coordinator");
+		expect(body.type).toBe("status");
+		expect(body.audience).toBe("human");
+		expect(body.priority).toBe("normal");
+		expect(typeof body.id).toBe("string");
+		expect(body.id.length).toBeGreaterThan(0);
+
+		// Verify message persisted in mail.db
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		const messages = mailStore.getAll({ from: "human", to: "coordinator", audience: "human" });
+		mailStore.close();
+		expect(messages.length).toBe(1);
+		expect(messages[0]?.body).toBe("Hello coordinator");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/coordinator/chat/history
+// ---------------------------------------------------------------------------
+
+describe("GET /api/coordinator/chat/history", () => {
+	it("returns empty array when mail.db does not exist", async () => {
+		const res = await dispatch("/api/coordinator/chat/history");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns messages sent to coordinator in chronological order", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "chat-msg-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "First message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "chat-msg-002",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "Second message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string; to: string }>;
+		expect(body.length).toBe(2);
+		// Both messages present (millisecond precision may affect order within same second)
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("First message");
+		expect(bodies).toContain("Second message");
+		for (const msg of body) {
+			expect(msg.from).toBe("human");
+			expect(msg.to).toBe("coordinator");
+		}
+	});
+
+	it("does not include non-human-audience messages", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "agent-msg-001",
+			from: "worker",
+			to: "coordinator",
+			subject: "status",
+			body: "Agent message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.insert({
+			id: "human-msg-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "Human message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/coordinator/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("Human message");
+	});
+
+	it("respects ?limit= query param", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		for (let i = 0; i < 5; i++) {
+			store.insert({
+				id: `limit-msg-${String(i).padStart(3, "0")}`,
+				from: "human",
+				to: "coordinator",
+				subject: "chat",
+				body: `Message ${i}`,
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+		}
+		store.close();
+
+		const res = await dispatch("/api/coordinator/chat/history", { limit: "3" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(3);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/agents/:name/chat
+// ---------------------------------------------------------------------------
+
+describe("POST /api/agents/:name/chat", () => {
+	it("returns 400 when text field is missing", async () => {
+		const res = await dispatchPost("/api/agents/scout-1/chat", {});
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 when text field is empty string", async () => {
+		const res = await dispatchPost("/api/agents/scout-1/chat", { text: "   " });
+		expect(res.status).toBe(400);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("text");
+	});
+
+	it("returns 400 for non-JSON body", async () => {
+		const res = await handleApiRequest(
+			new Request("http://localhost/api/agents/scout-1/chat", {
+				method: "POST",
+				body: "not json",
+				headers: { "Content-Type": "text/plain" },
+			}),
+			legioDir,
+			projectRoot,
+		);
+		expect(res.status).toBe(400);
+	});
+
+	it("returns 404 when agent is not running (no sessions.db)", async () => {
+		const res = await dispatchPost("/api/agents/scout-1/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("scout-1");
+	});
+
+	it("persists message to mail.db with agent-specific to field", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-agent-chat-001",
+			agentName: "scout-1",
+			capability: "scout",
+			worktreePath: "/tmp/wt/scout-1",
+			branchName: "legio/scout-1/task-1",
+			beadId: "task-1",
+			tmuxSession: "legio-test-scout-1",
+			state: "working",
+			pid: 12345,
+			parentAgent: null,
+			depth: 1,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatchPost("/api/agents/scout-1/chat", { text: "Hello scout" });
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as {
+			from: string;
+			to: string;
+			body: string;
+			audience: string;
+		};
+		expect(body.from).toBe("human");
+		expect(body.to).toBe("scout-1");
+		expect(body.body).toBe("Hello scout");
+		expect(body.audience).toBe("human");
+
+		// Verify persisted in mail.db
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		const messages = mailStore.getAll({ from: "human", to: "scout-1", audience: "human" });
+		mailStore.close();
+		expect(messages.length).toBe(1);
+		expect(messages[0]?.body).toBe("Hello scout");
+	});
+
+	it("returns 404 when agent session is in DB but tmux session is not alive", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-agent-stale-001",
+			agentName: "builder-2",
+			capability: "builder",
+			worktreePath: "/tmp/wt/builder-2",
+			branchName: "legio/builder-2/task-2",
+			beadId: "task-2",
+			tmuxSession: "legio-test-builder-2-stale",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 2,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		mockIsSessionAlive.mockResolvedValueOnce(false);
+		const res = await dispatchPost("/api/agents/builder-2/chat", { text: "hello" });
+		expect(res.status).toBe(404);
+		const body = (await json(res)) as { error: string };
+		expect(body.error).toContain("not alive");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/agents/:name/chat/history
+// ---------------------------------------------------------------------------
+
+describe("GET /api/agents/:name/chat/history", () => {
+	it("returns empty array when mail.db does not exist", async () => {
+		const res = await dispatch("/api/agents/scout-1/chat/history");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns messages sent to the agent in chronological order", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "agent-chat-001",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "First to scout",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "agent-chat-002",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "Second to scout",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Message to a different agent — should not appear
+		store.insert({
+			id: "agent-chat-003",
+			from: "human",
+			to: "builder-1",
+			subject: "chat",
+			body: "To builder",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/agents/scout-1/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; to: string }>;
+		expect(body.length).toBe(2);
+		// Both messages present (millisecond precision may affect order within same second)
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("First to scout");
+		expect(bodies).toContain("Second to scout");
+		for (const msg of body) {
+			expect(msg.to).toBe("scout-1");
+		}
+	});
+
+	it("does not include messages with non-human audience", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "agent-both-001",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "Agent audience message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.insert({
+			id: "agent-human-001",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "Human audience message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/agents/scout-1/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("Human audience message");
+	});
+
+	it("respects ?limit= query param", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		for (let i = 0; i < 5; i++) {
+			store.insert({
+				id: `scout-limit-msg-${String(i).padStart(3, "0")}`,
+				from: "human",
+				to: "scout-1",
+				subject: "chat",
+				body: `Scout message ${i}`,
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+		}
+		store.close();
+
+		const res = await dispatch("/api/agents/scout-1/chat/history", { limit: "2" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(2);
+	});
+});

@@ -909,13 +909,89 @@ export async function handleApiRequest(
 		const text = typeof parsed.text === "string" ? parsed.text.trim() : null;
 		if (!text) return errorResponse("Missing or empty required field: text", 400);
 
-		const store = createChatStore(join(legioDir, "chat.db"));
-		try {
-			const session = store.getOrCreateCoordinatorSession();
-			const savedMessage = store.addMessage(session.id, "user", text);
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		const savedMessage = mailStore.insert({
+			id: "",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: text,
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		mailStore.close();
 
-			// Forward to terminal: headless coordinator first, then tmux fallback
-			const agentName = "coordinator";
+		// Forward to terminal: headless coordinator first, then tmux fallback
+		const agentName = "coordinator";
+		if (
+			(agentName === "coordinator" || agentName === "headless") &&
+			headless?.coordinator?.isRunning()
+		) {
+			try {
+				headless.coordinator.write(`${text}\n`);
+			} catch (err) {
+				return errorResponse(
+					`Failed to write to headless coordinator: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+			return jsonResponse(savedMessage, 201);
+		}
+
+		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
+		if (!tmuxSession) {
+			return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+		}
+
+		if (!(await isSessionAlive(tmuxSession))) {
+			return errorResponse(`Tmux session "${tmuxSession}" is not alive`, 404);
+		}
+
+		try {
+			await sendKeys(tmuxSession, text);
+			await new Promise((resolve) => setTimeout(resolve, 500));
+			await sendKeys(tmuxSession, "");
+		} catch (err) {
+			return errorResponse(
+				`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		return jsonResponse(savedMessage, 201);
+	}
+
+	// -------------------------------------------------------------------------
+	// Agent Chat — POST /api/agents/:name/chat (before GET-only guard)
+	// -------------------------------------------------------------------------
+
+	{
+		const params = matchRoute(path, "/api/agents/:name/chat");
+		if (request.method === "POST" && params) {
+			const agentName = params.name;
+			if (!agentName) return errorResponse("Missing agent name", 400);
+
+			const parsed = await parseJsonBody(request);
+			if (parsed instanceof Response) return parsed;
+
+			const text = typeof parsed.text === "string" ? parsed.text.trim() : null;
+			if (!text) return errorResponse("Missing or empty required field: text", 400);
+
+			const mailStore = createMailStore(join(legioDir, "mail.db"));
+			const savedMessage = mailStore.insert({
+				id: "",
+				from: "human",
+				to: agentName,
+				subject: "chat",
+				body: text,
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+			mailStore.close();
+
+			// Forward to terminal: headless coordinator first (when agent is coordinator), then tmux
 			if (
 				(agentName === "coordinator" || agentName === "headless") &&
 				headless?.coordinator?.isRunning()
@@ -950,8 +1026,6 @@ export async function handleApiRequest(
 			}
 
 			return jsonResponse(savedMessage, 201);
-		} finally {
-			store.close();
 		}
 	}
 
@@ -1059,6 +1133,29 @@ export async function handleApiRequest(
 			return jsonResponse(store.getActive());
 		} finally {
 			store.close();
+		}
+	}
+
+	// /api/agents/:name/chat/history
+	{
+		const params = matchRoute(path, "/api/agents/:name/chat/history");
+		if (params) {
+			const agentName = params.name;
+			if (!agentName) return errorResponse("Missing agent name", 400);
+			const dbPath = join(legioDir, "mail.db");
+			if (!(await fileExists(dbPath))) {
+				return jsonResponse([]);
+			}
+			const limitParam = url.searchParams.get("limit");
+			const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 100) : 100;
+			const store = createMailStore(dbPath);
+			try {
+				const messages = store.getAll({ from: "human", to: agentName, audience: "human" });
+				// getAll returns DESC (newest first); take the most recent `limit` in chronological order
+				return jsonResponse(messages.slice(0, limit).reverse());
+			} finally {
+				store.close();
+			}
 		}
 	}
 
@@ -1614,10 +1711,15 @@ export async function handleApiRequest(
 	if (path === "/api/coordinator/chat/history") {
 		const limitParam = url.searchParams.get("limit");
 		const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 100) : 100;
-		const store = createChatStore(join(legioDir, "chat.db"));
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await fileExists(dbPath))) {
+			return jsonResponse([]);
+		}
+		const store = createMailStore(dbPath);
 		try {
-			const session = store.getOrCreateCoordinatorSession();
-			return jsonResponse(store.getRecentMessages(session.id, limit));
+			const messages = store.getAll({ from: "human", to: "coordinator", audience: "human" });
+			// getAll returns DESC (newest first); take the most recent `limit` in chronological order
+			return jsonResponse(messages.slice(0, limit).reverse());
 		} finally {
 			store.close();
 		}
