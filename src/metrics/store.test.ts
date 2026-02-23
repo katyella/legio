@@ -851,7 +851,7 @@ describe("getSessionsFiltered", () => {
 		expect(results[0]?.beadId).toBe("task-early-start");
 	});
 
-	test("still-running session (completedAt IS NULL) appears with any time window", () => {
+	test("still-running session started before window is excluded by since filter", () => {
 		store.recordSession(
 			makeSession({
 				beadId: "task-running",
@@ -861,8 +861,7 @@ describe("getSessionsFiltered", () => {
 		);
 
 		const results = store.getSessionsFiltered({ since: "2026-01-02T00:00:00Z" });
-		expect(results).toHaveLength(1);
-		expect(results[0]?.beadId).toBe("task-running");
+		expect(results).toHaveLength(0);
 	});
 
 	test("empty DB returns empty array", () => {
@@ -984,7 +983,7 @@ describe("getSessionsByModel", () => {
 		expect(results[0]?.sessions).toBe(1);
 	});
 
-	test("still-running session with time window is included in model group", () => {
+	test("still-running session started before window is excluded from model group", () => {
 		store.recordSession(
 			makeSession({
 				beadId: "task-running",
@@ -996,9 +995,7 @@ describe("getSessionsByModel", () => {
 		);
 
 		const results = store.getSessionsByModel({ since: "2026-01-02T00:00:00Z" });
-		expect(results).toHaveLength(1);
-		expect(results[0]?.model).toBe("claude-sonnet-4-6");
-		expect(results[0]?.sessions).toBe(1);
+		expect(results).toHaveLength(0);
 	});
 
 	test("ordered by estimated_cost_usd DESC", () => {
@@ -1130,7 +1127,7 @@ describe("getSessionsByDate", () => {
 		expect(results[0]?.date).toBe("2026-01-01");
 	});
 
-	test("still-running session with time window is included in date group", () => {
+	test("still-running session started before window is excluded from date group", () => {
 		store.recordSession(
 			makeSession({
 				beadId: "task-running",
@@ -1140,8 +1137,7 @@ describe("getSessionsByDate", () => {
 		);
 
 		const results = store.getSessionsByDate({ since: "2026-01-02T00:00:00Z" });
-		expect(results).toHaveLength(1);
-		expect(results[0]?.date).toBe("2026-01-01");
+		expect(results).toHaveLength(0);
 	});
 
 	test("null estimated_cost_usd treated as 0 in sum", () => {

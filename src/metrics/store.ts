@@ -254,7 +254,7 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 
 	const filteredStmt = db.prepare(`
 		SELECT * FROM sessions
-		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since OR completed_at IS NULL)
+		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since)
 		  AND ($until IS NULL OR started_at <= $until)
 		ORDER BY started_at DESC
 		LIMIT $limit
@@ -270,7 +270,7 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 		  SUM(cache_creation_tokens) as cache_creation_tokens,
 		  SUM(COALESCE(estimated_cost_usd, 0)) as estimated_cost_usd
 		FROM sessions
-		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since OR completed_at IS NULL)
+		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since)
 		  AND ($until IS NULL OR started_at <= $until)
 		GROUP BY COALESCE(model_used, 'unknown')
 		ORDER BY estimated_cost_usd DESC
@@ -286,7 +286,7 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 		  SUM(cache_creation_tokens) as cache_creation_tokens,
 		  SUM(COALESCE(estimated_cost_usd, 0)) as estimated_cost_usd
 		FROM sessions
-		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since OR completed_at IS NULL)
+		WHERE ($since IS NULL OR started_at >= $since OR completed_at >= $since)
 		  AND ($until IS NULL OR started_at <= $until)
 		GROUP BY DATE(started_at)
 		ORDER BY date ASC
