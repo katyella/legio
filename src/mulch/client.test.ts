@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { AgentError } from "../errors.ts";
-import { createMulchClient } from "./client.ts";
+import { createMulchClient, inferDomainsFromFiles } from "./client.ts";
 
 // Check if mulch is available
 let hasMulch = false;
@@ -484,5 +484,64 @@ describe("createMulchClient", () => {
 			expect(result).toHaveProperty("domains");
 			expect(result.domains).toEqual([]);
 		});
+	});
+});
+
+describe("inferDomainsFromFiles", () => {
+	test("returns empty array for empty file list", () => {
+		expect(inferDomainsFromFiles([])).toEqual([]);
+	});
+
+	test("maps src/commands/ files to cli domain", () => {
+		const result = inferDomainsFromFiles(["src/commands/init.ts"]);
+		expect(result).toContain("cli");
+		expect(result).not.toContain("server");
+	});
+
+	test("maps src/worktree/ files to both swarm and merge domains", () => {
+		const result = inferDomainsFromFiles(["src/worktree/manager.ts"]);
+		expect(result).toContain("swarm");
+		expect(result).toContain("merge");
+	});
+
+	test("maps test files to testing domain", () => {
+		const direct = inferDomainsFromFiles(["src/config.test.ts"]);
+		expect(direct).toContain("testing");
+
+		const nested = inferDomainsFromFiles(["src/mulch/client.test.ts"]);
+		expect(nested).toContain("testing");
+	});
+
+	test("deduplicates domains when multiple files match same domain", () => {
+		const result = inferDomainsFromFiles([
+			"src/commands/init.ts",
+			"src/commands/sling.ts",
+			"src/beads/client.ts",
+		]);
+		const cliCount = result.filter((d) => d === "cli").length;
+		expect(cliCount).toBe(1);
+	});
+
+	test("accepts custom domainMap that overrides defaults", () => {
+		const customMap: Record<string, string[]> = {
+			"src/custom/**": ["myDomain"],
+		};
+		const result = inferDomainsFromFiles(["src/custom/foo.ts"], customMap);
+		expect(result).toEqual(["myDomain"]);
+		// Should NOT match DEFAULT_DOMAIN_MAP patterns
+		expect(result).not.toContain("cli");
+	});
+
+	test("returns empty array when no patterns match", () => {
+		const result = inferDomainsFromFiles(["some/random/file.txt"]);
+		expect(result).toEqual([]);
+	});
+
+	test("maps agents/ and templates/ to swarm domain", () => {
+		const agents = inferDomainsFromFiles(["agents/builder.md"]);
+		expect(agents).toContain("swarm");
+
+		const templates = inferDomainsFromFiles(["templates/overlay.md.tmpl"]);
+		expect(templates).toContain("swarm");
 	});
 });
