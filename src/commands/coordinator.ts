@@ -523,6 +523,28 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 
 		store.upsert(session);
 
+		// Write output BEFORE the blocking sleep+sendKeys so that callers
+		// reading stdout (e.g., runLegio in the server) get the response
+		// immediately and don't hang waiting for the pipe to close.
+		const output = {
+			agentName: COORDINATOR_NAME,
+			capability: "coordinator",
+			tmuxSession,
+			projectRoot,
+			pid,
+			watchdog: false,
+			monitor: false,
+		};
+
+		if (json) {
+			process.stdout.write(`${JSON.stringify(output)}\n`);
+		} else {
+			process.stdout.write("Coordinator started\n");
+			process.stdout.write(`  Tmux:    ${tmuxSession}\n`);
+			process.stdout.write(`  Root:    ${projectRoot}\n`);
+			process.stdout.write(`  PID:     ${pid}\n`);
+		}
+
 		// Wait for Claude Code's TUI to render before sending beacon.
 		// Falls back to sleep(3_000) when waitForTuiReady is not in the DI mock.
 		if (tmux.waitForTuiReady) {
@@ -538,11 +560,9 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		await tmux.sendKeys(tmuxSession, "");
 
 		// Auto-start watchdog if --watchdog flag is present
-		let watchdogPid: number | undefined;
 		if (watchdogFlag) {
 			const watchdogResult = await watchdog.start();
 			if (watchdogResult) {
-				watchdogPid = watchdogResult.pid;
 				if (!json) process.stdout.write(`  Watchdog: started (PID ${watchdogResult.pid})\n`);
 			} else {
 				if (!json) process.stderr.write("  Watchdog: failed to start or already running\n");
@@ -550,34 +570,13 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		}
 
 		// Auto-start monitor if --monitor flag is present
-		let monitorPid: number | undefined;
 		if (monitorFlag) {
 			const monitorResult = await monitor.start([]);
 			if (monitorResult) {
-				monitorPid = monitorResult.pid;
 				if (!json) process.stdout.write(`  Monitor:  started (PID ${monitorResult.pid})\n`);
 			} else {
 				if (!json) process.stderr.write("  Monitor:  failed to start or already running\n");
 			}
-		}
-
-		const output = {
-			agentName: COORDINATOR_NAME,
-			capability: "coordinator",
-			tmuxSession,
-			projectRoot,
-			pid,
-			watchdog: watchdogFlag ? watchdogPid !== undefined : false,
-			monitor: monitorFlag ? monitorPid !== undefined : false,
-		};
-
-		if (json) {
-			process.stdout.write(`${JSON.stringify(output)}\n`);
-		} else {
-			process.stdout.write("Coordinator started\n");
-			process.stdout.write(`  Tmux:    ${tmuxSession}\n`);
-			process.stdout.write(`  Root:    ${projectRoot}\n`);
-			process.stdout.write(`  PID:     ${pid}\n`);
 		}
 
 		if (shouldAttach) {

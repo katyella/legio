@@ -950,14 +950,14 @@ describe("watchdog integration", () => {
 			expect(watchdogCalls?.start).toBe(0);
 		});
 
-		test("--json output includes watchdog field when --watchdog is present and succeeds", async () => {
+		test("--json output includes watchdog:false (output written before watchdog starts)", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
 			const output = await captureStdout(() =>
 				coordinatorCommand(["start", "--watchdog", "--json"], deps),
 			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdog).toBe(true);
+			expect(parsed.watchdog).toBe(false);
 		});
 
 		test("--json output includes watchdog:false when --watchdog is present but start fails", async () => {
@@ -1115,14 +1115,14 @@ describe("monitor integration", () => {
 			expect(monitorCalls?.start).toBe(0);
 		});
 
-		test("--json output includes monitor field when --monitor is present and succeeds", async () => {
+		test("--json output includes monitor:false (output written before monitor starts)", async () => {
 			const { deps } = makeDeps({}, undefined, { startSuccess: true });
 			const output = await captureStdout(() =>
 				coordinatorCommand(["start", "--monitor", "--json"], deps),
 			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.monitor).toBe(true);
+			expect(parsed.monitor).toBe(false);
 		});
 
 		test("--json output includes monitor:false when --monitor is present but start fails", async () => {

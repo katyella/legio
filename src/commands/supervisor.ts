@@ -232,21 +232,8 @@ async function startSupervisor(args: string[]): Promise<void> {
 			LEGIO_AGENT_NAME: flags.name,
 		});
 
-		// Wait for Claude Code's TUI to render before sending beacon.
-		await waitForTuiReady(tmuxSession);
-		const beacon = buildSupervisorBeacon({
-			name: flags.name,
-			beadId: flags.task,
-			depth: flags.depth,
-			parent: flags.parent,
-		});
-		await sendKeys(tmuxSession, beacon);
-
-		// Follow-up Enter to ensure submission
-		await new Promise((resolve) => setTimeout(resolve, 500));
-		await sendKeys(tmuxSession, "");
-
-		// Record session
+		// Record session BEFORE the blocking beacon send so hook-triggered
+		// updateLastActivity() can find the entry.
 		const session: AgentSession = {
 			id: `session-${Date.now()}-${flags.name}`,
 			agentName: flags.name,
@@ -268,6 +255,9 @@ async function startSupervisor(args: string[]): Promise<void> {
 
 		store.upsert(session);
 
+		// Write output BEFORE the blocking sleep+sendKeys so that callers
+		// reading stdout (e.g., runLegio in the server) get the response
+		// immediately and don't hang waiting for the pipe to close.
 		const output = {
 			agentName: flags.name,
 			capability: "supervisor",
@@ -290,6 +280,20 @@ async function startSupervisor(args: string[]): Promise<void> {
 			process.stdout.write(`  Depth:   ${flags.depth}\n`);
 			process.stdout.write(`  PID:     ${pid}\n`);
 		}
+
+		// Wait for Claude Code's TUI to render before sending beacon.
+		await waitForTuiReady(tmuxSession);
+		const beacon = buildSupervisorBeacon({
+			name: flags.name,
+			beadId: flags.task,
+			depth: flags.depth,
+			parent: flags.parent,
+		});
+		await sendKeys(tmuxSession, beacon);
+
+		// Follow-up Enter to ensure submission
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		await sendKeys(tmuxSession, "");
 	} finally {
 		store.close();
 	}

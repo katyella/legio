@@ -203,15 +203,9 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 
 		store.upsert(session);
 
-		// Send beacon after TUI initialization delay
-		await sleep(3_000);
-		const beacon = buildGatewayBeacon();
-		await tmux.sendKeys(tmuxSession, beacon);
-
-		// Follow-up Enter to ensure submission (same pattern as sling.ts)
-		await sleep(500);
-		await tmux.sendKeys(tmuxSession, "");
-
+		// Write output BEFORE the blocking sleep+sendKeys so that callers
+		// reading stdout (e.g., runLegio in the server) get the response
+		// immediately and don't hang waiting for the pipe to close.
 		const output = {
 			agentName: GATEWAY_NAME,
 			capability: "gateway",
@@ -228,6 +222,15 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 			process.stdout.write(`  Root:    ${projectRoot}\n`);
 			process.stdout.write(`  PID:     ${pid}\n`);
 		}
+
+		// Send beacon after TUI initialization delay
+		await sleep(3_000);
+		const beacon = buildGatewayBeacon();
+		await tmux.sendKeys(tmuxSession, beacon);
+
+		// Follow-up Enter to ensure submission (same pattern as sling.ts)
+		await sleep(500);
+		await tmux.sendKeys(tmuxSession, "");
 
 		if (shouldAttach) {
 			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {

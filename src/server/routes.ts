@@ -168,28 +168,50 @@ async function runLegio(
 		});
 		let stdout = "";
 		let stderr = "";
+		let resolved = false;
+		const doResolve = (result: { ok: true; data: unknown } | { ok: false; error: string }) => {
+			if (!resolved) {
+				resolved = true;
+				resolve(result);
+			}
+		};
 		proc.stdout?.on("data", (chunk: Buffer) => {
 			stdout += chunk;
 		});
 		proc.stderr?.on("data", (chunk: Buffer) => {
 			stderr += chunk;
 		});
-		proc.on("close", (code: number | null) => {
+		// Use 'exit' instead of 'close' — 'close' waits for all stdio pipes
+		// to drain, which can hang if child processes (e.g., tmux sessions)
+		// inherit the pipe file descriptors.
+		proc.on("exit", (code: number | null) => {
 			if (code === 0) {
 				try {
-					resolve({ ok: true, data: JSON.parse(stdout) });
+					doResolve({ ok: true, data: JSON.parse(stdout) });
 				} catch {
-					resolve({ ok: true, data: stdout.trim() });
+					doResolve({ ok: true, data: stdout.trim() });
 				}
 			} else {
 				const raw = stderr.trim() || stdout.trim() || "Command failed";
 				const errorText = raw.split("\n")[0] ?? "Command failed";
-				resolve({ ok: false, error: errorText });
+				doResolve({ ok: false, error: errorText });
 			}
 		});
 		proc.on("error", (err: Error) => {
-			resolve({ ok: false, error: err.message });
+			doResolve({ ok: false, error: err.message });
 		});
+		// Safety timeout: resolve after 10s even if the process hasn't exited
+		setTimeout(() => {
+			if (stdout.trim().length > 0) {
+				try {
+					doResolve({ ok: true, data: JSON.parse(stdout) });
+				} catch {
+					doResolve({ ok: true, data: stdout.trim() });
+				}
+			} else {
+				doResolve({ ok: false, error: "Command timed out" });
+			}
+		}, 10_000);
 	});
 }
 
