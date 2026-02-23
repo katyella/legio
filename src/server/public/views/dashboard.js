@@ -1,5 +1,5 @@
 // dashboard.js — Unified Dashboard View (Preact+HTM)
-// Two-panel: Left = Coordinator Chat (~58%), Right = Sidebar (MetricsStrip + AgentRoster + MergeQueue)
+// Two-panel: Left = Coordinator Chat (~58%), Right = Sidebar (MetricsStrip + AgentRoster + MailFeed)
 // Merges former CommandView and DashboardView into a single unified page.
 
 import { fetchJson, postJson } from "../lib/api.js";
@@ -29,12 +29,20 @@ const TYPE_COLORS = {
 	system: "bg-[#333] text-[#999]",
 };
 
-const MERGE_STATUS_COLOR = {
-	pending: "text-yellow-500",
-	merging: "text-green-500",
-	merged: "text-gray-500",
-	conflict: "text-red-500",
-	failed: "text-red-500",
+// Type badge Tailwind classes for MailFeed
+const MAIL_TYPE_COLORS = {
+	result: "bg-green-900/50 text-green-400",
+	worker_done: "bg-green-900/50 text-green-400",
+	merged: "bg-green-900/50 text-green-400",
+	status: "bg-blue-900/50 text-blue-400",
+	dispatch: "bg-blue-900/50 text-blue-400",
+	assign: "bg-blue-900/50 text-blue-400",
+	question: "bg-yellow-900/50 text-yellow-400",
+	merge_ready: "bg-yellow-900/50 text-yellow-400",
+	error: "bg-red-900/50 text-red-400",
+	merge_failed: "bg-red-900/50 text-red-400",
+	escalation: "bg-red-900/50 text-red-400",
+	health_check: "bg-[#333] text-[#999]",
 };
 
 // ---------------------------------------------------------------------------
@@ -73,12 +81,12 @@ function typeBadgeClass(type) {
 // MetricsStrip
 // ---------------------------------------------------------------------------
 
-function MetricsStrip({ agents, mergeQueue, status }) {
+function MetricsStrip({ agents, status }) {
 	const totalSessions = agents.length;
 	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting").length;
 	const completedCount = agents.filter((a) => a.state === "completed").length;
 	const unreadMail = status?.unreadMailCount ?? 0;
-	const pendingMerges = status?.mergeQueueCount ?? mergeQueue.length;
+	const pendingMerges = status?.mergeQueueCount ?? 0;
 
 	const stats = [
 		{ label: "Sessions", value: totalSessions },
@@ -107,102 +115,39 @@ function MetricsStrip({ agents, mergeQueue, status }) {
 }
 
 // ---------------------------------------------------------------------------
-// MergeQueue
+// MailFeed
 // ---------------------------------------------------------------------------
 
-function MergeQueue({ mergeQueue, onRefresh }) {
-	const [mergingBranch, setMergingBranch] = useState(null);
-	const [mergingAll, setMergingAll] = useState(false);
-	const [error, setError] = useState(null);
-
-	const pendingEntries = mergeQueue.filter((e) => e.status === "pending");
-
-	async function refreshQueue() {
-		try {
-			const data = await fetchJson("/api/merge-queue");
-			if (onRefresh) onRefresh(data);
-		} catch (_e) {
-			// ignore refresh errors
-		}
-	}
-
-	function showError(msg) {
-		setError(msg);
-		setTimeout(() => setError(null), 5000);
-	}
-
-	async function handleMergeAll() {
-		setMergingAll(true);
-		setError(null);
-		try {
-			await postJson("/api/merge", { all: true });
-			await refreshQueue();
-		} catch (e) {
-			showError(e.message || "Merge all failed");
-		} finally {
-			setMergingAll(false);
-		}
-	}
-
-	async function handleMergeBranch(branchName) {
-		setMergingBranch(branchName);
-		setError(null);
-		try {
-			await postJson("/api/merge", { branch: branchName });
-			await refreshQueue();
-		} catch (e) {
-			showError(e.message || `Merge failed for ${branchName}`);
-		} finally {
-			setMergingBranch(null);
-		}
-	}
+function MailFeed({ mail }) {
+	const sorted = [...mail]
+		.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+		.slice(0, 50);
 
 	return html`
 		<div class="bg-[#1a1a1a] border-t border-[#2a2a2a] shrink-0">
-			<div class="border-b border-[#2a2a2a] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
-				<span>Merge Queue</span>
-				${
-					pendingEntries.length > 0
-						? html`<button
-							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-1 rounded cursor-pointer border-none"
-							onClick=${handleMergeAll}
-							disabled=${mergingAll}
-						>
-							${mergingAll ? "Merging\u2026" : "Merge All"}
-						</button>`
-						: null
-				}
+			<div class="border-b border-[#2a2a2a] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
+				Mail Feed
 			</div>
-			<div class="overflow-y-auto max-h-[30vh] p-2 space-y-1">
-				${error ? html`<div class="text-xs text-red-400 mt-1 px-2">${error}</div>` : null}
+			<div class="overflow-y-auto max-h-[30vh] p-2 space-y-0.5">
 				${
-					mergeQueue.length === 0
-						? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">Queue is empty</div>`
-						: mergeQueue.map(
-								(entry) => html`
+					sorted.length === 0
+						? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">No recent mail</div>`
+						: sorted.map(
+								(m) => html`
 								<div
-									key=${entry.agentName + entry.branchName}
-									class="flex items-center gap-2 px-2 py-1 text-xs hover:bg-white/5 rounded-sm"
+									key=${m.id}
+									class="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-white/5 rounded-sm"
 								>
-									<span class=${MERGE_STATUS_COLOR[entry.status] || "text-gray-400"}>●</span>
-									<span class="shrink-0">${entry.agentName || ""}</span>
-									<span class="flex-1 truncate font-mono text-gray-400">
-										${entry.branchName || ""}
+									<span
+										class=${`px-1 rounded font-mono flex-shrink-0 ${MAIL_TYPE_COLORS[m.type] ?? "bg-[#333] text-[#999]"}`}
+									>
+										${m.type || "mail"}
 									</span>
-									<span class="shrink-0 rounded-sm border border-[#2a2a2a] px-1.5 py-0.5 text-gray-400">
-										${entry.status || ""}
-									</span>
-									${
-										entry.status === "pending"
-											? html`<button
-												class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none shrink-0"
-												onClick=${() => handleMergeBranch(entry.branchName)}
-												disabled=${mergingBranch === entry.branchName || mergingAll}
-											>
-												${mergingBranch === entry.branchName ? "\u2026" : "Merge"}
-											</button>`
-											: null
-									}
+									<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.from}</span>
+									<span class="text-[#444] flex-shrink-0">\u2192</span>
+									<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.to}</span>
+									<span class="flex-1 truncate text-[#999] min-w-0">${m.subject || ""}</span>
+									<span class="text-[#444] flex-shrink-0 ml-auto">${timeAgo(m.createdAt)}</span>
 								</div>
 							`,
 							)
@@ -590,7 +535,6 @@ const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
 export function DashboardView() {
 	const [activityEvents, setActivityEvents] = useState([]);
 	const [mail, setMail] = useState([]);
-	const [mergeQueue, setMergeQueue] = useState([]);
 	const [coordRunning, setCoordRunning] = useState(false);
 	const [gwRunning, setGwRunning] = useState(false);
 
@@ -650,27 +594,6 @@ export function DashboardView() {
 		};
 	}, []);
 
-	// Poll merge-queue every 5s
-	useEffect(() => {
-		let cancelled = false;
-		async function fetchMergeQueue() {
-			try {
-				const data = await fetchJson("/api/merge-queue");
-				if (!cancelled) {
-					setMergeQueue(Array.isArray(data) ? data : []);
-				}
-			} catch (_err) {
-				// non-fatal
-			}
-		}
-		fetchMergeQueue();
-		const interval = setInterval(fetchMergeQueue, 5000);
-		return () => {
-			cancelled = true;
-			clearInterval(interval);
-		};
-	}, []);
-
 	// Poll coordinator/gateway status for chat routing
 	useEffect(() => {
 		let cancelled = false;
@@ -711,11 +634,11 @@ export function DashboardView() {
 					<${CoordinatorChat} mail=${mail} coordRunning=${coordRunning} gwRunning=${gwRunning} />
 				</div>
 
-				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MergeQueue -->
+				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MailFeed -->
 				<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 42 1 0%">
-					<${MetricsStrip} agents=${agents} mergeQueue=${mergeQueue} status=${status} />
+					<${MetricsStrip} agents=${agents} status=${status} />
 					<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
-					<${MergeQueue} mergeQueue=${mergeQueue} onRefresh=${setMergeQueue} />
+					<${MailFeed} mail=${mail} />
 				</div>
 			</div>
 		</div>
