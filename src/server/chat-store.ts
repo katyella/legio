@@ -25,6 +25,8 @@ interface ChatMessageRow {
 	created_at: string;
 }
 
+export const COORDINATOR_SESSION_ID = "coordinator";
+
 export interface ChatStore {
 	createSession(opts?: { title?: string; model?: string }): ChatSession;
 	getSession(id: string): ChatSession | null;
@@ -32,6 +34,8 @@ export interface ChatStore {
 	deleteSession(id: string): boolean;
 	addMessage(sessionId: string, role: ChatRole, content: string): ChatMessage;
 	getMessages(sessionId: string): ChatMessage[];
+	getOrCreateCoordinatorSession(): ChatSession;
+	getRecentMessages(sessionId: string, limit: number): ChatMessage[];
 	close(): void;
 }
 
@@ -153,6 +157,32 @@ export function createChatStore(dbPath: string): ChatStore {
 				)
 				.all({ session_id: sessionId }) as ChatMessageRow[];
 			return rows.map(rowToMessage);
+		},
+
+		getOrCreateCoordinatorSession(): ChatSession {
+			const existing = db
+				.prepare("SELECT * FROM chat_sessions WHERE id = $id")
+				.get({ id: COORDINATOR_SESSION_ID }) as ChatSessionRow | undefined;
+			if (existing) {
+				return rowToSession(existing);
+			}
+			db.prepare(`
+				INSERT INTO chat_sessions (id, title, model)
+				VALUES ($id, $title, $model)
+			`).run({ id: COORDINATOR_SESSION_ID, title: "Coordinator Chat", model: "none" });
+			const row = db
+				.prepare("SELECT * FROM chat_sessions WHERE id = $id")
+				.get({ id: COORDINATOR_SESSION_ID }) as ChatSessionRow;
+			return rowToSession(row);
+		},
+
+		getRecentMessages(sessionId: string, limit: number): ChatMessage[] {
+			const rows = db
+				.prepare(
+					"SELECT * FROM chat_messages WHERE session_id = $session_id ORDER BY created_at DESC, rowid DESC LIMIT $limit",
+				)
+				.all({ session_id: sessionId, limit }) as ChatMessageRow[];
+			return rows.reverse().map(rowToMessage);
 		},
 
 		close(): void {

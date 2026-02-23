@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ChatStore } from "./chat-store.ts";
-import { createChatStore } from "./chat-store.ts";
+import { COORDINATOR_SESSION_ID, createChatStore } from "./chat-store.ts";
 
 describe("ChatStore", () => {
 	let store: ChatStore;
@@ -161,6 +161,63 @@ describe("ChatStore", () => {
 			const s1Messages = store.getMessages(s1.id);
 			expect(s1Messages).toHaveLength(1);
 			expect(s1Messages[0]?.content).toBe("For session 1");
+		});
+	});
+
+	// -------------------------------------------------------------------------
+	// Coordinator session helpers
+	// -------------------------------------------------------------------------
+
+	describe("getOrCreateCoordinatorSession", () => {
+		it("creates coordinator session on first call", () => {
+			const session = store.getOrCreateCoordinatorSession();
+			expect(session.id).toBe(COORDINATOR_SESSION_ID);
+			expect(session.title).toBe("Coordinator Chat");
+			expect(session.model).toBe("none");
+		});
+
+		it("returns the same session on subsequent calls", () => {
+			const a = store.getOrCreateCoordinatorSession();
+			const b = store.getOrCreateCoordinatorSession();
+			expect(a.id).toBe(b.id);
+			expect(a.createdAt).toBe(b.createdAt);
+		});
+
+		it("is retrievable via getSession", () => {
+			store.getOrCreateCoordinatorSession();
+			const session = store.getSession(COORDINATOR_SESSION_ID);
+			expect(session).not.toBeNull();
+			expect(session?.title).toBe("Coordinator Chat");
+		});
+	});
+
+	describe("getRecentMessages", () => {
+		it("returns empty array when no messages", () => {
+			const session = store.getOrCreateCoordinatorSession();
+			expect(store.getRecentMessages(session.id, 10)).toEqual([]);
+		});
+
+		it("returns messages in chronological order (oldest first)", () => {
+			const session = store.getOrCreateCoordinatorSession();
+			store.addMessage(session.id, "user", "First");
+			store.addMessage(session.id, "assistant", "Second");
+			store.addMessage(session.id, "user", "Third");
+			const messages = store.getRecentMessages(session.id, 10);
+			expect(messages).toHaveLength(3);
+			expect(messages[0]?.content).toBe("First");
+			expect(messages[2]?.content).toBe("Third");
+		});
+
+		it("respects the limit and returns the most recent N", () => {
+			const session = store.getOrCreateCoordinatorSession();
+			store.addMessage(session.id, "user", "Oldest");
+			store.addMessage(session.id, "assistant", "Middle");
+			store.addMessage(session.id, "user", "Newest");
+			const messages = store.getRecentMessages(session.id, 2);
+			expect(messages).toHaveLength(2);
+			// Chronologically ordered, limited to last 2
+			expect(messages[0]?.content).toBe("Middle");
+			expect(messages[1]?.content).toBe("Newest");
 		});
 	});
 });

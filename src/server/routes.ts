@@ -876,6 +876,63 @@ export async function handleApiRequest(
 		return jsonResponse({ ok: true, sent: text });
 	}
 
+	// -------------------------------------------------------------------------
+	// Coordinator Chat — POST /api/coordinator/chat (before GET-only guard)
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/coordinator/chat") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const text = typeof parsed.text === "string" ? parsed.text.trim() : null;
+		if (!text) return errorResponse("Missing or empty required field: text", 400);
+
+		const store = createChatStore(join(legioDir, "chat.db"));
+		try {
+			const session = store.getOrCreateCoordinatorSession();
+			const savedMessage = store.addMessage(session.id, "user", text);
+
+			// Forward to terminal: headless coordinator first, then tmux fallback
+			const agentName = "coordinator";
+			if (
+				(agentName === "coordinator" || agentName === "headless") &&
+				headless?.coordinator?.isRunning()
+			) {
+				try {
+					headless.coordinator.write(`${text}\n`);
+				} catch (err) {
+					return errorResponse(
+						`Failed to write to headless coordinator: ${err instanceof Error ? err.message : String(err)}`,
+					);
+				}
+				return jsonResponse(savedMessage, 201);
+			}
+
+			const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
+			if (!tmuxSession) {
+				return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+			}
+
+			if (!(await isSessionAlive(tmuxSession))) {
+				return errorResponse(`Tmux session "${tmuxSession}" is not alive`, 404);
+			}
+
+			try {
+				await sendKeys(tmuxSession, text);
+				await new Promise((resolve) => setTimeout(resolve, 500));
+				await sendKeys(tmuxSession, "");
+			} catch (err) {
+				return errorResponse(
+					`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+
+			return jsonResponse(savedMessage, 201);
+		} finally {
+			store.close();
+		}
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
@@ -1525,6 +1582,22 @@ export async function handleApiRequest(
 			return errorResponse(
 				`Failed to read strategy.json: ${err instanceof Error ? err.message : String(err)}`,
 			);
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Coordinator Chat — GET /api/coordinator/chat/history
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/coordinator/chat/history") {
+		const limitParam = url.searchParams.get("limit");
+		const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 100) : 100;
+		const store = createChatStore(join(legioDir, "chat.db"));
+		try {
+			const session = store.getOrCreateCoordinatorSession();
+			return jsonResponse(store.getRecentMessages(session.id, limit));
+		} finally {
+			store.close();
 		}
 	}
 
