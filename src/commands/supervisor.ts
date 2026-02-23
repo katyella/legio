@@ -22,7 +22,13 @@ import { loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
-import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
+import {
+	createSession,
+	isSessionAlive,
+	killSession,
+	sendKeys,
+	waitForTuiReady,
+} from "../worktree/tmux.ts";
 
 async function fileExists(path: string): Promise<boolean> {
 	try {
@@ -217,8 +223,8 @@ async function startSupervisor(args: string[]): Promise<void> {
 			LEGIO_AGENT_NAME: flags.name,
 		});
 
-		// Send beacon after TUI initialization delay
-		await new Promise((resolve) => setTimeout(resolve, 3_000));
+		// Wait for Claude Code's TUI to render before sending beacon.
+		await waitForTuiReady(tmuxSession);
 		const beacon = buildSupervisorBeacon({
 			name: flags.name,
 			beadId: flags.task,

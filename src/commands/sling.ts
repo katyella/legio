@@ -34,7 +34,7 @@ import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
-import { createSession, sendKeys } from "../worktree/tmux.ts";
+import { createSession, sendKeys, waitForTuiReady } from "../worktree/tmux.ts";
 
 /**
  * Calculate how many milliseconds to sleep before spawning a new agent,
@@ -508,9 +508,9 @@ export async function slingCommand(args: string[]): Promise<void> {
 		}
 
 		// 13b. Send beacon prompt via tmux send-keys
-		// Allow Claude Code time to initialize its TUI before sending input.
-		// 3s gives the TUI enough time to render and attach its input handler.
-		await new Promise<void>((resolve) => setTimeout(resolve, 3_000));
+		// Wait for Claude Code's TUI to render before sending input.
+		// Polls pane content until non-empty (replaces hardcoded 3s sleep).
+		await waitForTuiReady(tmuxSessionName);
 		const beacon = buildBeacon({
 			agentName: name,
 			capability,
