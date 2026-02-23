@@ -19,7 +19,7 @@ import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { loadConfig } from "../config.ts";
-import { AgentError, ValidationError, isRunningAsRoot } from "../errors.ts";
+import { AgentError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { HeadlessCoordinator } from "../server/headless.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
@@ -306,9 +306,12 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		deps._sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
 	if (isRunningAsRoot()) {
-		throw new ValidationError("legio must not run as root — agent processes execute arbitrary code", {
-			field: "uid",
-		});
+		throw new ValidationError(
+			"legio must not run as root — agent processes execute arbitrary code",
+			{
+				field: "uid",
+			},
+		);
 	}
 
 	const json = args.includes("--json");

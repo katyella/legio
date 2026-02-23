@@ -28,7 +28,7 @@ import { writeOverlay } from "../agents/overlay.ts";
 import type { BeadIssue } from "../beads/client.ts";
 import { createBeadsClient } from "../beads/client.ts";
 import { loadConfig } from "../config.ts";
-import { AgentError, HierarchyError, ValidationError, isRunningAsRoot } from "../errors.ts";
+import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
@@ -196,9 +196,12 @@ export async function slingCommand(args: string[]): Promise<void> {
 	}
 
 	if (isRunningAsRoot()) {
-		throw new ValidationError("legio must not run as root — agent processes execute arbitrary code", {
-			field: "uid",
-		});
+		throw new ValidationError(
+			"legio must not run as root — agent processes execute arbitrary code",
+			{
+				field: "uid",
+			},
+		);
 	}
 
 	const taskId = args.find((a) => !a.startsWith("--"));
