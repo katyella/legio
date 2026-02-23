@@ -131,7 +131,7 @@ const AGENT_COLORS = {
 		border: "border-green-500",
 		text: "text-green-400",
 		dot: "bg-green-500",
-		avatar: "🏗️",
+		avatar: "⚡",
 	},
 	builder: {
 		bg: "bg-purple-500/10",
