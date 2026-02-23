@@ -248,6 +248,8 @@ describe("serverCommand start --daemon", () => {
 		expect(spawnArgs).not.toContain("--daemon");
 		// Should set LEGIO_SERVER_DAEMON env var
 		expect(spawnEnv?.LEGIO_SERVER_DAEMON).toBe("1");
+		// Should NOT inherit __LEGIO_TSX_LOADED — daemon must re-exec with tsx
+		expect(spawnEnv?.__LEGIO_TSX_LOADED).toBeUndefined();
 
 		// PID file should be written with the child's PID
 		const pid = await readServerPid(tempDir);
@@ -256,6 +258,42 @@ describe("serverCommand start --daemon", () => {
 		// Output should mention the PID and URL
 		expect(output).toContain(String(fakePid));
 		expect(output).toContain("http://");
+	});
+
+	it("strips __LEGIO_TSX_LOADED from daemon env to prevent Node v23 type-stripping errors", async () => {
+		const originalTsxLoaded = process.env.__LEGIO_TSX_LOADED;
+		process.env.__LEGIO_TSX_LOADED = "1";
+
+		const fakePid = 55557;
+		let capturedEnv: NodeJS.ProcessEnv | undefined;
+
+		const deps: ServerDeps = {
+			_isProcessRunning: (pid) => pid === fakePid,
+			_spawn: (_cmd, _args, opts) => {
+				capturedEnv = opts.env as NodeJS.ProcessEnv;
+				return { pid: fakePid, unref: () => {} };
+			},
+			_sleep: async () => {},
+		};
+
+		const originalWrite = process.stdout.write;
+		process.stdout.write = vi.fn(() => true) as typeof process.stdout.write;
+
+		try {
+			await serverCommand(["start", "--daemon"], deps);
+		} finally {
+			process.stdout.write = originalWrite;
+			if (originalTsxLoaded === undefined) {
+				delete process.env.__LEGIO_TSX_LOADED;
+			} else {
+				process.env.__LEGIO_TSX_LOADED = originalTsxLoaded;
+			}
+		}
+
+		// __LEGIO_TSX_LOADED must be absent so the daemon shim re-execs with tsx
+		expect(capturedEnv?.__LEGIO_TSX_LOADED).toBeUndefined();
+		// LEGIO_SERVER_DAEMON must still be set
+		expect(capturedEnv?.LEGIO_SERVER_DAEMON).toBe("1");
 	});
 
 	it("cleans up stale PID file when process is dead before spawning", async () => {

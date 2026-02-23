@@ -178,15 +178,21 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 			await removeServerPid(projectRoot);
 		}
 
-		// Spawn detached child without --daemon, with LEGIO_SERVER_DAEMON=1
+		// Spawn detached child without --daemon, with LEGIO_SERVER_DAEMON=1.
+		// Strip __LEGIO_TSX_LOADED so the shim re-execs with --import tsx:
+		// the daemon child inherits the parent env, and on Node v23+ the shim
+		// must re-exec to load TypeScript — it cannot strip types without tsx active.
 		const spawnFn = deps._spawn ?? spawn;
 		const childArgs = ["server", "start", "--port", String(port), "--host", host];
 		if (shouldOpen) childArgs.push("--open");
 
+		const childEnv: NodeJS.ProcessEnv = { ...process.env, LEGIO_SERVER_DAEMON: "1" };
+		delete childEnv.__LEGIO_TSX_LOADED;
+
 		const child = spawnFn("legio", childArgs, {
 			detached: true,
 			stdio: "ignore",
-			env: { ...process.env, LEGIO_SERVER_DAEMON: "1" },
+			env: childEnv,
 		});
 		child.unref();
 
