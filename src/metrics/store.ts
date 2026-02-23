@@ -34,6 +34,8 @@ export interface MetricsStore {
 	/** Get sessions filtered by optional time range. */
 	getSessionsFiltered(opts: { since?: string; until?: string; limit?: number }): SessionMetrics[];
 	getSessionsByAgent(agentName: string): SessionMetrics[];
+	/** Get sessions belonging to a specific coordinator run. */
+	getSessionsByRun(runId: string): SessionMetrics[];
 	/** Get sessions grouped by model_used with aggregated token totals and cost. */
 	getSessionsByModel(opts?: { since?: string; until?: string }): ModelGroup[];
 	/** Get sessions grouped by date (YYYY-MM-DD) with aggregated token totals and cost. */
@@ -63,6 +65,7 @@ interface SessionRow {
 	exit_code: number | null;
 	merge_result: string | null;
 	parent_agent: string | null;
+	run_id: string | null;
 	input_tokens: number;
 	output_tokens: number;
 	cache_read_tokens: number;
@@ -117,6 +120,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   exit_code INTEGER,
   merge_result TEXT,
   parent_agent TEXT,
+  run_id TEXT,
   input_tokens INTEGER NOT NULL DEFAULT 0,
   output_tokens INTEGER NOT NULL DEFAULT 0,
   cache_read_tokens INTEGER NOT NULL DEFAULT 0,
@@ -144,7 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_agent_time
   ON token_snapshots(agent_name, created_at)
 `;
 
-/** Token columns added in the token instrumentation migration. */
+/** Columns added via migration (safe to call multiple times — only adds missing columns). */
 const TOKEN_COLUMNS = [
 	{ name: "input_tokens", ddl: "INTEGER NOT NULL DEFAULT 0" },
 	{ name: "output_tokens", ddl: "INTEGER NOT NULL DEFAULT 0" },
@@ -152,6 +156,7 @@ const TOKEN_COLUMNS = [
 	{ name: "cache_creation_tokens", ddl: "INTEGER NOT NULL DEFAULT 0" },
 	{ name: "estimated_cost_usd", ddl: "REAL" },
 	{ name: "model_used", ddl: "TEXT" },
+	{ name: "run_id", ddl: "TEXT" },
 ] as const;
 
 /**
@@ -181,6 +186,7 @@ function rowToMetrics(row: SessionRow): SessionMetrics {
 		exitCode: row.exit_code,
 		mergeResult: row.merge_result as SessionMetrics["mergeResult"],
 		parentAgent: row.parent_agent,
+		runId: row.run_id,
 		inputTokens: row.input_tokens,
 		outputTokens: row.output_tokens,
 		cacheReadTokens: row.cache_read_tokens,
@@ -229,9 +235,9 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 	// Prepare statements for all queries
 	const insertStmt = db.prepare(`
 		INSERT OR REPLACE INTO sessions
-			(agent_name, bead_id, capability, started_at, completed_at, duration_ms, exit_code, merge_result, parent_agent, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, estimated_cost_usd, model_used)
+			(agent_name, bead_id, capability, started_at, completed_at, duration_ms, exit_code, merge_result, parent_agent, run_id, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, estimated_cost_usd, model_used)
 		VALUES
-			($agent_name, $bead_id, $capability, $started_at, $completed_at, $duration_ms, $exit_code, $merge_result, $parent_agent, $input_tokens, $output_tokens, $cache_read_tokens, $cache_creation_tokens, $estimated_cost_usd, $model_used)
+			($agent_name, $bead_id, $capability, $started_at, $completed_at, $duration_ms, $exit_code, $merge_result, $parent_agent, $run_id, $input_tokens, $output_tokens, $cache_read_tokens, $cache_creation_tokens, $estimated_cost_usd, $model_used)
 	`);
 
 	const recentStmt = db.prepare(`
@@ -240,6 +246,10 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 
 	const byAgentStmt = db.prepare(`
 		SELECT * FROM sessions WHERE agent_name = $agent_name ORDER BY started_at DESC
+	`);
+
+	const byRunStmt = db.prepare(`
+		SELECT * FROM sessions WHERE run_id = $run_id ORDER BY started_at DESC
 	`);
 
 	const filteredStmt = db.prepare(`
@@ -327,6 +337,7 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 				exit_code: metrics.exitCode,
 				merge_result: metrics.mergeResult,
 				parent_agent: metrics.parentAgent,
+				run_id: metrics.runId ?? null,
 				input_tokens: metrics.inputTokens,
 				output_tokens: metrics.outputTokens,
 				cache_read_tokens: metrics.cacheReadTokens,
@@ -356,6 +367,11 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 
 		getSessionsByAgent(agentName: string): SessionMetrics[] {
 			const rows = byAgentStmt.all({ agent_name: agentName }) as SessionRow[];
+			return rows.map(rowToMetrics);
+		},
+
+		getSessionsByRun(runId: string): SessionMetrics[] {
+			const rows = byRunStmt.all({ run_id: runId }) as SessionRow[];
 			return rows.map(rowToMetrics);
 		},
 
