@@ -1742,6 +1742,36 @@ export async function handleApiRequest(
 	}
 
 	// -------------------------------------------------------------------------
+	// Unified Chat History — GET /api/chat/unified/history
+	// Returns all human-audience messages across all agents in chronological order.
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/chat/unified/history") {
+		const limitParam = url.searchParams.get("limit");
+		const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 200) : 200;
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await fileExists(dbPath))) {
+			return jsonResponse([]);
+		}
+		const store = createMailStore(dbPath);
+		try {
+			const humanAudience = store.getAll({ audience: "human" });
+			const bothAudience = store.getAll({ audience: "both" });
+			const combined = [...humanAudience, ...bothAudience];
+			const seen = new Set<string>();
+			const relevant = combined.filter((m) => {
+				if (seen.has(m.id)) return false;
+				seen.add(m.id);
+				return true;
+			});
+			relevant.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+			return jsonResponse(relevant.slice(-limit));
+		} finally {
+			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// Chat — GET routes
 	// -------------------------------------------------------------------------
 

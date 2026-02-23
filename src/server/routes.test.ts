@@ -3629,3 +3629,178 @@ describe("GET /api/agents/:name/chat/history", () => {
 		expect(body[0]?.body).toBe("To scout");
 	});
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/chat/unified/history
+// ---------------------------------------------------------------------------
+
+describe("GET /api/chat/unified/history", () => {
+	it("returns empty array when mail.db does not exist", async () => {
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns all human-audience messages from all agents in chronological order", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "unified-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "Hello coordinator",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "unified-002",
+			from: "coordinator",
+			to: "human",
+			subject: "chat",
+			body: "Coordinator reply",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "unified-003",
+			from: "human",
+			to: "scout-1",
+			subject: "chat",
+			body: "Hello scout",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "unified-004",
+			from: "scout-1",
+			to: "human",
+			subject: "chat",
+			body: "Scout reply",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string }>;
+		expect(body.length).toBe(4);
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("Hello coordinator");
+		expect(bodies).toContain("Coordinator reply");
+		expect(bodies).toContain("Hello scout");
+		expect(bodies).toContain("Scout reply");
+	});
+
+	it("excludes agent-audience messages", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "unified-visible-001",
+			from: "human",
+			to: "coordinator",
+			subject: "chat",
+			body: "Human message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "unified-hidden-001",
+			from: "worker",
+			to: "coordinator",
+			subject: "status",
+			body: "Agent-only message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("Human message");
+	});
+
+	it("includes audience=both messages", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "unified-both-001",
+			from: "coordinator",
+			to: "human",
+			subject: "update",
+			body: "Broadcast update",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "both",
+		});
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("Broadcast update");
+	});
+
+	it("deduplicates messages that appear in both audience queries", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "unified-both-dedup",
+			from: "coordinator",
+			to: "human",
+			subject: "chat",
+			body: "Should appear once",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "both",
+		});
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+	});
+
+	it("respects limit parameter", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		for (let i = 1; i <= 5; i++) {
+			store.insert({
+				id: `unified-limit-00${i}`,
+				from: "human",
+				to: "coordinator",
+				subject: "chat",
+				body: `Message ${i}`,
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+		}
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history", { limit: "3" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(3);
+	});
+});
