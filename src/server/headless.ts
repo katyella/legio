@@ -18,9 +18,11 @@ export class HeadlessCoordinator extends EventEmitter {
 	private ringBuffer: string[] = [];
 	private maxLines: number;
 	private running = false;
+	private config: HeadlessCoordinatorConfig;
 
-	constructor(private config: HeadlessCoordinatorConfig) {
+	constructor(config: HeadlessCoordinatorConfig) {
 		super();
+		this.config = config;
 		this.maxLines = config.ringBufferSize ?? 500;
 	}
 
