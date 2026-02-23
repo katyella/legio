@@ -13,7 +13,6 @@ import { CostsView } from "./views/costs.js";
 import { DashboardView } from "./views/dashboard.js";
 import { InspectView } from "./views/inspect.js";
 import { IssuesView } from "./views/issues.js";
-import { RawChatView } from "./views/raw-chat.js";
 import { SetupView } from "./views/setup.js";
 import { StrategyView } from "./views/strategy.js";
 import { TaskDetailView } from "./views/task-detail.js";
@@ -70,8 +69,6 @@ function Router({ view, param }) {
 			return html`<${InspectView} agentName=${param} />`;
 		case "strategy":
 			return html`<${StrategyView} />`;
-		case "chat":
-			return html`<${RawChatView} />`;
 		default:
 			return html`<${DashboardView} />`;
 	}
@@ -83,7 +80,6 @@ const NAV_LINKS = [
 	{ href: "#dashboard", label: "Dashboard", view: "dashboard" },
 	{ href: "#costs", label: "Costs", view: "costs" },
 	{ href: "#tasks", label: "Tasks", view: "tasks" },
-	{ href: "#chat", label: "Chat", view: "chat" },
 	{ href: "#strategy", label: "Strategy", view: "strategy" },
 ];
 

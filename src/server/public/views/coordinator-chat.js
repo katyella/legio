@@ -1,19 +1,13 @@
 // coordinator-chat.js — CoordinatorChat standalone component
-// Extracted from dashboard.js: chat feed separated from terminal capture output.
-// Layout: header → chat feed (scrollable) → TerminalPanel (collapsible) → input area
+// Unified chat feed: all human-audience messages across all agents in one timeline.
+// Agent messages on left (labeled with agent name), user messages on right.
 
 import { TerminalPanel } from "../components/terminal-panel.js";
 import { fetchJson, postJson } from "../lib/api.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
-import { agentActivityLog, appState } from "../lib/state.js";
-import {
-	agentColor,
-	groupActivityMessages,
-	groupSummaryLabel,
-	isActivityMessage,
-	timeAgo,
-} from "../lib/utils.js";
+import { appState } from "../lib/state.js";
+import { timeAgo } from "../lib/utils.js";
 
 // Slash commands available in coordinator chat
 const SLASH_COMMANDS = [
@@ -24,24 +18,11 @@ const SLASH_COMMANDS = [
 	{ cmd: "/help", desc: "Show available commands" },
 ];
 
-// Map a persisted chat history message to the feed format
-function mapHistoryMessage(msg) {
-	const ts = msg.createdAt.endsWith("Z") ? msg.createdAt : msg.createdAt + "Z";
-	return {
-		id: msg.id,
-		from: msg.role === "user" ? "you" : "coordinator",
-		to: msg.role === "user" ? "coordinator" : "you",
-		body: msg.content,
-		createdAt: ts,
-		_persisted: true,
-	};
-}
-
 // ---------------------------------------------------------------------------
 // CoordinatorChat — main export
 // ---------------------------------------------------------------------------
 
-export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
+export function CoordinatorChat({ coordRunning }) {
 	const [input, setInput] = useState("");
 	const [sending, setSending] = useState(false);
 	const [sendError, setSendError] = useState("");
@@ -56,28 +37,23 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 	});
 	const feedRef = useRef(null);
 	const isNearBottomRef = useRef(true);
-	const prevFromTargetCountRef = useRef(0);
-	const prevHistoryFromCoordCountRef = useRef(0);
+	const prevFromAgentCountRef = useRef(0);
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
-	const manualSelectionRef = useRef(false);
-	const [chatTarget, setChatTarget] = useState("coordinator");
-	const neitherRunning = !coordRunning && !gwRunning;
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
 		" placeholder-[#666] outline-none focus:border-[#E64415]";
 
-	// Load coordinator chat history on mount and poll for updates
+	// Load unified chat history on mount and poll for updates
 	useEffect(() => {
 		let cancelled = false;
 
 		async function fetchHistory() {
 			try {
-				const data = await fetchJson("/api/coordinator/chat/history?limit=100");
+				const data = await fetchJson("/api/chat/unified/history?limit=200");
 				if (!cancelled) {
-					const msgs = Array.isArray(data) ? data : (data?.messages ?? []);
-					setHistoryMessages(msgs.map(mapHistoryMessage));
+					setHistoryMessages(Array.isArray(data) ? data : []);
 				}
 			} catch (_err) {
 				// non-fatal — history may not be available yet
@@ -92,28 +68,6 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		};
 	}, []);
 
-	// Filter target-related messages, sorted oldest first
-	const coordMessages = [...mail]
-		.filter((m) =>
-			chatTarget === "coordinator"
-				? m.from === "orchestrator" ||
-					m.from === "coordinator" ||
-					m.to === "orchestrator" ||
-					m.to === "coordinator"
-				: m.from === "gateway" || m.to === "gateway",
-		)
-		.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-	// Count of messages FROM active target — used to detect responses
-	const fromTargetCount = coordMessages.filter((m) =>
-		chatTarget === "coordinator"
-			? m.from === "orchestrator" || m.from === "coordinator"
-			: m.from === "gateway",
-	).length;
-
-	// Count coordinator responses in history
-	const historyFromCoordCount = historyMessages.filter((m) => m.from === "coordinator").length;
-
 	// Consume pendingChatContext from issue click-through
 	useEffect(() => {
 		const ctx = appState.pendingChatContext.value;
@@ -123,91 +77,40 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		inputRef.current?.focus();
 	}, [appState.pendingChatContext.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Auto-select the only running target (skipped if user manually selected one)
-	useEffect(() => {
-		if (coordRunning && gwRunning) {
-			manualSelectionRef.current = false;
-			return;
-		}
-		if (manualSelectionRef.current) return;
-		if (coordRunning && !gwRunning) {
-			setChatTarget("coordinator");
-		} else if (!coordRunning && gwRunning) {
-			setChatTarget("gateway");
-		}
-	}, [coordRunning, gwRunning]);
+	// Count non-human responses in history — detect new agent replies to clear thinking
+	const fromAgentCount = historyMessages.filter((m) => m.from !== "human").length;
 
-	// Reset thinking state when chat target switches
 	useEffect(() => {
-		prevFromTargetCountRef.current = 0;
-		setThinking(false);
-	}, [chatTarget]);
-
-	// Detect new target responses in mail → clear thinking + deduplicate pending
-	useEffect(() => {
-		if (fromTargetCount > prevFromTargetCountRef.current) {
+		if (fromAgentCount > prevFromAgentCountRef.current) {
 			setThinking(false);
-			setPendingMessages((prev) =>
-				prev.filter(
-					(pm) =>
-						!coordMessages.some(
-							(rm) =>
-								rm.body === pm.body &&
-								Math.abs(new Date(rm.createdAt).getTime() - new Date(pm.createdAt).getTime()) <
-									60000,
-						),
-				),
-			);
-		}
-		prevFromTargetCountRef.current = fromTargetCount;
-	}, [fromTargetCount]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	// Detect new coordinator responses in history → clear thinking + deduplicate pending
-	useEffect(() => {
-		if (historyFromCoordCount > prevHistoryFromCoordCountRef.current) {
-			setThinking(false);
+			// Deduplicate pending messages that now appear in history
 			setPendingMessages((prev) =>
 				prev.filter(
 					(pm) =>
 						!historyMessages.some(
 							(hm) =>
-								hm.from === "coordinator" &&
+								hm.from === "human" &&
 								hm.body === pm.body &&
-								Math.abs(new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime()) <
-									60000,
+								Math.abs(
+									new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
+								) < 60000,
 						),
 				),
 			);
 		}
-		prevHistoryFromCoordCountRef.current = historyFromCoordCount;
-	}, [historyFromCoordCount]); // eslint-disable-line react-hooks/exhaustive-deps
+		prevFromAgentCountRef.current = fromAgentCount;
+	}, [fromAgentCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Transform agent activity log entries into feed-compatible objects
-	const activityEntries = agentActivityLog.value.map((event, i) => ({
-		...event,
-		id: `activity-${i}-${event.timestamp}`,
-		createdAt: event.timestamp,
-		_isAgentActivity: true,
-	}));
-
-	// Merge all message sources, deduplicate by id, sort oldest first
-	const historyForTarget = chatTarget === "coordinator" ? historyMessages : [];
-	const pendingForTarget = pendingMessages.filter((m) => m._chatTarget === chatTarget);
+	// Merge history + pending, deduplicate by id, sort oldest first
 	const seenIds = new Set();
 	const allMessages = [];
-	for (const msg of [
-		...historyForTarget,
-		...pendingForTarget,
-		...activityEntries,
-		...coordMessages,
-	]) {
+	for (const msg of [...historyMessages, ...pendingMessages]) {
 		if (!seenIds.has(msg.id)) {
 			seenIds.add(msg.id);
 			allMessages.push(msg);
 		}
 	}
 	allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-	const groupedMessages = groupActivityMessages(allMessages);
 
 	// Auto-scroll to bottom when near bottom
 	useEffect(() => {
@@ -242,40 +145,24 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		const pendingId = `pending-${Date.now()}`;
 		const pending = {
 			id: pendingId,
-			from: "you",
-			to: chatTarget,
+			from: "human",
+			to: "coordinator",
 			body: text,
 			createdAt: new Date().toISOString(),
 			status: "sending",
-			_chatTarget: chatTarget,
 		};
 		setPendingMessages((prev) => [...prev, pending]);
 
 		try {
-			if (chatTarget === "gateway") {
-				await postJson("/api/gateway/chat", { text });
-				// Mark gateway pending as sent (no persistent history endpoint)
-				setPendingMessages((prev) =>
-					prev.map((m) => (m.id === pendingId ? { ...m, status: "sent" } : m)),
-				);
-			} else {
-				// Use persistent chat endpoint for coordinator
-				const saved = await postJson("/api/coordinator/chat", { text });
-				if (saved?.id) {
-					setHistoryMessages((prev) => {
-						if (prev.some((m) => m.id === saved.id)) return prev;
-						return [...prev, mapHistoryMessage(saved)];
-					});
-				}
-				// Remove optimistic pending (replaced by history entry)
-				setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
-			}
+			await postJson("/api/coordinator/chat", { text });
+			// Remove optimistic pending (history poll will pick it up)
+			setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
 			try {
 				await postJson("/api/audit", {
 					type: "command",
 					source: "web_ui",
 					summary: text,
-					agent: chatTarget,
+					agent: "coordinator",
 				});
 			} catch (_e) {
 				// intentionally ignored
@@ -288,7 +175,7 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		} finally {
 			setSending(false);
 		}
-	}, [input, sending, chatTarget]);
+	}, [input, sending]);
 
 	// Detect @-mention and /command triggers from input text and update dropdown state
 	const handleInput = useCallback((e) => {
@@ -397,117 +284,29 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		<div class="flex flex-col h-full min-h-0">
 			<!-- Header -->
 			<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0 flex items-center gap-2">
-				<span class="text-sm font-medium text-[#e5e5e5]">
-					${chatTarget === "coordinator" ? "Coordinator" : "Gateway"}
-				</span>
-				<span class="ml-1 text-xs text-[#555]">Recent messages</span>
-				${
-					coordRunning && gwRunning
-						? html`
-						<div class="ml-auto flex gap-1">
-							<button
-								class=${
-									"text-xs px-2 py-1 rounded " +
-									(chatTarget === "coordinator"
-										? "bg-[#E64415]/20 text-white"
-										: "text-[#666] hover:text-[#999]")
-								}
-								onClick=${() => {
-									manualSelectionRef.current = true;
-									setChatTarget("coordinator");
-								}}
-							>Coordinator</button>
-							<button
-								class=${
-									"text-xs px-2 py-1 rounded " +
-									(chatTarget === "gateway"
-										? "bg-[#E64415]/20 text-white"
-										: "text-[#666] hover:text-[#999]")
-								}
-								onClick=${() => {
-									manualSelectionRef.current = true;
-									setChatTarget("gateway");
-								}}
-							>Gateway</button>
-						</div>
-					`
-						: null
-				}
+				<span class="text-sm font-medium text-[#e5e5e5]">Chat</span>
+				<span class="ml-1 text-xs text-[#555]">All agents</span>
 			</div>
 
-			<!-- Message feed — conversational only, NO terminal output -->
+			<!-- Message feed — unified timeline of all human-audience messages -->
 			<div
 				class="flex-1 overflow-y-auto p-3 min-h-0 flex flex-col gap-2"
 				ref=${feedRef}
 				onScroll=${handleFeedScroll}
 			>
 				${
-					groupedMessages.length === 0
+					allMessages.length === 0
 						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
-							${
-								neitherRunning
-									? "Start coordinator or gateway to chat"
-									: `No ${chatTarget} messages yet`
-							}
+							${coordRunning ? "No messages yet" : "Start coordinator to chat"}
 						</div>
 					`
-						: groupedMessages.map((msg) => {
-								// Grouped activity messages → compact summary card
-								if (msg._isGroup) {
-									return html`
-									<div
-										key=${msg.id}
-										class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
-									>
-										<span class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0">
-											${msg.type}
-										</span>
-										<span class="flex-1 truncate min-w-0">${groupSummaryLabel(msg)}</span>
-										<span class="shrink-0">${timeAgo(msg.lastTimestamp)}</span>
-									</div>
-								`;
-								}
-
-								const isFromUser = msg.from === "you";
+						: allMessages.map((msg) => {
+								const isFromUser = msg.from === "human";
 								const isSending = msg.status === "sending";
 								const isCommand = isFromUser && (msg.body ?? "").startsWith("/");
 
-								// Agent lifecycle events → compact centered inline card
-								if (msg._isAgentActivity) {
-									const colors = agentColor(msg.capability);
-									const ts = msg.timestamp || msg.createdAt;
-									return html`
-									<div
-										key=${msg.id}
-										class="mx-auto max-w-[70%] flex items-center gap-1.5 px-3 py-1 mb-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]"
-									>
-										<span class="text-xs leading-none flex-shrink-0">${colors.avatar}</span>
-										<span class="text-xs text-[#666] truncate">${msg.summary || msg.type || ""}</span>
-										<span class="text-xs text-[#444] flex-shrink-0 ml-auto">${timeAgo(ts)}</span>
-									</div>
-								`;
-								}
-
-								// Protocol messages → compact one-liner
-								if (isActivityMessage(msg)) {
-									return html`
-									<div
-										key=${msg.id}
-										class="flex items-center gap-2 px-2 py-1 rounded bg-[#1a1a1a] border border-[#2a2a2a] text-xs text-[#666]"
-									>
-										<span class="px-1.5 py-0.5 rounded font-mono bg-[#2a2a2a] text-[#888] shrink-0">
-											${msg.type}
-										</span>
-										<span class="flex-1 truncate min-w-0">
-											${msg.subject || msg.body || ""}
-										</span>
-										<span class="shrink-0">${timeAgo(msg.createdAt)}</span>
-									</div>
-								`;
-								}
-
-								// Conversational messages (left for coord/agents, right for user)
+								// Conversational messages: user on right, agents on left with name label
 								return html`
 								<div
 									key=${msg.id}
@@ -552,7 +351,7 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 						<div class="flex justify-start">
 							<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
 								<div class="flex items-center gap-1 mb-1">
-									<span class="text-xs text-[#999]">${chatTarget}</span>
+									<span class="text-xs text-[#999]">coordinator</span>
 									<span class="text-xs text-[#555] animate-pulse">\u00b7 working\u2026</span>
 								</div>
 								<div class="flex items-center gap-2 text-sm text-[#666]">
@@ -566,7 +365,7 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 			</div>
 
 			<!-- Terminal panel (collapsible, collapsed by default) -->
-			<${TerminalPanel} chatTarget=${chatTarget} thinking=${thinking} />
+			<${TerminalPanel} chatTarget="coordinator" thinking=${thinking} />
 
 			<!-- Input area (always visible) -->
 			<div class="border-t border-[#2a2a2a] p-3 shrink-0">
@@ -628,21 +427,19 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 							ref=${inputRef}
 							type="text"
 							placeholder=${
-								neitherRunning
-									? "Start coordinator or gateway to chat\u2026"
-									: chatTarget === "coordinator"
-										? "Send command to coordinator\u2026"
-										: "Send message to gateway\u2026"
+								coordRunning
+									? "Send command to coordinator\u2026"
+									: "Start coordinator to chat\u2026"
 							}
 							value=${input}
 							onInput=${handleInput}
 							onKeyDown=${handleKeyDown}
-							disabled=${sending || neitherRunning}
+							disabled=${sending || !coordRunning}
 							class=${`${inputClass} flex-1 min-w-0`}
 						/>
 						<button
 							onClick=${handleSend}
-							disabled=${sending || !input.trim() || neitherRunning}
+							disabled=${sending || !input.trim() || !coordRunning}
 							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none shrink-0"
 						>
 							${sending ? "\u2026" : "Send"}
