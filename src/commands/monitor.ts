@@ -20,7 +20,7 @@ import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { loadConfig } from "../config.ts";
-import { AgentError, ValidationError } from "../errors.ts";
+import { AgentError, ValidationError, isRunningAsRoot } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
 import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
@@ -80,6 +80,12 @@ function resolveAttach(args: string[], isTTY: boolean): boolean {
  * 7. Record session in SessionStore (sessions.db)
  */
 async function startMonitor(args: string[]): Promise<void> {
+	if (isRunningAsRoot()) {
+		throw new ValidationError("legio must not run as root — agent processes execute arbitrary code", {
+			field: "uid",
+		});
+	}
+
 	const json = args.includes("--json");
 	const shouldAttach = resolveAttach(args, !!process.stdout.isTTY);
 	const cwd = process.cwd();

@@ -217,6 +217,15 @@ export class LifecycleError extends LegioError {
 }
 
 /**
+ * Returns true if the current process is running as the root user (UID 0).
+ * Only guards on POSIX platforms — returns false on Windows where process.getuid
+ * is unavailable.
+ */
+export function isRunningAsRoot(): boolean {
+	return typeof process.getuid === "function" && process.getuid() === 0;
+}
+
+/**
  * Raised when the web UI server fails to start or encounters a runtime error.
  * Examples: port already in use, bind failure, static file not found.
  */

@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { HierarchyError } from "../errors.ts";
+import { HierarchyError, ValidationError } from "../errors.ts";
 import {
 	type BeaconOptions,
 	buildBeacon,
 	calculateStaggerDelay,
 	parentHasScouts,
+	slingCommand,
 	validateHierarchy,
 } from "./sling.ts";
 
@@ -429,5 +430,24 @@ describe("buildBeacon", () => {
 		expect(beacon).toContain("[LEGIO] worker-3 (builder)");
 		expect(beacon).toContain("task:legio-deep");
 		expect(beacon).toContain("Depth: 2 | Parent: lead-main");
+	});
+});
+
+/**
+ * Root-user guard: slingCommand must reject execution when running as root.
+ */
+describe("slingCommand root guard", () => {
+	test("throws ValidationError with uid field when process.getuid returns 0", async () => {
+		const original = process.getuid;
+		// Simulate root
+		process.getuid = () => 0;
+		try {
+			await expect(slingCommand(["legio-test", "--name", "x"])).rejects.toMatchObject({
+				name: "ValidationError",
+				field: "uid",
+			});
+		} finally {
+			process.getuid = original;
+		}
 	});
 });

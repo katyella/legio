@@ -1504,3 +1504,21 @@ describe("SessionStore round-trip", () => {
 		expect(exists).toBe(true);
 	});
 });
+
+/**
+ * Root-user guard: coordinatorCommand start must reject when running as root.
+ */
+describe("coordinatorCommand root guard", () => {
+	test("throws ValidationError with uid field when process.getuid returns 0", async () => {
+		const original = process.getuid;
+		process.getuid = () => 0;
+		try {
+			await expect(coordinatorCommand(["start"])).rejects.toMatchObject({
+				name: "ValidationError",
+				field: "uid",
+			});
+		} finally {
+			process.getuid = original;
+		}
+	});
+});
