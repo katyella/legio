@@ -329,7 +329,6 @@ async function statusGateway(args: string[], deps: GatewayDeps = {}): Promise<vo
 		// this session needs to be marked as zombie.
 		if (!alive) {
 			store.updateState(GATEWAY_NAME, "zombie");
-			store.updateLastActivity(GATEWAY_NAME);
 			session.state = "zombie";
 		}
 

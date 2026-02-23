@@ -783,7 +783,6 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 		// this session needs to be marked as zombie.
 		if (!alive) {
 			store.updateState(COORDINATOR_NAME, "zombie");
-			store.updateLastActivity(COORDINATOR_NAME);
 			session.state = "zombie";
 		}
 		const status = {
