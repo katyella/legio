@@ -29,6 +29,8 @@ Coordinator (persistent orchestrator at project root)
 |-------|------|--------|
 | **Coordinator** | Persistent orchestrator — decomposes objectives, dispatches agents, tracks task groups | Read-only |
 | **Supervisor** | Per-project team lead — manages worker lifecycle, handles nudge/escalation | Read-only |
+| **Gateway** | Persistent gateway agent for external access and routing | Read-only |
+| **CTO** | Strategic technical leadership | Read-only |
 | **Scout** | Read-only exploration and research | Read-only |
 | **Builder** | Implementation and code changes | Read-write |
 | **Reviewer** | Validation and code review | Read-only |
@@ -123,15 +125,12 @@ Legio includes a browser-based dashboard for real-time fleet monitoring. Start i
 
 | View | Description |
 |------|-------------|
-| **Command** | Mission control — audit timeline + coordinator chat |
-| **Chat** | Task-based conversations grouped by issue |
 | **Dashboard** | Agent status, mail feed, merge queue, system metrics |
-| **Events** | Tool events and timelines |
-| **Issues** | Beads issue tracking and status |
-| **Inspect** | Deep per-agent inspection |
 | **Costs** | Token usage and cost breakdown |
-| **Terminal** | Interactive tmux pane capture and text send |
-| **Setup** | Interactive initialization wizard |
+| **Tasks** | Beads issue tracking and status |
+| **Chat** | Task-based conversations grouped by issue |
+| **Strategy** | Strategic planning and oversight |
+| **Gateway** | External access and routing (accessible via agent inspect) |
 
 **Tech:** Preact + HTM + Tailwind CSS, WebSocket for real-time updates, zero build step.
 
@@ -204,6 +203,10 @@ legio coordinator stop              Stop coordinator
 legio coordinator status            Show coordinator state
 
 legio supervisor start              Start per-project supervisor agent
+  --task <bead-id>                       Bead task ID (required)
+  --name <name>                          Unique name (required)
+  --parent <agent>                       Parent agent (default: coordinator)
+  --depth <n>                            Hierarchy depth (default: 1)
   --attach / --no-attach                 TTY-aware tmux attach (default: auto)
 legio supervisor stop               Stop supervisor
 legio supervisor status             Show supervisor state
@@ -294,7 +297,7 @@ legio metrics                       Show session metrics
 
 legio run list                      List orchestration runs
 legio run show <id>                 Show run details
-legio run complete <id>             Mark a run complete
+legio run complete                  Mark current run complete
 ```
 
 ### Infrastructure
@@ -340,6 +343,12 @@ When the server is running, a full REST API is available at `http://localhost:41
 | `GET /api/agents/:name` | Agent details |
 | `GET /api/agents/:name/inspect` | Deep inspection data |
 | `GET /api/agents/:name/events` | Agent events |
+| `POST /api/agents/:name/chat` | Send chat message to agent |
+| `GET /api/agents/:name/chat/history` | Agent chat history |
+| `POST /api/agents/spawn` | Spawn agent from UI |
+| `POST /api/coordinator/chat` | Send chat message to coordinator |
+| `GET /api/coordinator/chat/history` | Coordinator chat history |
+| `GET /api/strategy` | Strategy data |
 | `GET /api/mail` | All messages |
 | `GET /api/mail/unread` | Unread messages |
 | `GET /api/mail/conversations` | Thread grouping |
@@ -362,7 +371,7 @@ When the server is running, a full REST API is available at `http://localhost:41
 
 - **Runtime**: Node/tsx (TypeScript directly, no build step)
 - **Node.js**: v22+ (required for `better-sqlite3`)
-- **Dependencies**: `better-sqlite3` (SQLite), `ws` (WebSocket server)
+- **Dependencies**: `better-sqlite3` (SQLite), `tsx` (TypeScript execution), `ws` (WebSocket server)
 - **Database**: SQLite via `better-sqlite3` (WAL mode for concurrent access)
 - **Web UI**: Preact + HTM + Tailwind CSS (zero build step, served from `src/server/public/`)
 - **Linting**: Biome (formatter + linter)
@@ -376,7 +385,6 @@ When the server is running, a full REST API is available at `http://localhost:41
 npm test
 
 # Run store/server tests (vitest)
-npm run test:vitest
 npm run test:server
 
 # Run e2e tests (playwright)
@@ -425,6 +433,7 @@ legio/
       server.ts                   Web UI server lifecycle
       agents.ts                   Agent discovery and querying
       coordinator.ts              Persistent orchestrator lifecycle
+      gateway.ts                  Gateway agent lifecycle
       supervisor.ts               Team lead management
       dashboard.ts                Live TUI dashboard (ANSI, zero deps)
       hooks.ts                    Orchestrator hooks management
@@ -479,7 +488,7 @@ legio/
     beads/                        bd CLI wrapper + molecules
     mulch/                        mulch CLI wrapper
     e2e/                          End-to-end lifecycle tests
-  agents/                         Base agent definitions (.md, 8 roles)
+  agents/                         Base agent definitions (.md, 10 roles)
 
   templates/                      Templates for overlays and hooks
 ```
