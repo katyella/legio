@@ -149,6 +149,103 @@ async function captureTmuxPane(sessionName: string, lines: number): Promise<stri
 	});
 }
 
+/**
+ * Extract new content from a tmux capture by diffing against a baseline.
+ * Server-side equivalent of diffCapture() in coordinator-chat.js.
+ */
+function diffCaptureServer(baselineText: string, currentText: string): string {
+	const baselineLines = baselineText.trimEnd().split("\n");
+	const currentLines = currentText.trimEnd().split("\n");
+	const anchorLen = Math.min(3, baselineLines.length);
+	const anchor = baselineLines.slice(-anchorLen);
+
+	for (let i = currentLines.length - anchorLen; i >= 0; i--) {
+		let match = true;
+		for (let j = 0; j < anchorLen; j++) {
+			if (currentLines[i + j] !== anchor[j]) {
+				match = false;
+				break;
+			}
+		}
+		if (match) {
+			return currentLines.slice(i + anchorLen).join("\n");
+		}
+	}
+	return currentLines.slice(-20).join("\n");
+}
+
+/**
+ * Poll tmux capture-pane to detect the coordinator's response after a user message.
+ * Runs as a fire-and-forget background task — does not block the HTTP response.
+ *
+ * Strategy: capture a baseline, then poll until output stabilizes (no changes for
+ * ~3 seconds after changes were first detected). Extract the delta and persist it.
+ */
+async function captureCoordinatorResponse(
+	legioDir: string,
+	tmuxSession: string,
+	sessionId: string,
+	wsManager?: { broadcastEvent(event: { type: string; data?: unknown }): void } | null,
+): Promise<void> {
+	const POLL_INTERVAL = 1500; // ms between polls
+	const STABLE_THRESHOLD = 3000; // ms of no change = stable
+	const MAX_WAIT = 120_000; // max 2 minutes total
+	const CAPTURE_LINES = 80;
+
+	try {
+		// Wait a moment for the coordinator to start processing
+		await new Promise((r) => setTimeout(r, 2000));
+
+		const baseline = await captureTmuxPane(tmuxSession, CAPTURE_LINES);
+		if (baseline === null) return;
+
+		let lastOutput = baseline;
+		let lastChangeTime = 0;
+		let changesDetected = false;
+		const startTime = Date.now();
+
+		while (Date.now() - startTime < MAX_WAIT) {
+			await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+
+			const current = await captureTmuxPane(tmuxSession, CAPTURE_LINES);
+			if (current === null) continue;
+
+			if (current !== lastOutput) {
+				lastOutput = current;
+				lastChangeTime = Date.now();
+				changesDetected = true;
+			} else if (changesDetected && Date.now() - lastChangeTime >= STABLE_THRESHOLD) {
+				// Output has stabilized — extract delta
+				break;
+			}
+		}
+
+		if (!changesDetected) return; // No response detected
+
+		// Extract the delta between baseline and final output
+		const delta = diffCaptureServer(baseline, lastOutput);
+		if (!delta.trim()) return;
+
+		// Strip ANSI escape codes (ESC = char 27; regex built dynamically to avoid biome lint rule)
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI stripping
+		const cleaned = delta.replace(/\u001b\[[0-9;]*[mGKHF]/g, "").trim();
+		if (!cleaned) return;
+
+		// Persist as assistant message
+		const store = createChatStore(join(legioDir, "chat.db"));
+		try {
+			store.addMessage(sessionId, "assistant", cleaned);
+		} finally {
+			store.close();
+		}
+
+		// Notify WebSocket clients that new chat history is available
+		wsManager?.broadcastEvent({ type: "coordinator_chat_response" });
+	} catch {
+		// Fire-and-forget — errors are non-fatal
+	}
+}
+
 // ---------------------------------------------------------------------------
 // runLegio helper
 // ---------------------------------------------------------------------------
@@ -948,6 +1045,9 @@ export async function handleApiRequest(
 					`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
+
+			// Fire-and-forget: capture coordinator response in background
+			void captureCoordinatorResponse(legioDir, tmuxSession, session.id, wsManager);
 
 			return jsonResponse(savedMessage, 201);
 		} finally {
