@@ -268,6 +268,72 @@ export function InspectView({ agentName }) {
 				)}
 			</div>
 
+			<!-- Terminal section -->
+			<div class="flex items-center justify-between mb-2">
+				<h3 class="text-sm font-semibold text-[#999] uppercase tracking-wide">Terminal</h3>
+				<div class="flex items-center gap-3">
+					<div class="flex items-center gap-1.5">
+						<span
+							class=${"w-2 h-2 rounded-full " + (termConnected ? "bg-green-500" : "bg-[#555]")}
+						></span>
+						<span class=${"text-xs font-mono " + (termConnected ? "text-green-400" : "text-[#555]")}>
+							${termConnected ? "connected" : "disconnected"}
+						</span>
+					</div>
+					<button
+						onClick=${handleTermClear}
+						class="text-xs text-[#666] hover:text-[#999] bg-transparent border-none cursor-pointer font-mono"
+					>
+						clear
+					</button>
+				</div>
+			</div>
+			<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm mb-6">
+				<div
+					ref=${termOutputRef}
+					onScroll=${handleOutputScroll}
+					class="max-h-[40vh] overflow-y-auto p-3"
+				>
+					${
+						termOutput
+							? html`<pre
+								class="text-[#e5e5e5] text-xs leading-relaxed whitespace-pre-wrap break-words m-0 font-mono"
+							>${termOutput}</pre>`
+							: html`<div class="text-[#444] text-sm font-mono text-center py-4">
+								No output
+							</div>`
+					}
+				</div>
+				${
+					termError
+						? html`<div class="px-3 py-1.5 bg-[#1a0a0a] border-t border-red-900">
+							<span class="text-xs text-red-400 font-mono">${termError}</span>
+						</div>`
+						: null
+				}
+				<div class="border-t border-[#2a2a2a] p-3">
+					<div class="flex items-center gap-2">
+						<span class="text-[#E64415] font-mono text-sm shrink-0 select-none">$</span>
+						<input
+							type="text"
+							placeholder="Type a command or prompt..."
+							value=${termInput}
+							onInput=${(e) => setTermInput(e.target.value)}
+							onKeyDown=${handleTermKeyDown}
+							disabled=${termSending}
+							class=${"flex-1 " + inputCls + " font-mono disabled:opacity-50"}
+						/>
+						<button
+							onClick=${handleTermSend}
+							disabled=${termSending || !termInput.trim()}
+							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none font-mono shrink-0"
+						>
+							${termSending ? "…" : "Send"}
+						</button>
+					</div>
+				</div>
+			</div>
+
 			<!-- Tool Stats -->
 			<h3 class="text-sm font-semibold text-[#999] uppercase tracking-wide mb-2">Tool Stats</h3>
 			<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm mb-6 overflow-x-auto">
@@ -324,74 +390,8 @@ export function InspectView({ agentName }) {
 							</span>
 						</div>
 					`,
-							)
+						)
 				}
-			</div>
-
-			<!-- Terminal section -->
-			<div class="flex items-center justify-between mb-2">
-				<h3 class="text-sm font-semibold text-[#999] uppercase tracking-wide">Terminal</h3>
-				<div class="flex items-center gap-3">
-					<div class="flex items-center gap-1.5">
-						<span
-							class=${"w-2 h-2 rounded-full " + (termConnected ? "bg-green-500" : "bg-[#555]")}
-						></span>
-						<span class=${"text-xs font-mono " + (termConnected ? "text-green-400" : "text-[#555]")}>
-							${termConnected ? "connected" : "disconnected"}
-						</span>
-					</div>
-					<button
-						onClick=${handleTermClear}
-						class="text-xs text-[#666] hover:text-[#999] bg-transparent border-none cursor-pointer font-mono"
-					>
-						clear
-					</button>
-				</div>
-			</div>
-			<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm mb-2">
-				<div
-					ref=${termOutputRef}
-					onScroll=${handleOutputScroll}
-					class="max-h-[40vh] overflow-y-auto p-3"
-				>
-					${
-						termOutput
-							? html`<pre
-								class="text-[#e5e5e5] text-xs leading-relaxed whitespace-pre-wrap break-words m-0 font-mono"
-							>${termOutput}</pre>`
-							: html`<div class="text-[#444] text-sm font-mono text-center py-4">
-								No output
-							</div>`
-					}
-				</div>
-				${
-					termError
-						? html`<div class="px-3 py-1.5 bg-[#1a0a0a] border-t border-red-900">
-							<span class="text-xs text-red-400 font-mono">${termError}</span>
-						</div>`
-						: null
-				}
-				<div class="border-t border-[#2a2a2a] p-3">
-					<div class="flex items-center gap-2">
-						<span class="text-[#E64415] font-mono text-sm shrink-0 select-none">$</span>
-						<input
-							type="text"
-							placeholder="Type a command or prompt..."
-							value=${termInput}
-							onInput=${(e) => setTermInput(e.target.value)}
-							onKeyDown=${handleTermKeyDown}
-							disabled=${termSending}
-							class=${"flex-1 " + inputCls + " font-mono disabled:opacity-50"}
-						/>
-						<button
-							onClick=${handleTermSend}
-							disabled=${termSending || !termInput.trim()}
-							class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none font-mono shrink-0"
-						>
-							${termSending ? "…" : "Send"}
-						</button>
-					</div>
-				</div>
 			</div>
 		</div>
 	`;
