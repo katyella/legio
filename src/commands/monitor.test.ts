@@ -135,4 +135,17 @@ describe("monitorCommand", () => {
 			}
 		}
 	});
+
+	test("start throws ValidationError with uid field when running as root", async () => {
+		const original = process.getuid;
+		process.getuid = () => 0;
+		try {
+			await expect(monitorCommand(["start"])).rejects.toMatchObject({
+				name: "ValidationError",
+				field: "uid",
+			});
+		} finally {
+			process.getuid = original;
+		}
+	});
 });

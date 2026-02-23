@@ -168,4 +168,19 @@ describe("supervisorCommand", () => {
 	test("stop without --name throws ValidationError", async () => {
 		await expect(supervisorCommand(["stop"])).rejects.toThrow(/--name/);
 	});
+
+	test("start throws ValidationError with uid field when running as root", async () => {
+		const original = process.getuid;
+		process.getuid = () => 0;
+		try {
+			await expect(
+				supervisorCommand(["start", "--task", "legio-test", "--name", "sup-1"]),
+			).rejects.toMatchObject({
+				name: "ValidationError",
+				field: "uid",
+			});
+		} finally {
+			process.getuid = original;
+		}
+	});
 });
