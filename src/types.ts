@@ -359,6 +359,7 @@ export interface SessionMetrics {
 	exitCode: number | null;
 	mergeResult: ResolutionTier | null;
 	parentAgent: string | null;
+	runId?: string | null; // Links metric to a coordinator run
 	inputTokens: number;
 	outputTokens: number;
 	cacheReadTokens: number;

@@ -40,6 +40,7 @@ function makeSession(overrides: Partial<SessionMetrics> = {}): SessionMetrics {
 		exitCode: 0,
 		mergeResult: "auto-resolve",
 		parentAgent: "coordinator",
+		runId: null,
 		inputTokens: 0,
 		outputTokens: 0,
 		cacheReadTokens: 0,
@@ -220,6 +221,123 @@ describe("getSessionsByAgent", () => {
 		expect(retrieved[0]?.beadId).toBe("task-2"); // most recent
 		expect(retrieved[1]?.beadId).toBe("task-3");
 		expect(retrieved[2]?.beadId).toBe("task-1"); // oldest
+	});
+});
+
+// === getSessionsByRun ===
+
+describe("getSessionsByRun", () => {
+	test("returns sessions matching the given run_id", () => {
+		store.recordSession(makeSession({ agentName: "agent-a", beadId: "task-1", runId: "run-001" }));
+		store.recordSession(makeSession({ agentName: "agent-b", beadId: "task-2", runId: "run-001" }));
+		store.recordSession(makeSession({ agentName: "agent-c", beadId: "task-3", runId: "run-002" }));
+
+		const results = store.getSessionsByRun("run-001");
+		expect(results).toHaveLength(2);
+		const beadIds = results.map((s) => s.beadId);
+		expect(beadIds).toContain("task-1");
+		expect(beadIds).toContain("task-2");
+	});
+
+	test("returns empty array when no sessions match the run_id", () => {
+		store.recordSession(makeSession({ beadId: "task-1", runId: "run-001" }));
+
+		const results = store.getSessionsByRun("run-999");
+		expect(results).toEqual([]);
+	});
+
+	test("returns empty array for sessions with null run_id", () => {
+		store.recordSession(makeSession({ beadId: "task-1", runId: null }));
+
+		const results = store.getSessionsByRun("run-001");
+		expect(results).toEqual([]);
+	});
+
+	test("run_id roundtrips correctly through record/retrieve cycle", () => {
+		store.recordSession(makeSession({ beadId: "task-1", runId: "run-abc-123" }));
+
+		const results = store.getSessionsByRun("run-abc-123");
+		expect(results).toHaveLength(1);
+		expect(results[0]?.runId).toBe("run-abc-123");
+	});
+
+	test("null run_id roundtrips correctly", () => {
+		store.recordSession(makeSession({ beadId: "task-1", runId: null }));
+
+		const all = store.getRecentSessions(10);
+		expect(all).toHaveLength(1);
+		expect(all[0]?.runId).toBeNull();
+	});
+
+	test("results are ordered by started_at DESC", () => {
+		store.recordSession(
+			makeSession({ agentName: "agent-a", beadId: "task-1", runId: "run-001", startedAt: "2026-01-01T10:00:00Z" }),
+		);
+		store.recordSession(
+			makeSession({ agentName: "agent-b", beadId: "task-2", runId: "run-001", startedAt: "2026-01-01T12:00:00Z" }),
+		);
+		store.recordSession(
+			makeSession({ agentName: "agent-c", beadId: "task-3", runId: "run-001", startedAt: "2026-01-01T11:00:00Z" }),
+		);
+
+		const results = store.getSessionsByRun("run-001");
+		expect(results).toHaveLength(3);
+		expect(results[0]?.beadId).toBe("task-2"); // most recent
+		expect(results[1]?.beadId).toBe("task-3");
+		expect(results[2]?.beadId).toBe("task-1"); // oldest
+	});
+
+	test("migration: existing DB without run_id column can be opened and getSessionsByRun returns empty", () => {
+		store.close();
+
+		// Create a DB with old schema (no run_id column)
+		const Database = require("better-sqlite3");
+		const oldDb = new Database(dbPath);
+		oldDb.exec("DROP TABLE IF EXISTS sessions");
+		oldDb.exec(`
+			CREATE TABLE sessions (
+				agent_name TEXT NOT NULL,
+				bead_id TEXT NOT NULL,
+				capability TEXT NOT NULL,
+				started_at TEXT NOT NULL,
+				completed_at TEXT,
+				duration_ms INTEGER NOT NULL DEFAULT 0,
+				exit_code INTEGER,
+				merge_result TEXT,
+				parent_agent TEXT,
+				input_tokens INTEGER NOT NULL DEFAULT 0,
+				output_tokens INTEGER NOT NULL DEFAULT 0,
+				cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+				cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+				estimated_cost_usd REAL,
+				model_used TEXT,
+				PRIMARY KEY (agent_name, bead_id)
+			)
+		`);
+		oldDb.exec(`
+			INSERT INTO sessions (agent_name, bead_id, capability, started_at, duration_ms)
+			VALUES ('old-agent', 'old-task', 'builder', '2026-01-01T00:00:00Z', 100000)
+		`);
+		oldDb.close();
+
+		// Re-open with createMetricsStore — should migrate and add run_id column
+		store = createMetricsStore(dbPath);
+
+		// Old row should have null run_id after migration
+		const all = store.getRecentSessions(10);
+		expect(all).toHaveLength(1);
+		expect(all[0]?.runId).toBeNull();
+
+		// getSessionsByRun should return empty (old row has null run_id)
+		expect(store.getSessionsByRun("any-run")).toEqual([]);
+
+		// New rows with run_id should work
+		store.recordSession(
+			makeSession({ agentName: "new-agent", beadId: "new-task", runId: "run-new-001" }),
+		);
+		const runResults = store.getSessionsByRun("run-new-001");
+		expect(runResults).toHaveLength(1);
+		expect(runResults[0]?.agentName).toBe("new-agent");
 	});
 });
 

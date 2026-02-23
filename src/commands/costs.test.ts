@@ -437,56 +437,17 @@ describe("costsCommand", () => {
 	// === --run filter ===
 
 	describe("--run filter", () => {
-		test("filters sessions by run ID via SessionStore cross-reference", async () => {
+		test("filters sessions by run ID via direct MetricsStore query", async () => {
 			const legioDir = join(tempDir, ".legio");
 
-			// Create session store with run association
-			const sessDbPath = join(legioDir, "sessions.db");
-			const sessionStore = createSessionStore(sessDbPath);
-			sessionStore.upsert({
-				id: "sess-001",
-				agentName: "builder-1",
-				capability: "builder",
-				worktreePath: "/tmp/wt1",
-				branchName: "feat/task1",
-				beadId: "task-001",
-				tmuxSession: "tmux-001",
-				state: "completed",
-				pid: null,
-				parentAgent: null,
-				depth: 0,
-				runId: "run-2026-01-01",
-				startedAt: new Date().toISOString(),
-				lastActivity: new Date().toISOString(),
-				escalationLevel: 0,
-				stalledSince: null,
-			});
-			sessionStore.upsert({
-				id: "sess-002",
-				agentName: "scout-1",
-				capability: "scout",
-				worktreePath: "/tmp/wt2",
-				branchName: "feat/task2",
-				beadId: "task-002",
-				tmuxSession: "tmux-002",
-				state: "completed",
-				pid: null,
-				parentAgent: null,
-				depth: 0,
-				runId: "run-other",
-				startedAt: new Date().toISOString(),
-				lastActivity: new Date().toISOString(),
-				escalationLevel: 0,
-				stalledSince: null,
-			});
-			sessionStore.close();
-
-			// Create metrics store
+			// Seed metrics with run_id directly — no SessionStore cross-reference needed
 			const metricsDbPath = join(legioDir, "metrics.db");
 			const metricsStore = createMetricsStore(metricsDbPath);
-			metricsStore.recordSession(makeMetrics({ agentName: "builder-1", beadId: "task-001" }));
 			metricsStore.recordSession(
-				makeMetrics({ agentName: "scout-1", beadId: "task-002", capability: "scout" }),
+				makeMetrics({ agentName: "builder-1", beadId: "task-001", runId: "run-2026-01-01" }),
+			);
+			metricsStore.recordSession(
+				makeMetrics({ agentName: "scout-1", beadId: "task-002", capability: "scout", runId: "run-other" }),
 			);
 			metricsStore.close();
 
@@ -501,15 +462,10 @@ describe("costsCommand", () => {
 		test("returns empty when no sessions match run ID", async () => {
 			const legioDir = join(tempDir, ".legio");
 
-			// Create empty session store
-			const sessDbPath = join(legioDir, "sessions.db");
-			const sessionStore = createSessionStore(sessDbPath);
-			sessionStore.close();
-
-			// Create metrics store with data
+			// Create metrics store with data but no matching run_id
 			const metricsDbPath = join(legioDir, "metrics.db");
 			const metricsStore = createMetricsStore(metricsDbPath);
-			metricsStore.recordSession(makeMetrics({ agentName: "builder-1", beadId: "t1" }));
+			metricsStore.recordSession(makeMetrics({ agentName: "builder-1", beadId: "t1", runId: "run-other" }));
 			metricsStore.close();
 
 			await costsCommand(["--json", "--run", "run-nonexistent"]);
