@@ -805,9 +805,11 @@ function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 					groupedMessages.length === 0
 						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
-							${neitherRunning
-								? "Start coordinator or gateway to chat"
-								: `No ${chatTarget} messages yet`}
+							${
+								neitherRunning
+									? "Start coordinator or gateway to chat"
+									: `No ${chatTarget} messages yet`
+							}
 						</div>
 					`
 						: groupedMessages.map((msg) => {
@@ -969,11 +971,13 @@ function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 						<input
 							ref=${inputRef}
 							type="text"
-							placeholder=${neitherRunning
-								? "Start coordinator or gateway to chat\u2026"
-								: chatTarget === "coordinator"
-									? "Send command to coordinator\u2026"
-									: "Send message to gateway\u2026"}
+							placeholder=${
+								neitherRunning
+									? "Start coordinator or gateway to chat\u2026"
+									: chatTarget === "coordinator"
+										? "Send command to coordinator\u2026"
+										: "Send message to gateway\u2026"
+							}
 							value=${input}
 							onInput=${handleInput}
 							onKeyDown=${handleKeyDown}
@@ -1016,7 +1020,9 @@ function CoordinatorBar() {
 		try {
 			const gwData = await fetchJson("/api/gateway/status");
 			if (!cancelled) setGwStatus(gwData?.running === true);
-		} catch (_err) { /* non-fatal */ }
+		} catch (_err) {
+			/* non-fatal */
+		}
 	}, []);
 
 	useEffect(() => {
@@ -1063,17 +1069,29 @@ function CoordinatorBar() {
 	}, [poll]);
 
 	const handleGwStart = useCallback(async () => {
-		setGwLoading(true); setError(null);
-		try { await postJson("/api/gateway/start", {}); await poll(false); }
-		catch (err) { setError(err?.message ?? "Failed to start gateway"); }
-		finally { setGwLoading(false); }
+		setGwLoading(true);
+		setError(null);
+		try {
+			await postJson("/api/gateway/start", {});
+			await poll(false);
+		} catch (err) {
+			setError(err?.message ?? "Failed to start gateway");
+		} finally {
+			setGwLoading(false);
+		}
 	}, [poll]);
 
 	const handleGwStop = useCallback(async () => {
-		setGwLoading(true); setError(null);
-		try { await postJson("/api/gateway/stop", {}); await poll(false); }
-		catch (err) { setError(err?.message ?? "Failed to stop gateway"); }
-		finally { setGwLoading(false); }
+		setGwLoading(true);
+		setError(null);
+		try {
+			await postJson("/api/gateway/stop", {});
+			await poll(false);
+		} catch (err) {
+			setError(err?.message ?? "Failed to stop gateway");
+		} finally {
+			setGwLoading(false);
+		}
 	}, [poll]);
 
 	const handleSpawn = useCallback(() => {

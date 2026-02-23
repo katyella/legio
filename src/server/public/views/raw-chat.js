@@ -122,32 +122,26 @@ export function RawChatView() {
 	}, []);
 
 	// ── Select session ────────────────────────────────────────────────────────
-	const handleSelectSession = useCallback(
-		(id) => {
-			if (id === appState.chatActiveSessionId.value) return;
-			appState.chatActiveSessionId.value = id;
-			setError("");
-		},
-		[],
-	);
+	const handleSelectSession = useCallback((id) => {
+		if (id === appState.chatActiveSessionId.value) return;
+		appState.chatActiveSessionId.value = id;
+		setError("");
+	}, []);
 
 	// ── Delete session ────────────────────────────────────────────────────────
-	const handleDeleteSession = useCallback(
-		async (e, id) => {
-			e.stopPropagation();
-			try {
-				await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
-				appState.chatSessions.value = appState.chatSessions.value.filter((s) => s.id !== id);
-				if (appState.chatActiveSessionId.value === id) {
-					appState.chatActiveSessionId.value = null;
-					setMessages([]);
-				}
-			} catch (err) {
-				setError(err.message || "Failed to delete session");
+	const handleDeleteSession = useCallback(async (e, id) => {
+		e.stopPropagation();
+		try {
+			await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
+			appState.chatSessions.value = appState.chatSessions.value.filter((s) => s.id !== id);
+			if (appState.chatActiveSessionId.value === id) {
+				appState.chatActiveSessionId.value = null;
+				setMessages([]);
 			}
-		},
-		[],
-	);
+		} catch (err) {
+			setError(err.message || "Failed to delete session");
+		}
+	}, []);
 
 	// ── Send message ──────────────────────────────────────────────────────────
 	const handleSend = useCallback(async () => {

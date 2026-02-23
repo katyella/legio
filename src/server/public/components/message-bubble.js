@@ -2,8 +2,8 @@
 // Conversational-style message rendering with agent capability color coding.
 // No npm dependencies — uses shared preact-setup.js for version consistency.
 
-import { html } from "../lib/preact-setup.js";
 import { renderMarkdown } from "../lib/markdown.js";
+import { html } from "../lib/preact-setup.js";
 import { agentColor, timeAgo } from "../lib/utils.js";
 
 /**

@@ -18,12 +18,7 @@ import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import type { AgentSession } from "../types.ts";
-import {
-	buildGatewayBeacon,
-	type GatewayDeps,
-	gatewayCommand,
-	resolveAttach,
-} from "./gateway.ts";
+import { buildGatewayBeacon, type GatewayDeps, gatewayCommand, resolveAttach } from "./gateway.ts";
 
 // --- Fake Tmux ---
 
@@ -350,10 +345,7 @@ describe("startGateway", () => {
 		// Deploy a gateway agent definition
 		const agentDefsDir = join(legioDir, "agent-defs");
 		await mkdir(agentDefsDir, { recursive: true });
-		await writeFile(
-			join(agentDefsDir, "gateway.md"),
-			"# Gateway Agent\n\nYou are the gateway.\n",
-		);
+		await writeFile(join(agentDefsDir, "gateway.md"), "# Gateway Agent\n\nYou are the gateway.\n");
 
 		const { deps, calls } = makeDeps();
 

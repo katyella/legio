@@ -27,7 +27,13 @@ export interface ServerDeps {
 	_isProcessRunning?: (pid: number) => boolean;
 	_spawn?: (cmd: string, args: string[], opts: SpawnOptions) => { pid?: number; unref: () => void };
 	_sleep?: (ms: number) => Promise<void>;
-	_startServer?: (opts: { port: number; host: string; root: string; shouldOpen: boolean; autoStartCoordinator: boolean }) => Promise<void>;
+	_startServer?: (opts: {
+		port: number;
+		host: string;
+		root: string;
+		shouldOpen: boolean;
+		autoStartCoordinator: boolean;
+	}) => Promise<void>;
 }
 
 const SERVER_HELP = `legio server <subcommand>
@@ -209,10 +215,12 @@ async function startServer(args: string[], deps: ServerDeps): Promise<void> {
 
 	// Import the server module dynamically to avoid circular deps
 	const autoStartCoordinator = process.env.LEGIO_SERVER_DAEMON === "1";
-	const start = deps._startServer ?? (async (opts) => {
-		const { startServer: serverStart } = await import("../server/index.ts");
-		await serverStart(opts);
-	});
+	const start =
+		deps._startServer ??
+		(async (opts) => {
+			const { startServer: serverStart } = await import("../server/index.ts");
+			await serverStart(opts);
+		});
 	await start({ port, host, root, shouldOpen, autoStartCoordinator });
 }
 

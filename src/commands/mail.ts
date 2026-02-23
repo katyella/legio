@@ -19,7 +19,6 @@ import type { MailAudience, MailMessage, MailMessageType } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { nudgeAgent } from "./nudge.ts";
 
-
 /** Valid audience values for mail messages. */
 const VALID_AUDIENCES = ["human", "agent", "both"] as const;
 
