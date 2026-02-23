@@ -5,12 +5,7 @@
 import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useState } from "../lib/preact-setup.js";
 import { appState } from "../lib/state.js";
-import {
-	agentColor,
-	stateColor,
-	stateIcon,
-	timeAgo,
-} from "../lib/utils.js";
+import { agentColor, stateColor, stateIcon, timeAgo } from "../lib/utils.js";
 import { CoordinatorChat } from "./coordinator-chat.js";
 
 // ---------------------------------------------------------------------------
@@ -163,15 +158,53 @@ function MailFeed({ mail }) {
 
 const STATE_ORDER = { working: 0, booting: 1, stalled: 2, zombie: 3, completed: 4 };
 
+/**
+ * Build a depth-annotated ordered list from a flat agents array.
+ * Agents whose parentAgent is absent or not in the list are roots (depth 0).
+ * Children are placed immediately after their parent, sorted by state.
+ */
+function buildAgentHierarchy(agents) {
+	const agentNames = new Set(agents.map((a) => a.agentName));
+	const byParent = new Map();
+	const roots = [];
+
+	for (const agent of agents) {
+		const parent = agent.parentAgent;
+		if (!parent || !agentNames.has(parent)) {
+			roots.push(agent);
+		} else {
+			if (!byParent.has(parent)) byParent.set(parent, []);
+			byParent.get(parent).push(agent);
+		}
+	}
+
+	function sortByState(arr) {
+		return [...arr].sort((a, b) => {
+			const ao = STATE_ORDER[a.state] ?? 99;
+			const bo = STATE_ORDER[b.state] ?? 99;
+			if (ao !== bo) return ao - bo;
+			return (a.agentName ?? "").localeCompare(b.agentName ?? "");
+		});
+	}
+
+	const result = [];
+	function walk(agent, depth) {
+		result.push({ agent, depth });
+		const children = sortByState(byParent.get(agent.agentName) ?? []);
+		for (const child of children) {
+			walk(child, depth + 1);
+		}
+	}
+	for (const root of sortByState(roots)) {
+		walk(root, 0);
+	}
+	return result;
+}
+
 function AgentRoster({ agents, mail, events }) {
 	const [expandedAgent, setExpandedAgent] = useState(null);
 
-	const sorted = [...agents].sort((a, b) => {
-		const ao = STATE_ORDER[a.state] ?? 99;
-		const bo = STATE_ORDER[b.state] ?? 99;
-		if (ao !== bo) return ao - bo;
-		return (a.agentName ?? "").localeCompare(b.agentName ?? "");
-	});
+	const ordered = buildAgentHierarchy(agents);
 
 	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting").length;
 
@@ -190,13 +223,13 @@ function AgentRoster({ agents, mail, events }) {
 			<!-- Agent list -->
 			<div class="flex-1 overflow-y-auto min-h-0 p-2">
 				${
-					sorted.length === 0
+					ordered.length === 0
 						? html`
 						<div class="flex items-center justify-center h-full text-[#666] text-sm">
 							No agents yet
 						</div>
 					`
-						: sorted.map((agent) => {
+						: ordered.map(({ agent, depth }) => {
 								const isExpanded = expandedAgent === agent.agentName;
 								const colors = agentColor(agent.capability);
 								const icon = stateIcon(agent.state);
@@ -215,6 +248,7 @@ function AgentRoster({ agents, mail, events }) {
 								<div
 									key=${agent.agentName}
 									class="mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden"
+									style=${{ marginLeft: `${depth * 16}px` }}
 								>
 									<!-- Row -->
 									<div
@@ -270,7 +304,7 @@ function AgentRoster({ agents, mail, events }) {
 												<!-- Drill-down link -->
 												<div class="mb-2">
 													<a
-														href=${"#inspect/" + agent.agentName}
+														href=${`#inspect/${agent.agentName}`}
 														class="text-xs text-blue-400 hover:text-blue-300"
 													>
 														View Details
