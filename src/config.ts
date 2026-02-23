@@ -33,6 +33,7 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		enabled: true,
 		domains: [],
 		primeFormat: "markdown",
+		domainMap: {},
 	},
 	merge: {
 		aiResolveEnabled: true,

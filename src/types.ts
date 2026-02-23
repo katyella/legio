@@ -23,6 +23,7 @@ export interface LegioConfig {
 		enabled: boolean;
 		domains: string[]; // Domains to prime (empty = auto-detect)
 		primeFormat: "markdown" | "xml" | "json";
+		domainMap?: Record<string, string[]>; // file glob -> domain names (empty = use DEFAULT_DOMAIN_MAP)
 	};
 	merge: {
 		aiResolveEnabled: boolean;

@@ -29,7 +29,7 @@ import type { BeadIssue } from "../beads/client.ts";
 import { createBeadsClient } from "../beads/client.ts";
 import { loadConfig } from "../config.ts";
 import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
-import { createMulchClient } from "../mulch/client.ts";
+import { createMulchClient, inferDomainsFromFiles } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
@@ -394,12 +394,21 @@ export async function slingCommand(args: string[]): Promise<void> {
 		const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
 		const baseDefinition = await readFile(agentDefPath, "utf-8");
 
-		// 8a. Fetch file-scoped mulch expertise if mulch is enabled and files are provided
+		// 8a. Infer mulch domains from file scope and fetch expertise
+		const customDomainMap = config.mulch.domainMap;
+		const inferredDomains = inferDomainsFromFiles(
+			fileScope,
+			customDomainMap && Object.keys(customDomainMap).length > 0 ? customDomainMap : undefined,
+		);
 		let mulchExpertise: string | undefined;
 		if (config.mulch.enabled && fileScope.length > 0) {
 			try {
 				const mulch = createMulchClient(config.project.root);
-				mulchExpertise = await mulch.prime(undefined, undefined, { files: fileScope });
+				if (inferredDomains.length > 0) {
+					mulchExpertise = await mulch.prime(inferredDomains);
+				} else {
+					mulchExpertise = await mulch.prime(undefined, undefined, { files: fileScope });
+				}
 			} catch {
 				// Non-fatal: mulch expertise is supplementary context
 				mulchExpertise = undefined;
@@ -413,7 +422,11 @@ export async function slingCommand(args: string[]): Promise<void> {
 			branchName,
 			worktreePath,
 			fileScope,
-			mulchDomains: config.mulch.enabled ? config.mulch.domains : [],
+			mulchDomains: config.mulch.enabled
+				? inferredDomains.length > 0
+					? inferredDomains
+					: config.mulch.domains
+				: [],
 			parentAgent: parentAgent,
 			depth,
 			canSpawn: agentDef.canSpawn,
