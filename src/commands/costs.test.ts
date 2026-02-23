@@ -447,7 +447,12 @@ describe("costsCommand", () => {
 				makeMetrics({ agentName: "builder-1", beadId: "task-001", runId: "run-2026-01-01" }),
 			);
 			metricsStore.recordSession(
-				makeMetrics({ agentName: "scout-1", beadId: "task-002", capability: "scout", runId: "run-other" }),
+				makeMetrics({
+					agentName: "scout-1",
+					beadId: "task-002",
+					capability: "scout",
+					runId: "run-other",
+				}),
 			);
 			metricsStore.close();
 
@@ -465,7 +470,9 @@ describe("costsCommand", () => {
 			// Create metrics store with data but no matching run_id
 			const metricsDbPath = join(legioDir, "metrics.db");
 			const metricsStore = createMetricsStore(metricsDbPath);
-			metricsStore.recordSession(makeMetrics({ agentName: "builder-1", beadId: "t1", runId: "run-other" }));
+			metricsStore.recordSession(
+				makeMetrics({ agentName: "builder-1", beadId: "t1", runId: "run-other" }),
+			);
 			metricsStore.close();
 
 			await costsCommand(["--json", "--run", "run-nonexistent"]);

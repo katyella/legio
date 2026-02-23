@@ -271,13 +271,28 @@ describe("getSessionsByRun", () => {
 
 	test("results are ordered by started_at DESC", () => {
 		store.recordSession(
-			makeSession({ agentName: "agent-a", beadId: "task-1", runId: "run-001", startedAt: "2026-01-01T10:00:00Z" }),
+			makeSession({
+				agentName: "agent-a",
+				beadId: "task-1",
+				runId: "run-001",
+				startedAt: "2026-01-01T10:00:00Z",
+			}),
 		);
 		store.recordSession(
-			makeSession({ agentName: "agent-b", beadId: "task-2", runId: "run-001", startedAt: "2026-01-01T12:00:00Z" }),
+			makeSession({
+				agentName: "agent-b",
+				beadId: "task-2",
+				runId: "run-001",
+				startedAt: "2026-01-01T12:00:00Z",
+			}),
 		);
 		store.recordSession(
-			makeSession({ agentName: "agent-c", beadId: "task-3", runId: "run-001", startedAt: "2026-01-01T11:00:00Z" }),
+			makeSession({
+				agentName: "agent-c",
+				beadId: "task-3",
+				runId: "run-001",
+				startedAt: "2026-01-01T11:00:00Z",
+			}),
 		);
 
 		const results = store.getSessionsByRun("run-001");
