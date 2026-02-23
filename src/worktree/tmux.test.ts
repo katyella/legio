@@ -774,18 +774,35 @@ describe("sendKeys", () => {
 
 		await sendKeys("legio-auth", "echo hello world");
 
-		expect(mockSpawn).toHaveBeenCalledTimes(1);
-		const callArgs = mockSpawn.mock.calls[0] as unknown[];
-		const command = callArgs[0] as string;
-		const args = callArgs[1] as string[];
-		expect([command, ...args]).toEqual([
+		// Two calls: text with -l flag, then Enter separately
+		expect(mockSpawn).toHaveBeenCalledTimes(2);
+		const call1 = mockSpawn.mock.calls[0] as unknown[];
+		expect([call1[0] as string, ...(call1[1] as string[])]).toEqual([
 			"tmux",
 			"send-keys",
 			"-t",
 			"legio-auth",
+			"-l",
 			"echo hello world",
+		]);
+		const call2 = mockSpawn.mock.calls[1] as unknown[];
+		expect([call2[0] as string, ...(call2[1] as string[])]).toEqual([
+			"tmux",
+			"send-keys",
+			"-t",
+			"legio-auth",
 			"Enter",
 		]);
+	});
+
+	test("sends text with -l literal flag", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+
+		await sendKeys("legio-auth", "hello");
+
+		const call1 = mockSpawn.mock.calls[0] as unknown[];
+		const args = call1[1] as string[];
+		expect(args).toContain("-l");
 	});
 
 	test("flattens newlines in keys to spaces", async () => {
@@ -793,16 +810,40 @@ describe("sendKeys", () => {
 
 		await sendKeys("legio-agent", "line1\nline2\nline3");
 
-		expect(mockSpawn).toHaveBeenCalledTimes(1);
-		const callArgs = mockSpawn.mock.calls[0] as unknown[];
-		const command = callArgs[0] as string;
-		const args = callArgs[1] as string[];
-		expect([command, ...args]).toEqual([
+		// Two calls: text with -l flag (newlines flattened), then Enter
+		expect(mockSpawn).toHaveBeenCalledTimes(2);
+		const call1 = mockSpawn.mock.calls[0] as unknown[];
+		expect([call1[0] as string, ...(call1[1] as string[])]).toEqual([
 			"tmux",
 			"send-keys",
 			"-t",
 			"legio-agent",
+			"-l",
 			"line1 line2 line3",
+		]);
+		const call2 = mockSpawn.mock.calls[1] as unknown[];
+		expect([call2[0] as string, ...(call2[1] as string[])]).toEqual([
+			"tmux",
+			"send-keys",
+			"-t",
+			"legio-agent",
+			"Enter",
+		]);
+	});
+
+	test("sends Enter with empty string (follow-up submission)", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+
+		await sendKeys("legio-agent", "");
+
+		// Only one call: just Enter, no text step for empty string
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		expect([callArgs[0] as string, ...(callArgs[1] as string[])]).toEqual([
+			"tmux",
+			"send-keys",
+			"-t",
+			"legio-agent",
 			"Enter",
 		]);
 	});
@@ -811,6 +852,23 @@ describe("sendKeys", () => {
 		mockSpawn.mockImplementation(() => createMockProcess("", "session not found: dead-agent", 1));
 
 		await expect(sendKeys("dead-agent", "echo test")).rejects.toThrow(AgentError);
+	});
+
+	test("fails on text step error and does not proceed to Enter", async () => {
+		let callCount = 0;
+		mockSpawn.mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				// Text step fails
+				return createMockProcess("", "session not found: my-agent", 1);
+			}
+			// Enter step should NOT be reached
+			return createMockProcess("", "", 0);
+		});
+
+		await expect(sendKeys("my-agent", "some text")).rejects.toThrow(AgentError);
+		// Only the text step was called; Enter step was skipped
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
 	});
 
 	test("AgentError contains session name on failure", async () => {
@@ -868,16 +926,20 @@ describe("sendKeys", () => {
 		}
 	});
 
-	test("sends Enter with empty string (follow-up submission)", async () => {
-		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+	test("throws AgentError when Enter step fails", async () => {
+		let callCount = 0;
+		mockSpawn.mockImplementation(() => {
+			callCount++;
+			if (callCount === 1) {
+				// Text step succeeds
+				return createMockProcess("", "", 0);
+			}
+			// Enter step fails
+			return createMockProcess("", "session not found: some-agent", 1);
+		});
 
-		await sendKeys("legio-agent", "");
-
-		expect(mockSpawn).toHaveBeenCalledTimes(1);
-		const callArgs = mockSpawn.mock.calls[0] as unknown[];
-		const command = callArgs[0] as string;
-		const args = callArgs[1] as string[];
-		expect([command, ...args]).toEqual(["tmux", "send-keys", "-t", "legio-agent", "", "Enter"]);
+		await expect(sendKeys("some-agent", "hello")).rejects.toThrow(AgentError);
+		expect(mockSpawn).toHaveBeenCalledTimes(2);
 	});
 });
 

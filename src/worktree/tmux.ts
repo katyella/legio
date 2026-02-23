@@ -426,7 +426,33 @@ export async function isSessionAlive(name: string): Promise<boolean> {
 }
 
 /**
+ * Throw a typed AgentError for send-keys failures, differentiating known tmux errors.
+ */
+function throwSendKeysError(name: string, stderr: string): never {
+	if (stderr.includes("no server running")) {
+		throw new AgentError(`Tmux server not running — cannot send keys to session "${name}"`, {
+			agentName: name,
+		});
+	}
+	if (stderr.includes("session not found") || stderr.includes("can't find session")) {
+		throw new AgentError(`Session "${name}" not found — cannot send keys`, { agentName: name });
+	}
+	throw new AgentError(`Failed to send keys to tmux session "${name}": ${stderr.trim()}`, {
+		agentName: name,
+	});
+}
+
+/**
  * Send keys to a tmux session.
+ *
+ * Uses two separate tmux calls: first sends text with the `-l` (literal) flag
+ * so tmux treats the content as literal characters rather than key names, then
+ * sends Enter separately to trigger submission. This prevents tmux from
+ * interpreting key names embedded in the text (e.g. "Enter", "Escape") and
+ * ensures the TUI has received the full text before the submit signal arrives.
+ *
+ * When `keys` is empty (follow-up submission), skips the text step and only
+ * sends Enter.
  *
  * @param name - Session name to send keys to
  * @param keys - The keys/text to send
@@ -437,28 +463,21 @@ export async function sendKeys(name: string, keys: string): Promise<void> {
 	// Claude Code's TUI to receive embedded Enter keystrokes which prevent
 	// the final "Enter" from triggering message submission (legio-y2ob).
 	const flatKeys = keys.replace(/\n/g, " ");
-	const { exitCode, stderr } = await runCommand([
-		"tmux",
-		"send-keys",
-		"-t",
-		name,
-		flatKeys,
-		"Enter",
-	]);
 
-	if (exitCode !== 0) {
-		// Differentiate failure reasons so callers can handle them appropriately.
-		if (stderr.includes("no server running")) {
-			throw new AgentError(`Tmux server not running — cannot send keys to session "${name}"`, {
-				agentName: name,
-			});
+	// Step 1: Send text with -l (literal) flag so tmux treats it as literal
+	// characters, not key names. Skip this step for empty strings (follow-up
+	// submissions that only need Enter).
+	if (flatKeys.length > 0) {
+		const textResult = await runCommand(["tmux", "send-keys", "-t", name, "-l", flatKeys]);
+		if (textResult.exitCode !== 0) {
+			throwSendKeysError(name, textResult.stderr);
 		}
-		if (stderr.includes("session not found") || stderr.includes("can't find session")) {
-			throw new AgentError(`Session "${name}" not found — cannot send keys`, { agentName: name });
-		}
-		throw new AgentError(`Failed to send keys to tmux session "${name}": ${stderr.trim()}`, {
-			agentName: name,
-		});
+	}
+
+	// Step 2: Send Enter separately to trigger submission.
+	const enterResult = await runCommand(["tmux", "send-keys", "-t", name, "Enter"]);
+	if (enterResult.exitCode !== 0) {
+		throwSendKeysError(name, enterResult.stderr);
 	}
 }
 
