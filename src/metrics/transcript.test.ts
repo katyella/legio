@@ -260,7 +260,7 @@ describe("parseTranscriptUsage", () => {
 // === estimateCost ===
 
 describe("estimateCost", () => {
-	test("calculates cost for opus model", () => {
+	test("calculates cost for opus 4.6 model (new pricing)", () => {
 		const cost = estimateCost({
 			inputTokens: 1_000_000,
 			outputTokens: 1_000_000,
@@ -269,7 +269,46 @@ describe("estimateCost", () => {
 			modelUsed: "claude-opus-4-6",
 		});
 
-		// opus: input=$15, output=$75, cacheRead=$1.50, cacheCreation=$3.75
+		// opus 4.5+: input=$5, output=$25, cacheRead=$0.50, cacheCreation=$1.25
+		expect(cost).toBeCloseTo(31.75, 2);
+	});
+
+	test("calculates cost for opus 4.5 model (new pricing)", () => {
+		const cost = estimateCost({
+			inputTokens: 1_000_000,
+			outputTokens: 1_000_000,
+			cacheReadTokens: 1_000_000,
+			cacheCreationTokens: 1_000_000,
+			modelUsed: "claude-opus-4-5",
+		});
+
+		// opus 4.5+: input=$5, output=$25, cacheRead=$0.50, cacheCreation=$1.25
+		expect(cost).toBeCloseTo(31.75, 2);
+	});
+
+	test("calculates cost for opus 4 model (legacy pricing)", () => {
+		const cost = estimateCost({
+			inputTokens: 1_000_000,
+			outputTokens: 1_000_000,
+			cacheReadTokens: 1_000_000,
+			cacheCreationTokens: 1_000_000,
+			modelUsed: "claude-opus-4",
+		});
+
+		// opus legacy: input=$15, output=$75, cacheRead=$1.50, cacheCreation=$3.75
+		expect(cost).toBeCloseTo(95.25, 2);
+	});
+
+	test("calculates cost for opus 4.1 model (legacy pricing)", () => {
+		const cost = estimateCost({
+			inputTokens: 1_000_000,
+			outputTokens: 1_000_000,
+			cacheReadTokens: 1_000_000,
+			cacheCreationTokens: 1_000_000,
+			modelUsed: "claude-opus-4-1",
+		});
+
+		// opus legacy: input=$15, output=$75, cacheRead=$1.50, cacheCreation=$3.75
 		expect(cost).toBeCloseTo(95.25, 2);
 	});
 
@@ -286,7 +325,7 @@ describe("estimateCost", () => {
 		expect(cost).toBeCloseTo(19.05, 2);
 	});
 
-	test("calculates cost for haiku model", () => {
+	test("calculates cost for haiku 3.5 model (legacy pricing)", () => {
 		const cost = estimateCost({
 			inputTokens: 1_000_000,
 			outputTokens: 1_000_000,
@@ -295,8 +334,21 @@ describe("estimateCost", () => {
 			modelUsed: "claude-haiku-3-5-20241022",
 		});
 
-		// haiku: input=$0.80, output=$4, cacheRead=$0.08, cacheCreation=$0.20
+		// haiku legacy: input=$0.80, output=$4, cacheRead=$0.08, cacheCreation=$0.20
 		expect(cost).toBeCloseTo(5.08, 2);
+	});
+
+	test("calculates cost for haiku 4.5 model (new pricing)", () => {
+		const cost = estimateCost({
+			inputTokens: 1_000_000,
+			outputTokens: 1_000_000,
+			cacheReadTokens: 1_000_000,
+			cacheCreationTokens: 1_000_000,
+			modelUsed: "claude-haiku-4-5-20251001",
+		});
+
+		// haiku 4.5+: input=$1, output=$5, cacheRead=$0.10, cacheCreation=$0.25
+		expect(cost).toBeCloseTo(6.35, 2);
 	});
 
 	test("returns null for unknown model", () => {

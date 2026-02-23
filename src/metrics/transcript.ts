@@ -45,11 +45,19 @@ interface ModelPricing {
 
 /** Hardcoded pricing for known Claude models. */
 const MODEL_PRICING: Record<string, ModelPricing> = {
-	opus: {
+	// Opus 4 / 4.1 — legacy pricing
+	"opus-legacy": {
 		inputPerMTok: 15,
 		outputPerMTok: 75,
 		cacheReadPerMTok: 1.5, // 10% of input
 		cacheCreationPerMTok: 3.75, // 25% of input
+	},
+	// Opus 4.5+ (claude-opus-4-5, claude-opus-4-6, ...) — reduced pricing
+	"opus-new": {
+		inputPerMTok: 5,
+		outputPerMTok: 25,
+		cacheReadPerMTok: 0.5, // 10% of input
+		cacheCreationPerMTok: 1.25, // 25% of input
 	},
 	sonnet: {
 		inputPerMTok: 3,
@@ -57,24 +65,61 @@ const MODEL_PRICING: Record<string, ModelPricing> = {
 		cacheReadPerMTok: 0.3, // 10% of input
 		cacheCreationPerMTok: 0.75, // 25% of input
 	},
-	haiku: {
+	// Haiku 3.x / 4.0-4.4 — legacy pricing
+	"haiku-legacy": {
 		inputPerMTok: 0.8,
 		outputPerMTok: 4,
 		cacheReadPerMTok: 0.08, // 10% of input
 		cacheCreationPerMTok: 0.2, // 25% of input
 	},
+	// Haiku 4.5+ (claude-haiku-4-5-20251001, ...) — updated pricing
+	"haiku-new": {
+		inputPerMTok: 1,
+		outputPerMTok: 5,
+		cacheReadPerMTok: 0.1, // 10% of input
+		cacheCreationPerMTok: 0.25, // 25% of input
+	},
 };
 
 /**
  * Determine the pricing tier for a given model string.
- * Matches on substring: "opus" -> opus pricing, "sonnet" -> sonnet, "haiku" -> haiku.
+ * Parses the major.minor version suffix (e.g. "opus-4-6") to select the right tier:
+ * - Opus 4.5+ -> opus-new ($5/$25), Opus < 4.5 -> opus-legacy ($15/$75)
+ * - Haiku 4.5+ -> haiku-new ($1/$5), Haiku < 4.5 -> haiku-legacy ($0.80/$4)
+ * - Sonnet -> sonnet ($3/$15)
  * Returns null if unrecognized.
  */
 function getPricingForModel(model: string): ModelPricing | null {
 	const lower = model.toLowerCase();
-	if (lower.includes("opus")) return MODEL_PRICING.opus ?? null;
+
+	if (lower.includes("opus")) {
+		// Detect major.minor version from pattern like "opus-4-6" or "opus-4-5"
+		const m = lower.match(/opus-(\d+)-(\d+)/);
+		if (m && m[1] !== undefined && m[2] !== undefined) {
+			const major = parseInt(m[1], 10);
+			const minor = parseInt(m[2], 10);
+			if (major > 4 || (major === 4 && minor >= 5)) {
+				return MODEL_PRICING["opus-new"] ?? null;
+			}
+		}
+		return MODEL_PRICING["opus-legacy"] ?? null;
+	}
+
 	if (lower.includes("sonnet")) return MODEL_PRICING.sonnet ?? null;
-	if (lower.includes("haiku")) return MODEL_PRICING.haiku ?? null;
+
+	if (lower.includes("haiku")) {
+		// Detect major.minor version from pattern like "haiku-4-5" or "haiku-3-5"
+		const m = lower.match(/haiku-(\d+)-(\d+)/);
+		if (m && m[1] !== undefined && m[2] !== undefined) {
+			const major = parseInt(m[1], 10);
+			const minor = parseInt(m[2], 10);
+			if (major > 4 || (major === 4 && minor >= 5)) {
+				return MODEL_PRICING["haiku-new"] ?? null;
+			}
+		}
+		return MODEL_PRICING["haiku-legacy"] ?? null;
+	}
+
 	return null;
 }
 
