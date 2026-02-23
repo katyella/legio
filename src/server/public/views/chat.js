@@ -169,7 +169,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		setToVal(selectedAgent || "");
 	}, [selectedAgent, selectedConversation]);
 
-	// Fetch conversation history when selectedConversation changes
+	// Fetch conversation history when selectedConversation changes, then poll every 3s
 	useEffect(() => {
 		if (!selectedConversation) {
 			setConversationHistory([]);
@@ -190,14 +190,20 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 		if (!url) return;
 
-		fetchJson(url)
-			.then((data) => {
-				setConversationHistory(Array.isArray(data) ? data : (data.messages || []));
-			})
-			.catch(() => {
-				// Gracefully handle 404s since backend may not be deployed yet
-				setConversationHistory([]);
-			});
+		const fetchHistory = () => {
+			fetchJson(url)
+				.then((data) => {
+					setConversationHistory(Array.isArray(data) ? data : (data.messages || []));
+				})
+				.catch(() => {
+					// Gracefully handle 404s since backend may not be deployed yet
+					setConversationHistory([]);
+				});
+		};
+
+		fetchHistory();
+		const intervalId = setInterval(fetchHistory, 3000);
+		return () => clearInterval(intervalId);
 	}, [selectedConversation]);
 
 	// Smart scroll: after every render, scroll to bottom only if near bottom
