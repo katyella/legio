@@ -5,6 +5,7 @@ import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AgentError } from "../errors.ts";
 import {
+	capturePaneContent,
 	createSession,
 	getDescendantPids,
 	getPanePid,
@@ -14,6 +15,7 @@ import {
 	killSession,
 	listSessions,
 	sendKeys,
+	waitForTuiReady,
 } from "./tmux.ts";
 
 /**
@@ -825,6 +827,51 @@ describe("sendKeys", () => {
 		}
 	});
 
+	test("error message says 'server not running' when tmux has no server", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "no server running on /tmp/tmux-501/default", 1),
+		);
+
+		try {
+			await sendKeys("dead-agent", "echo test");
+			expect(true).toBe(false);
+		} catch (err: unknown) {
+			expect(err).toBeInstanceOf(AgentError);
+			const agentErr = err as AgentError;
+			expect(agentErr.message).toContain("Tmux server not running");
+		}
+	});
+
+	test("error message says 'not found' when session does not exist", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "session not found: dead-agent", 1),
+		);
+
+		try {
+			await sendKeys("dead-agent", "echo test");
+			expect(true).toBe(false);
+		} catch (err: unknown) {
+			expect(err).toBeInstanceOf(AgentError);
+			const agentErr = err as AgentError;
+			expect(agentErr.message).toContain("not found");
+		}
+	});
+
+	test("error message includes stderr for unrecognized tmux errors", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "unexpected tmux protocol error", 1),
+		);
+
+		try {
+			await sendKeys("agent", "echo test");
+			expect(true).toBe(false);
+		} catch (err: unknown) {
+			expect(err).toBeInstanceOf(AgentError);
+			const agentErr = err as AgentError;
+			expect(agentErr.message).toContain("unexpected tmux protocol error");
+		}
+	});
+
 	test("sends Enter with empty string (follow-up submission)", async () => {
 		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
@@ -835,5 +882,99 @@ describe("sendKeys", () => {
 		const command = callArgs[0] as string;
 		const args = callArgs[1] as string[];
 		expect([command, ...args]).toEqual(["tmux", "send-keys", "-t", "legio-agent", "", "Enter"]);
+	});
+});
+
+describe("capturePaneContent", () => {
+	beforeEach(() => {
+		mockSpawn.mockReset();
+	});
+
+	test("returns pane content on success", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("> type your message\n", "", 0));
+
+		const content = await capturePaneContent("legio-auth");
+
+		expect(content).toBe("> type your message\n");
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "capture-pane", "-t", "legio-auth", "-p"]);
+	});
+
+	test("returns empty string when session does not exist", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "can't find session: gone", 1),
+		);
+
+		const content = await capturePaneContent("gone");
+
+		expect(content).toBe("");
+	});
+
+	test("returns empty string when capture-pane fails", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "no server running", 1),
+		);
+
+		const content = await capturePaneContent("any-session");
+
+		expect(content).toBe("");
+	});
+});
+
+describe("waitForTuiReady", () => {
+	beforeEach(() => {
+		mockSpawn.mockReset();
+	});
+
+	test("resolves immediately when pane already has content", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("> ready\n", "", 0));
+
+		await waitForTuiReady("legio-agent");
+
+		// Should call capture-pane once and return without timeout
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "capture-pane", "-t", "legio-agent", "-p"]);
+	});
+
+	test("polls until pane content appears", async () => {
+		let callCount = 0;
+		mockSpawn.mockImplementation(() => {
+			callCount++;
+			if (callCount <= 2) {
+				// First two polls: empty pane
+				return createMockProcess("", "", 0);
+			}
+			// Third poll: content appeared
+			return createMockProcess("> ready for input\n", "", 0);
+		});
+
+		await waitForTuiReady("legio-agent", { timeout: 5_000, interval: 10 });
+
+		// Should have polled 3 times
+		expect(mockSpawn).toHaveBeenCalledTimes(3);
+	});
+
+	test("resolves without throwing when timeout expires with empty pane", async () => {
+		// Always return empty content
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+
+		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+		// Short timeout so test is fast
+		await expect(
+			waitForTuiReady("legio-agent", { timeout: 100, interval: 10 }),
+		).resolves.toBeUndefined();
+
+		// Should emit a warning on timeout
+		expect(stderrSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Warning"),
+		);
+
+		stderrSpy.mockRestore();
 	});
 });

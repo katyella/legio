@@ -447,8 +447,69 @@ export async function sendKeys(name: string, keys: string): Promise<void> {
 	]);
 
 	if (exitCode !== 0) {
+		// Differentiate failure reasons so callers can handle them appropriately.
+		if (stderr.includes("no server running")) {
+			throw new AgentError(
+				`Tmux server not running — cannot send keys to session "${name}"`,
+				{ agentName: name },
+			);
+		}
+		if (stderr.includes("session not found") || stderr.includes("can't find session")) {
+			throw new AgentError(
+				`Session "${name}" not found — cannot send keys`,
+				{ agentName: name },
+			);
+		}
 		throw new AgentError(`Failed to send keys to tmux session "${name}": ${stderr.trim()}`, {
 			agentName: name,
 		});
 	}
+}
+
+/**
+ * Capture the current visible content of a tmux pane.
+ *
+ * @param name - Session name to capture from
+ * @returns The current pane content, or empty string if the session does not exist or capture fails
+ */
+export async function capturePaneContent(name: string): Promise<string> {
+	const { exitCode, stdout } = await runCommand(["tmux", "capture-pane", "-t", name, "-p"]);
+	if (exitCode !== 0) {
+		return "";
+	}
+	return stdout;
+}
+
+/**
+ * Poll a tmux pane until Claude Code's TUI has rendered content, indicating
+ * it is ready to accept input.
+ *
+ * Replaces fixed-duration sleeps with an adaptive wait that fires as soon as
+ * the pane has content, bounded by a configurable timeout. If the timeout
+ * expires before content appears, a warning is emitted to stderr and the
+ * function resolves normally (graceful fallback — the caller proceeds anyway).
+ *
+ * @param sessionName - Tmux session name to poll
+ * @param opts.timeout - Maximum time to wait in ms (default: 15_000)
+ * @param opts.interval - Polling interval in ms (default: 500)
+ */
+export async function waitForTuiReady(
+	sessionName: string,
+	opts?: { timeout?: number; interval?: number },
+): Promise<void> {
+	const timeoutMs = opts?.timeout ?? 15_000;
+	const intervalMs = opts?.interval ?? 500;
+	const deadline = Date.now() + timeoutMs;
+
+	while (Date.now() < deadline) {
+		const content = await capturePaneContent(sessionName);
+		if (content.trim().length > 0) {
+			return;
+		}
+		await setTimeout(intervalMs);
+	}
+
+	process.stderr.write(
+		`⚠️  Warning: TUI for session "${sessionName}" did not become ready within ${timeoutMs}ms — proceeding anyway\n`,
+	);
 }

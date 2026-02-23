@@ -25,7 +25,13 @@ import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import type { AgentSession, HeadlessCoordinatorConfig } from "../types.ts";
 import { isProcessRunning } from "../watchdog/health.ts";
-import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
+import {
+	createSession,
+	isSessionAlive,
+	killSession,
+	sendKeys,
+	waitForTuiReady,
+} from "../worktree/tmux.ts";
 
 /** Default coordinator agent name. */
 const COORDINATOR_NAME = "coordinator";
@@ -102,6 +108,10 @@ export interface CoordinatorDeps {
 		isSessionAlive: (name: string) => Promise<boolean>;
 		killSession: (name: string) => Promise<void>;
 		sendKeys: (name: string, keys: string) => Promise<void>;
+		waitForTuiReady?: (
+			sessionName: string,
+			opts?: { timeout?: number; interval?: number },
+		) => Promise<void>;
 	};
 	_watchdog?: {
 		start: () => Promise<{ pid: number } | null>;
@@ -301,7 +311,13 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
 }
 
 async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Promise<void> {
-	const tmux = deps._tmux ?? { createSession, isSessionAlive, killSession, sendKeys };
+	const tmux = deps._tmux ?? {
+		createSession,
+		isSessionAlive,
+		killSession,
+		sendKeys,
+		waitForTuiReady,
+	};
 	const sleep =
 		deps._sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
@@ -507,8 +523,13 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 
 		store.upsert(session);
 
-		// Send beacon after TUI initialization delay
-		await sleep(3_000);
+		// Wait for Claude Code's TUI to render before sending beacon.
+		// Falls back to sleep(3_000) when waitForTuiReady is not in the DI mock.
+		if (tmux.waitForTuiReady) {
+			await tmux.waitForTuiReady(tmuxSession);
+		} else {
+			await sleep(3_000);
+		}
 		const beacon = buildCoordinatorBeacon();
 		await tmux.sendKeys(tmuxSession, beacon);
 
