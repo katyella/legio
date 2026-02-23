@@ -330,6 +330,15 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 	const [modelData, setModelData] = useState([]);
 	const [dateData, setDateData] = useState([]);
 	const [loading, setLoading] = useState(false);
+	const [agentExpanded, setAgentExpanded] = useState(() => {
+		const names = new Set(
+			(Array.isArray(initialMetrics) ? initialMetrics : []).map((m) => m.agentName || "unknown"),
+		);
+		return names.size <= 5;
+	});
+	const [detailExpanded, setDetailExpanded] = useState(
+		() => !initialMetrics || initialMetrics.length < 10,
+	);
 
 	const onToggleGroup = useCallback(() => setGroupByCapability((v) => !v), []);
 
@@ -472,6 +481,10 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 	// Determine if capability chart should show
 	const uniqueCaps = new Set(safeMetrics.map((m) => m.capability || "unknown"));
+	const agentCount = useMemo(
+		() => new Set(safeMetrics.map((m) => m.agentName || "unknown")).size,
+		[safeMetrics],
+	);
 
 	return html`
 		<div class="flex flex-col gap-6 p-6">
@@ -533,8 +546,17 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 			<!-- Cost by Agent Bar Chart -->
 			<div class="bg-surface border border-border rounded-sm p-4">
-				<div class="text-gray-500 uppercase text-xs tracking-wider mb-4">Cost by Agent</div>
-				<${AgentBarChart} metrics=${safeMetrics} />
+				<div
+					class="flex items-center justify-between cursor-pointer"
+					onClick=${() => setAgentExpanded((v) => !v)}
+				>
+					<div class="text-gray-500 uppercase text-xs tracking-wider">Cost by Agent</div>
+					<span class="text-gray-500 text-sm">${agentExpanded ? "▾" : "▸"}</span>
+				</div>
+				${agentExpanded
+					? html`<div class="mt-4"><${AgentBarChart} metrics=${safeMetrics} /></div>`
+					: html`<div class="text-sm text-gray-500 mt-2">${agentCount} agent${agentCount === 1 ? "" : "s"} — ${totals.cost != null ? formatCostShort(totals.cost) : "—"} total</div>`
+				}
 			</div>
 
 			<!-- Date Chart (show when data available) -->
@@ -569,51 +591,65 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 			<!-- Detailed Costs Table -->
 			<div class="bg-surface border border-border rounded-sm p-4">
-				<div class="flex items-center gap-3 mb-4">
-					<div class="text-gray-500 uppercase text-xs tracking-wider">Detailed Breakdown</div>
-					<button
-						class=${
-							"text-sm px-3 py-1.5 rounded-sm border border-border ml-auto " +
-							(groupByCapability
-								? "bg-white/10 text-gray-200"
-								: "bg-surface text-gray-400 hover:text-gray-200")
-						}
-						onClick=${onToggleGroup}
+				<div class=${"flex items-center gap-3 " + (detailExpanded ? "mb-4" : "")}>
+					<div
+						class="flex items-center gap-2 cursor-pointer"
+						onClick=${() => setDetailExpanded((v) => !v)}
 					>
-						${groupByCapability ? "Ungroup" : "Group by Capability"}
-					</button>
+						<span class="text-gray-500 uppercase text-xs tracking-wider">Detailed Breakdown</span>
+						<span class="text-gray-500 text-sm">${detailExpanded ? "▾" : "▸"}</span>
+					</div>
+					${detailExpanded
+						? html`
+							<button
+								class=${
+									"text-sm px-3 py-1.5 rounded-sm border border-border ml-auto " +
+									(groupByCapability
+										? "bg-white/10 text-gray-200"
+										: "bg-surface text-gray-400 hover:text-gray-200")
+								}
+								onClick=${onToggleGroup}
+							>
+								${groupByCapability ? "Ungroup" : "Group by Capability"}
+							</button>
+						`
+						: null}
 				</div>
 
-				<div class="overflow-x-auto">
-					<table class="w-full text-sm border-collapse">
-						<thead>
-							<tr class="border-b border-border">
-								<th class=${thClass}>Agent</th>
-								<th class=${thClass}>Capability</th>
-								<th class=${thClass}>Input Tokens</th>
-								<th class=${thClass}>Output Tokens</th>
-								<th class=${thClass}>Cache Read</th>
-								<th class=${thClass}>Cache Created</th>
-								<th class=${thClass}>Est. Cost</th>
-							</tr>
-						</thead>
-						<tbody>
-							<${TableBody} />
-						</tbody>
-						<tfoot class="border-t border-border">
-							<tr class="text-gray-300 font-medium">
-								<td class=${`border-b-0 ${tdClass}`} colspan="2">Total</td>
-								<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.input)}</td>
-								<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.output)}</td>
-								<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.cacheRead)}</td>
-								<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.cacheCreated)}</td>
-								<td class=${`border-b-0 ${tdMono}`}>
-									${totals.cost != null ? formatCost(totals.cost) : "—"}
-								</td>
-							</tr>
-						</tfoot>
-					</table>
-				</div>
+				${detailExpanded
+					? html`
+						<div class="overflow-x-auto">
+							<table class="w-full text-sm border-collapse">
+								<thead>
+									<tr class="border-b border-border">
+										<th class=${thClass}>Agent</th>
+										<th class=${thClass}>Capability</th>
+										<th class=${thClass}>Input Tokens</th>
+										<th class=${thClass}>Output Tokens</th>
+										<th class=${thClass}>Cache Read</th>
+										<th class=${thClass}>Cache Created</th>
+										<th class=${thClass}>Est. Cost</th>
+									</tr>
+								</thead>
+								<tbody>
+									<${TableBody} />
+								</tbody>
+								<tfoot class="border-t border-border">
+									<tr class="text-gray-300 font-medium">
+										<td class=${`border-b-0 ${tdClass}`} colspan="2">Total</td>
+										<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.input)}</td>
+										<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.output)}</td>
+										<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.cacheRead)}</td>
+										<td class=${`border-b-0 ${tdMono}`}>${formatNumber(totals.cacheCreated)}</td>
+										<td class=${`border-b-0 ${tdMono}`}>
+											${totals.cost != null ? formatCost(totals.cost) : "—"}
+										</td>
+									</tr>
+								</tfoot>
+							</table>
+						</div>
+					`
+					: null}
 			</div>
 
 			<!-- Live Snapshots (only when data exists) -->
