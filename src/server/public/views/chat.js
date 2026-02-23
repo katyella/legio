@@ -1,6 +1,7 @@
 // Legio Web UI — ChatView component
 // Preact+HTM component providing the full chat interface:
 //   - Task-based sidebar grouping conversations by beads issue
+//   - Conversations section for direct agent/coordinator/gateway chat
 //   - Message feed with thread grouping + smart scroll
 //   - Chat input with POST /api/mail/send integration
 // No npm dependencies — uses CDN imports. Served as a static ES module.
@@ -15,6 +16,7 @@ import {
 	useRef,
 	useState,
 } from "../lib/preact-setup.js";
+import { fetchJson, postJson } from "../lib/api.js";
 import { agentColor, inferCapability, isActivityMessage, timeAgo } from "../lib/utils.js";
 
 // Issue status icon colors
@@ -141,6 +143,12 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const [expandedTasks, setExpandedTasks] = useState(() => new Set());
 	const [collapsedThreads, setCollapsedThreads] = useState(() => new Set());
 
+	// Conversation state — direct chat with coordinator/gateway/agents
+	// null | { type: 'coordinator' | 'gateway' | 'agent', name: string, label: string, capability?: string, state?: string }
+	const [selectedConversation, setSelectedConversation] = useState(null);
+	const [conversationHistory, setConversationHistory] = useState([]);
+	const [pendingConvMessages, setPendingConvMessages] = useState([]);
+
 	// Chat/All mode toggle
 	const [chatMode, setChatMode] = useState("chat");
 
@@ -155,10 +163,42 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	// Track whether user is near the bottom of the feed
 	const isNearBottomRef = useRef(true);
 
-	// Keep "To" field pre-filled with selected agent
+	// Keep "To" field pre-filled with selected agent (only when no conversation selected)
 	useEffect(() => {
+		if (selectedConversation) return;
 		setToVal(selectedAgent || "");
-	}, [selectedAgent]);
+	}, [selectedAgent, selectedConversation]);
+
+	// Fetch conversation history when selectedConversation changes
+	useEffect(() => {
+		if (!selectedConversation) {
+			setConversationHistory([]);
+			setPendingConvMessages([]);
+			return;
+		}
+
+		setPendingConvMessages([]);
+		setConversationHistory([]);
+
+		let url = null;
+		if (selectedConversation.type === "coordinator") {
+			url = "/api/coordinator/chat/history?limit=100";
+		} else if (selectedConversation.type === "agent") {
+			url = `/api/agents/${selectedConversation.name}/chat/history`;
+		}
+		// gateway has no history endpoint
+
+		if (!url) return;
+
+		fetchJson(url)
+			.then((data) => {
+				setConversationHistory(Array.isArray(data) ? data : (data.messages || []));
+			})
+			.catch(() => {
+				// Gracefully handle 404s since backend may not be deployed yet
+				setConversationHistory([]);
+			});
+	}, [selectedConversation]);
 
 	// Smart scroll: after every render, scroll to bottom only if near bottom
 	useLayoutEffect(() => {
@@ -196,47 +236,89 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		return { msgCount, unreadCount };
 	}, [mail, agentTaskMap]);
 
+	// Conversation entries for sidebar (memoized)
+	// Always shows Coordinator and Gateway; adds all active agents
+	const conversationEntries = useMemo(() => {
+		const entries = [
+			{ type: "coordinator", name: "coordinator", label: "Coordinator" },
+			{ type: "gateway", name: "gateway", label: "Gateway" },
+		];
+		for (const agent of agents) {
+			if (agent.agentName === "coordinator" || agent.agentName === "gateway") continue;
+			entries.push({
+				type: "agent",
+				name: agent.agentName,
+				label: agent.agentName,
+				capability: agent.capability,
+				state: agent.state,
+			});
+		}
+		return entries;
+	}, [agents]);
+
 	// ----- Message filtering and thread grouping -----
 
-	let filteredMessages = [...mail];
+	let filteredMessages;
 
-	if (selectedAgent) {
-		// Filter to just this agent's messages
-		filteredMessages = filteredMessages.filter(
-			(m) => m.from === selectedAgent || m.to === selectedAgent,
-		);
-	} else if (selectedTask === "__general__") {
-		// Show messages where neither from nor to has a beadId
-		filteredMessages = filteredMessages.filter(
-			(m) => !agentTaskMap.has(m.from) && !agentTaskMap.has(m.to),
-		);
-	} else if (selectedTask) {
-		// Show messages for this task's agents
-		const group = taskGroups.get(selectedTask);
-		if (group) {
-			const agentNames = group.agentNames;
+	if (selectedConversation) {
+		// Merge conversation history + relevant mail + pending optimistic messages
+		const target = selectedConversation.name;
+		const convMail = mail.filter((m) => {
+			const isRelevant = m.from === target || m.to === target;
+			const isHuman = !m.audience || m.audience === "human" || m.audience === "both";
+			return isRelevant && isHuman;
+		});
+
+		// Deduplicate by id, sort chronologically
+		const seenIds = new Set();
+		const merged = [];
+		for (const m of [...conversationHistory, ...convMail, ...pendingConvMessages]) {
+			if (m.id && seenIds.has(m.id)) continue;
+			if (m.id) seenIds.add(m.id);
+			merged.push(m);
+		}
+		filteredMessages = merged;
+	} else {
+		filteredMessages = [...mail];
+
+		if (selectedAgent) {
+			// Filter to just this agent's messages
 			filteredMessages = filteredMessages.filter(
-				(m) => agentNames.has(m.from) || agentNames.has(m.to),
+				(m) => m.from === selectedAgent || m.to === selectedAgent,
 			);
-		} else {
-			filteredMessages = [];
+		} else if (selectedTask === "__general__") {
+			// Show messages where neither from nor to has a beadId
+			filteredMessages = filteredMessages.filter(
+				(m) => !agentTaskMap.has(m.from) && !agentTaskMap.has(m.to),
+			);
+		} else if (selectedTask) {
+			// Show messages for this task's agents
+			const group = taskGroups.get(selectedTask);
+			if (group) {
+				const agentNames = group.agentNames;
+				filteredMessages = filteredMessages.filter(
+					(m) => agentNames.has(m.from) || agentNames.has(m.to),
+				);
+			} else {
+				filteredMessages = [];
+			}
+		}
+
+		// In chat mode, hide protocol/activity messages (only for non-conversation views)
+		if (chatMode === "chat") {
+			filteredMessages = filteredMessages.filter((m) => {
+				// Use audience field when available (new API), fall back to type heuristic (backward compat)
+				if (m.audience) {
+					return m.audience === "human" || m.audience === "both";
+				}
+				return !isActivityMessage(m);
+			});
 		}
 	}
 
 	filteredMessages.sort(
 		(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
 	);
-
-	// In chat mode, hide protocol/activity messages
-	if (chatMode === "chat") {
-		filteredMessages = filteredMessages.filter((m) => {
-			// Use audience field when available (new API), fall back to type heuristic (backward compat)
-			if (m.audience) {
-				return m.audience === "human" || m.audience === "both";
-			}
-			return !isActivityMessage(m);
-		});
-	}
 
 	// Root messages: no threadId, or threadId equals their own id
 	const roots = filteredMessages.filter((m) => !m.threadId || m.threadId === m.id);
@@ -255,6 +337,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const handleTaskClick = useCallback((taskId) => {
 		setSelectedTask(taskId);
 		setSelectedAgent(null);
+		setSelectedConversation(null);
 		// Auto-expand task on click (not for general section)
 		if (taskId && taskId !== "__general__") {
 			setExpandedTasks((prev) => {
@@ -281,11 +364,13 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const handleAgentClick = useCallback((e, agentName) => {
 		e.stopPropagation();
 		setSelectedAgent(agentName);
+		setSelectedConversation(null);
 	}, []);
 
 	const handleAllMessagesClick = useCallback(() => {
 		setSelectedTask(null);
 		setSelectedAgent(null);
+		setSelectedConversation(null);
 	}, []);
 
 	const handleThreadToggle = useCallback((threadId) => {
@@ -300,7 +385,60 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		});
 	}, []);
 
+	const handleConversationClick = useCallback((conv) => {
+		setSelectedConversation(conv);
+		setSelectedTask(null);
+		setSelectedAgent(null);
+	}, []);
+
 	const handleSend = useCallback(async () => {
+		// Conversation mode: route to agent/coordinator/gateway endpoint
+		if (selectedConversation) {
+			if (!bodyVal.trim()) {
+				setSendError("Message body is required.");
+				return;
+			}
+			setSendError("");
+			setSending(true);
+
+			// Create optimistic pending message
+			const optimisticId = `pending-${Date.now()}`;
+			const optimistic = {
+				id: optimisticId,
+				from: "you",
+				to: selectedConversation.name,
+				subject: "",
+				body: bodyVal.trim(),
+				createdAt: new Date().toISOString(),
+				audience: "human",
+				_chatTarget: selectedConversation.name,
+			};
+			setPendingConvMessages((prev) => [...prev, optimistic]);
+
+			let url;
+			if (selectedConversation.type === "coordinator") {
+				url = "/api/coordinator/chat";
+			} else if (selectedConversation.type === "gateway") {
+				url = "/api/gateway/chat";
+			} else {
+				url = `/api/agents/${selectedConversation.name}/chat`;
+			}
+
+			try {
+				await postJson(url, { text: bodyVal.trim() });
+				setBodyVal("");
+				// Keep optimistic message until the next poll picks up the real response
+			} catch (err) {
+				setSendError(err.message || "Send failed");
+				// Remove the failed optimistic message
+				setPendingConvMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+			} finally {
+				setSending(false);
+			}
+			return;
+		}
+
+		// Standard mail mode
 		if (!toVal.trim() || !bodyVal.trim()) {
 			setSendError("To and body are required.");
 			return;
@@ -343,7 +481,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		} finally {
 			setSending(false);
 		}
-	}, [toVal, bodyVal, propOnSendMessage]);
+	}, [selectedConversation, toVal, bodyVal, propOnSendMessage]);
 
 	// ----- Header data -----
 
@@ -377,7 +515,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 			/>`;
 		}
 		const capability = inferCapability(msg.from, agents);
-		const isUser = msg.from === "orchestrator" || msg.from === "coordinator";
+		const isUser = msg.from === "orchestrator" || msg.from === "you" || msg.from === "human";
 		return html`<${MessageBubble}
 			key=${msg.id}
 			msg=${msg}
@@ -468,11 +606,50 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 				<div
 					class=${
 						"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
-						(!selectedTask && !selectedAgent ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "")
+						(!selectedTask && !selectedAgent && !selectedConversation ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "")
 					}
 					onClick=${handleAllMessagesClick}
 				>
 					<span class="text-[#e5e5e5]">All Messages</span>
+				</div>
+
+				<!-- Conversations section -->
+				<div class="mt-1 border-t border-[#1a1a1a]">
+					<div class="px-3 py-1 text-xs text-[#555] uppercase tracking-wider">
+						Conversations
+					</div>
+					${conversationEntries.map((conv) => {
+						const isSelected =
+							selectedConversation &&
+							selectedConversation.type === conv.type &&
+							selectedConversation.name === conv.name;
+						const colors = capabilityColors(conv.capability || null);
+						const convItemClass =
+							"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
+							(isSelected ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "");
+						return html`
+							<div
+								key=${conv.name}
+								class=${convItemClass}
+								onClick=${() => handleConversationClick(conv)}
+							>
+								<span class=${`text-xs shrink-0 ${colors.dot}`}>\u25CF</span>
+								<span class="flex-1 truncate text-[#e5e5e5] text-xs">${conv.label}</span>
+								${
+									conv.capability
+										? html`<span
+											class=${`text-xs px-1 rounded shrink-0 ${colors.bg} ${colors.text}`}
+										>${conv.capability}</span>`
+										: null
+								}
+								${
+									conv.state
+										? html`<span class="text-[#555] text-xs shrink-0">${conv.state}</span>`
+										: null
+								}
+							</div>
+						`;
+					})}
 				</div>
 
 				<!-- Tasks section header -->
@@ -487,7 +664,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 				<!-- Task list -->
 				${sortedGroups.map(([beadId, group]) => {
-					const isTaskSelected = selectedTask === beadId && !selectedAgent;
+					const isTaskSelected = selectedTask === beadId && !selectedAgent && !selectedConversation;
 					const isExpanded = expandedTasks.has(beadId);
 					const status = group.issue?.status || "open";
 					const statusIcon = STATUS_ICONS[status] || STATUS_ICONS.open;
@@ -539,7 +716,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 							${
 								isExpanded &&
 								group.agents.map((ag) => {
-									const isAgentSelected = selectedAgent === ag.agentName;
+									const isAgentSelected = selectedAgent === ag.agentName && !selectedConversation;
 									const colors = capabilityColors(ag.capability);
 									const agentItemClass =
 										"pl-8 pr-3 py-1.5 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-1.5 text-xs" +
@@ -579,7 +756,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 					<div
 						class=${
 							"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
-							(selectedTask === "__general__" && !selectedAgent
+							(selectedTask === "__general__" && !selectedAgent && !selectedConversation
 								? " bg-[#1a1a1a] border-l-2 border-[#E64415]"
 								: "")
 						}
@@ -609,8 +786,31 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 				<!-- Header -->
 				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2 flex-wrap">
 					${
-						selectedAgent
+						selectedConversation
 							? html`
+								<div class="flex items-center gap-2 border-l-4 pl-2 border-[#E64415]">
+									<span class="font-semibold text-[#e5e5e5]">${selectedConversation.label}</span>
+									${
+										selectedConversation.capability &&
+										html`<span class=${
+											`text-xs px-1.5 py-0.5 rounded` +
+											` ${capabilityColors(selectedConversation.capability).bg}` +
+											` ${capabilityColors(selectedConversation.capability).text}`
+										}>
+											${selectedConversation.capability}
+										</span>`
+									}
+									${
+										selectedConversation.state &&
+										html`<span class="text-xs px-1.5 py-0.5 rounded bg-[#333] text-[#999]">
+											${selectedConversation.state}
+										</span>`
+									}
+									<span class="text-xs text-[#555]">conversation</span>
+								</div>
+							  `
+							: selectedAgent
+								? html`
 								<div class=${
 									"flex items-center gap-2 border-l-4 pl-2" +
 									(selectedAgentData
@@ -635,10 +835,10 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 									}
 								</div>
 							  `
-							: selectedTask === "__general__"
-								? html`<span class="font-semibold text-[#e5e5e5]">Unassigned Messages</span>`
-								: selectedTaskData
-									? html`
+								: selectedTask === "__general__"
+									? html`<span class="font-semibold text-[#e5e5e5]">Unassigned Messages</span>`
+									: selectedTaskData
+										? html`
 								<span class="font-mono text-xs text-[#999]">${selectedTask}</span>
 								<span class="font-semibold text-[#e5e5e5] truncate">
 									${selectedTaskData.issue?.title || selectedTask}
@@ -668,7 +868,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 									${selectedTaskData.agents.length === 1 ? "agent" : "agents"}
 								</span>
 						  `
-									: html`<span class="font-semibold text-[#e5e5e5]">All Messages</span>`
+										: html`<span class="font-semibold text-[#e5e5e5]">All Messages</span>`
 					}
 					<span class="flex-1"></span>
 					${
@@ -677,8 +877,10 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						${unreadInView} unread
 					</span>`
 					}
-					<!-- Chat/All mode toggle -->
-					<div class="flex items-center gap-0.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full px-0.5 py-0.5">
+					<!-- Chat/All mode toggle (only shown when not in conversation mode) -->
+					${
+						!selectedConversation &&
+						html`<div class="flex items-center gap-0.5 bg-[#1a1a1a] border border-[#2a2a2a] rounded-full px-0.5 py-0.5">
 						<button
 							class=${
 								"text-xs px-2.5 py-0.5 rounded-full border-none cursor-pointer transition-colors" +
@@ -697,7 +899,8 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 							}
 							onClick=${() => setChatMode("all")}
 						>All</button>
-					</div>
+					</div>`
+					}
 				</div>
 
 				<!-- Message feed -->
@@ -708,12 +911,17 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 				>
 					${
 						roots.length === 0
-							? chatMode === "chat"
+							? selectedConversation
 								? html`<div class="flex flex-col items-center justify-center h-full text-[#666] text-sm gap-1">
+									<span>No messages yet.</span>
+									<span class="text-xs">Start a conversation below.</span>
+								</div>`
+								: chatMode === "chat"
+									? html`<div class="flex flex-col items-center justify-center h-full text-[#666] text-sm gap-1">
 									<span>No conversation messages yet.</span>
 									<span class="text-xs">Switch to "All" to see protocol activity.</span>
 								</div>`
-								: html`<div class="flex items-center justify-center h-full text-[#666] text-sm">No messages yet</div>`
+									: html`<div class="flex items-center justify-center h-full text-[#666] text-sm">No messages yet</div>`
 							: feedItems
 					}
 				</div>
@@ -724,12 +932,16 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 						<div class="flex-1">
 							<div class="flex items-center gap-1 mb-1">
 								<span class="text-xs text-[#555]">To:</span>
-								<input
-									type="text"
-									value=${toVal}
-									onInput=${(e) => setToVal(e.target.value)}
-									class="bg-transparent border-none text-xs text-[#e5e5e5] outline-none w-24"
-								/>
+								${
+									selectedConversation
+										? html`<span class="text-xs text-[#e5e5e5] font-medium">${selectedConversation.label}</span>`
+										: html`<input
+											type="text"
+											value=${toVal}
+											onInput=${(e) => setToVal(e.target.value)}
+											class="bg-transparent border-none text-xs text-[#e5e5e5] outline-none w-24"
+										/>`
+								}
 							</div>
 							<textarea
 								placeholder="Message... (Ctrl+Enter or Cmd+Enter to send)"
