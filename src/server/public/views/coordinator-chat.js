@@ -181,6 +181,7 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 	const prevHistoryFromCoordCountRef = useRef(0);
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
+	const manualSelectionRef = useRef(false);
 	const [chatTarget, setChatTarget] = useState("coordinator");
 	const neitherRunning = !coordRunning && !gwRunning;
 
@@ -243,8 +244,13 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 		inputRef.current?.focus();
 	}, [appState.pendingChatContext.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Auto-select the only running target
+	// Auto-select the only running target (skipped if user manually selected one)
 	useEffect(() => {
+		if (coordRunning && gwRunning) {
+			manualSelectionRef.current = false;
+			return;
+		}
+		if (manualSelectionRef.current) return;
 		if (coordRunning && !gwRunning) {
 			setChatTarget("coordinator");
 		} else if (!coordRunning && gwRunning) {
@@ -307,11 +313,13 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 	}));
 
 	// Merge all message sources, deduplicate by id, sort oldest first
+	const historyForTarget = chatTarget === "coordinator" ? historyMessages : [];
+	const pendingForTarget = pendingMessages.filter((m) => m._chatTarget === chatTarget);
 	const seenIds = new Set();
 	const allMessages = [];
 	for (const msg of [
-		...historyMessages,
-		...pendingMessages,
+		...historyForTarget,
+		...pendingForTarget,
 		...activityEntries,
 		...coordMessages,
 	]) {
@@ -361,6 +369,7 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 			body: text,
 			createdAt: new Date().toISOString(),
 			status: "sending",
+			_chatTarget: chatTarget,
 		};
 		setPendingMessages((prev) => [...prev, pending]);
 
@@ -523,14 +532,14 @@ export function CoordinatorChat({ mail, coordRunning, gwRunning }) {
 									(chatTarget === "coordinator"
 										? "bg-[#E64415]/20 text-white"
 										: "text-[#666] hover:text-[#999]")}
-								onClick=${() => setChatTarget("coordinator")}
+								onClick=${() => { manualSelectionRef.current = true; setChatTarget("coordinator"); }}
 							>Coordinator</button>
 							<button
 								class=${"text-xs px-2 py-1 rounded " +
 									(chatTarget === "gateway"
 										? "bg-[#E64415]/20 text-white"
 										: "text-[#666] hover:text-[#999]")}
-								onClick=${() => setChatTarget("gateway")}
+								onClick=${() => { manualSelectionRef.current = true; setChatTarget("gateway"); }}
 							>Gateway</button>
 						</div>
 					`
