@@ -11,7 +11,7 @@ import {
 	createTempGitRepo,
 	getDefaultBranch,
 } from "../test-helpers.ts";
-import { createWorktree, listWorktrees, removeWorktree } from "./manager.ts";
+import { createWorktree, isBranchMerged, listWorktrees, removeWorktree } from "./manager.ts";
 
 /**
  * Run a git command in a directory and return stdout. Throws on non-zero exit.
@@ -350,7 +350,7 @@ describe("removeWorktree", () => {
 		expect(branchList).not.toContain("legio/auth-login/bead-abc");
 	});
 
-	test("without forceBranch, unmerged branch deletion is silently ignored", async () => {
+	test("throws WorktreeError when branch is unmerged and forceBranch is false", async () => {
 		const { path: wtPath } = await createWorktree({
 			repoRoot: repoDir,
 			baseDir: worktreesDir,
@@ -362,15 +362,88 @@ describe("removeWorktree", () => {
 		// Add a commit to make the branch unmerged
 		await commitFile(wtPath, "new-file.ts", "export const x = 1;", "add new file");
 
-		// Without forceBranch, branch -d will fail because it's not merged, but
-		// removeWorktree should not throw (it catches the error)
-		await removeWorktree(repoDir, wtPath, { force: true });
+		// Without forceBranch, removeWorktree should throw WorktreeError because
+		// the branch has unmerged commits (git branch -d refuses to delete it).
+		await expect(removeWorktree(repoDir, wtPath, { force: true })).rejects.toThrow(WorktreeError);
 
-		// Worktree is gone
+		// Worktree directory is removed before the throw (worktree remove runs first)
 		expect(existsSync(wtPath)).toBe(false);
 
-		// But branch still exists because -d failed silently
+		// Branch still exists because -d failed and we threw instead of silently ignoring
 		const branchList = await git(repoDir, ["branch", "--list"]);
 		expect(branchList).toContain("legio/auth-login/bead-abc");
+	});
+});
+
+describe("isBranchMerged", () => {
+	let repoDir: string;
+	let worktreesDir: string;
+	let defaultBranch: string;
+
+	beforeEach(async () => {
+		repoDir = realpathSync(await createTempGitRepo());
+		defaultBranch = await getDefaultBranch(repoDir);
+		worktreesDir = join(repoDir, ".legio", "worktrees");
+		await mkdir(worktreesDir, { recursive: true });
+	});
+
+	afterEach(async () => {
+		await cleanupTempDir(repoDir);
+	});
+
+	test("returns true for a branch with no extra commits (same tip as target)", async () => {
+		const { branch } = await createWorktree({
+			repoRoot: repoDir,
+			baseDir: worktreesDir,
+			agentName: "agent-a",
+			baseBranch: defaultBranch,
+			beadId: "bead-001",
+		});
+
+		// Branch was created from defaultBranch with no extra commits — its tip IS HEAD
+		const merged = await isBranchMerged(repoDir, branch, "HEAD");
+		expect(merged).toBe(true);
+	});
+
+	test("returns false for a branch with unmerged commits", async () => {
+		const { path: wtPath, branch } = await createWorktree({
+			repoRoot: repoDir,
+			baseDir: worktreesDir,
+			agentName: "agent-b",
+			baseBranch: defaultBranch,
+			beadId: "bead-002",
+		});
+
+		// Commit diverges the branch from HEAD
+		await commitFile(wtPath, "feature.ts", "export const y = 2;", "add feature");
+
+		const merged = await isBranchMerged(repoDir, branch, "HEAD");
+		expect(merged).toBe(false);
+	});
+
+	test("returns true after branch is merged into HEAD", async () => {
+		const { path: wtPath, branch } = await createWorktree({
+			repoRoot: repoDir,
+			baseDir: worktreesDir,
+			agentName: "agent-c",
+			baseBranch: defaultBranch,
+			beadId: "bead-003",
+		});
+
+		// Commit diverges the branch
+		await commitFile(wtPath, "feature.ts", "export const z = 3;", "add feature");
+
+		// Not merged yet
+		expect(await isBranchMerged(repoDir, branch, "HEAD")).toBe(false);
+
+		// Remove the worktree (but NOT the branch) so it is no longer checked out.
+		// Use git directly to detach just the worktree without deleting the branch ref.
+		await git(repoDir, ["worktree", "remove", "--force", wtPath]);
+
+		// Merge the branch into the main repo's HEAD
+		await git(repoDir, ["merge", branch, "--no-ff", "-m", `Merge ${branch}`]);
+
+		// Now the branch tip is an ancestor of HEAD
+		expect(await isBranchMerged(repoDir, branch, "HEAD")).toBe(true);
 	});
 });

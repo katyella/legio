@@ -149,12 +149,38 @@ export async function listWorktrees(
 }
 
 /**
+ * Check whether a branch has been merged into a target ref.
+ *
+ * Uses `git merge-base --is-ancestor <branch> <target>`, which exits 0
+ * when branch is an ancestor of target (i.e., merged) and 1 when it is not.
+ * Any other exit code (e.g., unknown object) is treated as not merged.
+ *
+ * @param repoRoot - Absolute path to the git repository root.
+ * @param branch - Branch to check.
+ * @param target - Ref to check against (e.g. "HEAD", "main").
+ */
+export async function isBranchMerged(
+	repoRoot: string,
+	branch: string,
+	target: string,
+): Promise<boolean> {
+	const { exitCode } = await runCommand(
+		["git", "merge-base", "--is-ancestor", branch, target],
+		repoRoot,
+	);
+	// exit 0 = is ancestor (merged), exit 1 = not ancestor, other = error → treat as not merged
+	return exitCode === 0;
+}
+
+/**
  * Remove a git worktree and delete its associated branch.
  *
  * Runs `git worktree remove {path}` to remove the worktree, then
  * deletes the branch. With `forceBranch: true`, uses `git branch -D`
- * to force-delete even unmerged branches. Otherwise uses `git branch -d`
- * which only deletes merged branches.
+ * to force-delete even unmerged branches and swallows deletion errors
+ * (best-effort). Without `forceBranch`, uses `git branch -d` which only
+ * deletes merged branches — if deletion fails (branch is unmerged), throws
+ * `WorktreeError` to signal that unmerged work remains.
  */
 export async function removeWorktree(
 	repoRoot: string,
@@ -184,8 +210,15 @@ export async function removeWorktree(
 		try {
 			await runGit(repoRoot, ["branch", deleteFlag, branchName], { branchName });
 		} catch {
-			// Branch deletion failed — may be unmerged (with -d) or checked out elsewhere.
-			// This is best-effort; the worktree itself is already removed.
+			if (!options?.forceBranch) {
+				// Branch deletion failed without forceBranch — the branch has unmerged commits.
+				// Throw so callers know unmerged work remains on the branch.
+				throw new WorktreeError(
+					`Branch "${branchName}" has unmerged commits; pass forceBranch: true to force-delete.`,
+					{ worktreePath: path, branchName },
+				);
+			}
+			// forceBranch: branch deletion is best-effort, swallow the error.
 		}
 	}
 }
