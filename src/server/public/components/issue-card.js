@@ -2,7 +2,6 @@
 // Used by views/issues.js
 
 import { h, html } from "../lib/preact-setup.js";
-import { appState } from "../lib/state.js";
 
 // Maps priority number → left border color (hex, for inline style)
 const priorityBorderColors = {
@@ -38,12 +37,7 @@ export function IssueCard({ issue }) {
 
 	function handleClick() {
 		if (isClosed) return;
-		appState.pendingChatContext.value = {
-			issueId: issue.id,
-			title: issue.title,
-			description: issue.description,
-		};
-		location.hash = "dashboard";
+		location.hash = "task/" + issue.id;
 	}
 
 	return html`

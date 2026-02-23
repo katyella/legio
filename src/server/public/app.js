@@ -16,6 +16,7 @@ import { IssuesView } from "./views/issues.js";
 import { RawChatView } from "./views/raw-chat.js";
 import { SetupView } from "./views/setup.js";
 import { StrategyView } from "./views/strategy.js";
+import { TaskDetailView } from "./views/task-detail.js";
 
 // ===== Initial Data Fetch =====
 
@@ -63,6 +64,8 @@ function Router({ view, param }) {
 			return html`<${CostsView} metrics=${appState.metrics.value} snapshots=${appState.snapshots.value} />`;
 		case "tasks":
 			return html`<${IssuesView} />`;
+		case "task":
+			return html`<${TaskDetailView} taskId=${param} />`;
 		case "inspect":
 			return html`<${InspectView} agentName=${param} />`;
 		case "strategy":
