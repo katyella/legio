@@ -14,7 +14,7 @@ import { DashboardView } from "./views/dashboard.js";
 import { InspectView } from "./views/inspect.js";
 import { IssuesView } from "./views/issues.js";
 import { SetupView } from "./views/setup.js";
-import { StrategyView } from "./views/strategy.js";
+import { PlanningView } from "./views/strategy.js";
 import { TaskDetailView } from "./views/task-detail.js";
 
 // ===== Initial Data Fetch =====
@@ -67,8 +67,8 @@ function Router({ view, param }) {
 			return html`<${TaskDetailView} taskId=${param} />`;
 		case "inspect":
 			return html`<${InspectView} agentName=${param} />`;
-		case "strategy":
-			return html`<${StrategyView} />`;
+		case "planning":
+			return html`<${PlanningView} />`;
 		default:
 			return html`<${DashboardView} />`;
 	}
@@ -80,7 +80,7 @@ const NAV_LINKS = [
 	{ href: "#dashboard", label: "Dashboard", view: "dashboard" },
 	{ href: "#costs", label: "Costs", view: "costs" },
 	{ href: "#tasks", label: "Tasks", view: "tasks" },
-	{ href: "#strategy", label: "Strategy", view: "strategy" },
+	{ href: "#planning", label: "Planning", view: "planning" },
 ];
 
 function Layout({ view, param }) {
@@ -154,6 +154,10 @@ function App() {
 				window.location.hash = "#dashboard";
 				return; // will re-trigger the hash change handler
 			}
+			if (hash === "#strategy" || hash === "strategy") {
+				window.location.hash = "#planning";
+				return; // will re-trigger the hash change handler
+			}
 			setRoute(parseHash(hash));
 		};
 		// Redirect legacy #issues hash on initial load
@@ -167,6 +171,10 @@ function App() {
 		// Redirect legacy #gateway hash on initial load
 		if (location.hash === "#gateway" || location.hash === "gateway") {
 			window.location.hash = "#dashboard";
+		}
+		// Redirect legacy #strategy hash on initial load
+		if (location.hash === "#strategy" || location.hash === "strategy") {
+			window.location.hash = "#planning";
 		}
 		window.addEventListener("hashchange", onHashChange);
 		return () => window.removeEventListener("hashchange", onHashChange);
