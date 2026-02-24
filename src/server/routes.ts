@@ -7,6 +7,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -27,13 +28,26 @@ import type {
 	MailMessage,
 	MergeEntry,
 	RunStatus,
-	StrategyFile,
 } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { isSessionAlive, sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
 import { createChatStore } from "./chat-store.ts";
 import { HeadlessCoordinator } from "./headless.ts";
+
+// TODO: move Idea and IdeasFile to types.ts
+interface Idea {
+	id: string; // "idea-" + randomUUID().slice(0, 8)
+	title: string;
+	body: string;
+	status: "active" | "dispatched" | "backlog";
+	createdAt: string;
+	updatedAt: string;
+}
+
+interface IdeasFile {
+	ideas: Idea[];
+}
 
 // ---------------------------------------------------------------------------
 // File helpers
@@ -521,82 +535,169 @@ export async function handleApiRequest(
 	}
 
 	// -------------------------------------------------------------------------
-	// Strategy — POST routes (before the GET-only guard)
+	// Ideas — POST/PUT/DELETE routes (before the GET-only guard)
 	// -------------------------------------------------------------------------
 
-	{
-		const params = matchRoute(path, "/api/strategy/:id/approve");
-		if (request.method === "POST" && params) {
-			const { id } = params;
-			if (!id) return errorResponse("Missing recommendation ID", 400);
+	if (request.method === "POST" && path === "/api/ideas") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
 
-			const strategyPath = join(legioDir, "strategy.json");
-			if (!(await fileExists(strategyPath))) {
-				return errorResponse("No strategy.json found", 404);
+		const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+		if (!title) return errorResponse("Missing required field: title", 400);
+
+		const body = typeof parsed.body === "string" ? parsed.body : "";
+		const now = new Date().toISOString();
+		const idea: Idea = {
+			id: `idea-${randomUUID().slice(0, 8)}`,
+			title,
+			body,
+			status: "active",
+			createdAt: now,
+			updatedAt: now,
+		};
+
+		const ideasPath = join(legioDir, "ideas.json");
+		let data: IdeasFile = { ideas: [] };
+		if (await fileExists(ideasPath)) {
+			try {
+				data = JSON.parse(await readFile(ideasPath, "utf-8")) as IdeasFile;
+			} catch {
+				// start fresh on corrupt file
+			}
+		}
+		data.ideas.push(idea);
+		await writeFile(ideasPath, JSON.stringify(data, null, 2));
+		return jsonResponse(idea, 201);
+	}
+
+	{
+		const params = matchRoute(path, "/api/ideas/:id");
+		if (request.method === "PUT" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing idea ID", 400);
+
+			const ideasPath = join(legioDir, "ideas.json");
+			if (!(await fileExists(ideasPath))) {
+				return errorResponse(`Idea not found: ${id}`, 404);
+			}
+
+			const parsed = await parseJsonBody(request);
+			if (parsed instanceof Response) return parsed;
+
+			try {
+				const data = JSON.parse(await readFile(ideasPath, "utf-8")) as IdeasFile;
+				const idea = data.ideas.find((i) => i.id === id);
+				if (!idea) return errorResponse(`Idea not found: ${id}`, 404);
+
+				if (typeof parsed.title === "string") idea.title = parsed.title;
+				if (typeof parsed.body === "string") idea.body = parsed.body;
+				idea.updatedAt = new Date().toISOString();
+
+				await writeFile(ideasPath, JSON.stringify(data, null, 2));
+				return jsonResponse(idea);
+			} catch (err) {
+				return errorResponse(
+					`Failed to update idea: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+
+		if (request.method === "DELETE" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing idea ID", 400);
+
+			const ideasPath = join(legioDir, "ideas.json");
+			if (!(await fileExists(ideasPath))) {
+				return errorResponse(`Idea not found: ${id}`, 404);
 			}
 
 			try {
-				const raw = await readFile(strategyPath, "utf-8");
-				const data = JSON.parse(raw) as StrategyFile;
-				const rec = data.recommendations.find((r) => r.id === id);
-				if (!rec) return errorResponse(`Recommendation not found: ${id}`, 404);
-				if (rec.status !== "pending") {
-					return errorResponse(`Recommendation already ${rec.status}`, 409);
-				}
+				const data = JSON.parse(await readFile(ideasPath, "utf-8")) as IdeasFile;
+				const idx = data.ideas.findIndex((i) => i.id === id);
+				if (idx === -1) return errorResponse(`Idea not found: ${id}`, 404);
 
-				const client = createBeadsClient(projectRoot);
-				const priorityNum =
-					rec.priority === "critical"
-						? 0
-						: rec.priority === "high"
-							? 1
-							: rec.priority === "medium"
-								? 2
-								: 3;
-				const issueId = await client.create(rec.title, {
-					description: rec.rationale,
-					priority: priorityNum,
-				});
-
-				rec.status = "approved";
-				await writeFile(strategyPath, JSON.stringify(data, null, 2));
-
-				return jsonResponse({ recommendation: rec, issueId });
+				data.ideas.splice(idx, 1);
+				await writeFile(ideasPath, JSON.stringify(data, null, 2));
+				return jsonResponse({ success: true });
 			} catch (err) {
 				return errorResponse(
-					`Failed to approve recommendation: ${err instanceof Error ? err.message : String(err)}`,
+					`Failed to delete idea: ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
 		}
 	}
 
 	{
-		const params = matchRoute(path, "/api/strategy/:id/dismiss");
+		const params = matchRoute(path, "/api/ideas/:id/dispatch");
 		if (request.method === "POST" && params) {
 			const { id } = params;
-			if (!id) return errorResponse("Missing recommendation ID", 400);
+			if (!id) return errorResponse("Missing idea ID", 400);
 
-			const strategyPath = join(legioDir, "strategy.json");
-			if (!(await fileExists(strategyPath))) {
-				return errorResponse("No strategy.json found", 404);
+			const ideasPath = join(legioDir, "ideas.json");
+			if (!(await fileExists(ideasPath))) {
+				return errorResponse(`Idea not found: ${id}`, 404);
 			}
 
 			try {
-				const raw = await readFile(strategyPath, "utf-8");
-				const data = JSON.parse(raw) as StrategyFile;
-				const rec = data.recommendations.find((r) => r.id === id);
-				if (!rec) return errorResponse(`Recommendation not found: ${id}`, 404);
-				if (rec.status !== "pending") {
-					return errorResponse(`Recommendation already ${rec.status}`, 409);
-				}
+				const data = JSON.parse(await readFile(ideasPath, "utf-8")) as IdeasFile;
+				const idea = data.ideas.find((i) => i.id === id);
+				if (!idea) return errorResponse(`Idea not found: ${id}`, 404);
 
-				rec.status = "dismissed";
-				await writeFile(strategyPath, JSON.stringify(data, null, 2));
+				const store = createMailStore(join(legioDir, "mail.db"));
+				const messageId = `idea-dispatch-${randomUUID().slice(0, 8)}`;
+				store.insert({
+					id: messageId,
+					from: "human",
+					to: "coordinator",
+					subject: idea.title,
+					body: idea.body ? `${idea.title}\n\n${idea.body}` : idea.title,
+					type: "dispatch",
+					priority: "normal",
+					threadId: null,
+					audience: "agent",
+				});
+				store.close();
 
-				return jsonResponse(rec);
+				idea.status = "dispatched";
+				idea.updatedAt = new Date().toISOString();
+				await writeFile(ideasPath, JSON.stringify(data, null, 2));
+
+				return jsonResponse({ idea, messageId });
 			} catch (err) {
 				return errorResponse(
-					`Failed to dismiss recommendation: ${err instanceof Error ? err.message : String(err)}`,
+					`Failed to dispatch idea: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+	}
+
+	{
+		const params = matchRoute(path, "/api/ideas/:id/backlog");
+		if (request.method === "POST" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing idea ID", 400);
+
+			const ideasPath = join(legioDir, "ideas.json");
+			if (!(await fileExists(ideasPath))) {
+				return errorResponse(`Idea not found: ${id}`, 404);
+			}
+
+			try {
+				const data = JSON.parse(await readFile(ideasPath, "utf-8")) as IdeasFile;
+				const idea = data.ideas.find((i) => i.id === id);
+				if (!idea) return errorResponse(`Idea not found: ${id}`, 404);
+
+				const client = createBeadsClient(projectRoot);
+				const issueId = await client.create(idea.title, { description: idea.body });
+
+				idea.status = "backlog";
+				idea.updatedAt = new Date().toISOString();
+				await writeFile(ideasPath, JSON.stringify(data, null, 2));
+
+				return jsonResponse({ idea, issueId });
+			} catch (err) {
+				return errorResponse(
+					`Failed to add idea to backlog: ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
 		}
@@ -1693,21 +1794,21 @@ export async function handleApiRequest(
 	}
 
 	// -------------------------------------------------------------------------
-	// Strategy
+	// Ideas
 	// -------------------------------------------------------------------------
 
-	if (path === "/api/strategy") {
-		const strategyPath = join(legioDir, "strategy.json");
-		if (!(await fileExists(strategyPath))) {
+	if (path === "/api/ideas") {
+		const ideasPath = join(legioDir, "ideas.json");
+		if (!(await fileExists(ideasPath))) {
 			return jsonResponse([]);
 		}
 		try {
-			const raw = await readFile(strategyPath, "utf-8");
-			const data = JSON.parse(raw) as StrategyFile;
-			return jsonResponse(data.recommendations ?? []);
+			const raw = await readFile(ideasPath, "utf-8");
+			const data = JSON.parse(raw) as IdeasFile;
+			return jsonResponse(data.ideas ?? []);
 		} catch (err) {
 			return errorResponse(
-				`Failed to read strategy.json: ${err instanceof Error ? err.message : String(err)}`,
+				`Failed to read ideas.json: ${err instanceof Error ? err.message : String(err)}`,
 			);
 		}
 	}
