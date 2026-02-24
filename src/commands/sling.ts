@@ -27,7 +27,7 @@ import { createManifestLoader } from "../agents/manifest.ts";
 import { writeOverlay } from "../agents/overlay.ts";
 import type { BeadIssue } from "../beads/client.ts";
 import { createBeadsClient } from "../beads/client.ts";
-import { loadConfig } from "../config.ts";
+import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { createMulchClient, inferDomainsFromFiles } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
@@ -492,6 +492,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		const tmuxSessionName = `legio-${config.project.name}-${name}`;
 		const claudeCmd = `claude --model ${agentDef.model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSessionName, worktreePath, claudeCmd, {
+			...collectProviderEnv(),
 			LEGIO_AGENT_NAME: name,
 			LEGIO_WORKTREE_PATH: worktreePath,
 		});
