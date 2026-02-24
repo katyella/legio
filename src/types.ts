@@ -1,3 +1,19 @@
+// === Provider Configuration ===
+
+/** Short alias for model selection (e.g., in config.yaml models section). */
+export type ModelAlias = "sonnet" | "opus" | "haiku";
+
+/** Full model reference: either an alias or a provider-qualified string. */
+export type ModelRef = ModelAlias | string;
+
+/** Provider endpoint configuration for custom API routing. */
+export interface ProviderConfig {
+	/** Base URL for the Anthropic API (maps to ANTHROPIC_BASE_URL). */
+	baseUrl?: string;
+	/** Auth token for the Anthropic API (maps to ANTHROPIC_AUTH_TOKEN). */
+	authToken?: string;
+}
+
 // === Project Configuration ===
 
 export interface LegioConfig {
@@ -38,7 +54,7 @@ export interface LegioConfig {
 		zombieThresholdMs: number; // When to kill
 		nudgeIntervalMs: number; // Time between progressive nudge stages (default 60_000)
 	};
-	models: Partial<Record<string, "sonnet" | "opus" | "haiku">>;
+	models: Partial<Record<string, ModelAlias>>;
 	logging: {
 		verbose: boolean;
 		redactSecrets: boolean;
@@ -55,7 +71,7 @@ export interface AgentManifest {
 
 export interface AgentDefinition {
 	file: string; // Path to base agent definition (.md)
-	model: "sonnet" | "opus" | "haiku";
+	model: ModelAlias;
 	tools: string[]; // Allowed tools
 	capabilities: string[]; // What this agent can do
 	canSpawn: boolean; // Can this agent spawn sub-workers?

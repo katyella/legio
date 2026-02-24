@@ -598,3 +598,21 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 
 	return merged;
 }
+
+/**
+ * Collect provider-related environment variables from the current process.
+ *
+ * Returns a Record<string, string> containing only the env vars that are
+ * set (non-empty), suitable for passing to tmux createSession() env overrides.
+ */
+export function collectProviderEnv(): Record<string, string> {
+	const env: Record<string, string> = {};
+	const vars = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"] as const;
+	for (const key of vars) {
+		const value = process.env[key];
+		if (value) {
+			env[key] = value;
+		}
+	}
+	return env;
+}
