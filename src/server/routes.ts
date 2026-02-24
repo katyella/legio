@@ -1130,6 +1130,96 @@ export async function handleApiRequest(
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Transcript Sync — POST /api/chat/transcript-sync
+	// Triggers on-demand transcript sync for a persistent agent.
+	// -------------------------------------------------------------------------
+
+	if (request.method === "POST" && path === "/api/chat/transcript-sync") {
+		const parsed = await parseJsonBody(request);
+		if (parsed instanceof Response) return parsed;
+
+		const agentName = typeof parsed.agent === "string" ? parsed.agent.trim() : null;
+		if (!agentName) return errorResponse("Missing or empty required field: agent", 400);
+
+		if (!(await fileExists(join(legioDir, "sessions.db")))) {
+			return errorResponse("No sessions database found", 404);
+		}
+
+		const { store: sessionStore } = openSessionStore(legioDir);
+		try {
+			const sessions = sessionStore.getActive();
+			const agentSession = sessions.find((s) => s.agentName === agentName);
+			if (!agentSession) {
+				return errorResponse(`No active session found for agent "${agentName}"`, 404);
+			}
+
+			const logsBase = join(legioDir, "logs");
+			const cachePath = join(logsBase, agentName, ".transcript-path");
+			let transcriptPath: string | null = null;
+			try {
+				const cached = (await readFile(cachePath, "utf-8")).trim();
+				if (cached.length > 0) {
+					await access(cached, constants.R_OK);
+					transcriptPath = cached;
+				}
+			} catch {
+				// No cached transcript path
+			}
+
+			if (!transcriptPath) {
+				return errorResponse(`No transcript found for agent "${agentName}"`, 404);
+			}
+
+			const { parseTranscriptTexts } = await import("../metrics/transcript.ts");
+			const offsetPath = join(logsBase, agentName, ".chat-transcript-offset");
+			let fromLine = 0;
+			try {
+				const savedOffset = await readFile(offsetPath, "utf-8");
+				const parsedOffset = Number.parseInt(savedOffset.trim(), 10);
+				if (!Number.isNaN(parsedOffset) && parsedOffset >= 0) {
+					fromLine = parsedOffset;
+				}
+			} catch {
+				// No offset file yet — start from beginning
+			}
+
+			const { messages, nextLine } = await parseTranscriptTexts(transcriptPath, fromLine);
+			const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+			if (assistantMessages.length > 0) {
+				const mailStore = createMailStore(join(legioDir, "mail.db"));
+				try {
+					for (const msg of assistantMessages) {
+						mailStore.insert({
+							id: "",
+							from: agentName,
+							to: "human",
+							subject: "chat",
+							body: msg.text,
+							type: "status",
+							priority: "normal",
+							threadId: null,
+							audience: "human",
+						});
+					}
+				} finally {
+					mailStore.close();
+				}
+			}
+
+			await writeFile(offsetPath, String(nextLine));
+
+			return jsonResponse({
+				synced: assistantMessages.length,
+				nextLine,
+				agent: agentName,
+			});
+		} finally {
+			sessionStore.close();
+		}
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
@@ -1845,6 +1935,8 @@ export async function handleApiRequest(
 	// -------------------------------------------------------------------------
 	// Unified Chat History — GET /api/chat/unified/history
 	// Returns all human-audience messages across all agents in chronological order.
+	// Bidirectional: includes messages from human AND messages to human,
+	// filtered by audience (human or both).
 	// -------------------------------------------------------------------------
 
 	if (path === "/api/chat/unified/history") {
@@ -1856,14 +1948,14 @@ export async function handleApiRequest(
 		}
 		const store = createMailStore(dbPath);
 		try {
-			const humanAudience = store.getAll({ audience: "human" });
-			const bothAudience = store.getAll({ audience: "both" });
-			const combined = [...humanAudience, ...bothAudience];
+			const fromHuman = store.getAll({ from: "human" });
+			const toHuman = store.getAll({ to: "human" });
+			const combined = [...fromHuman, ...toHuman];
 			const seen = new Set<string>();
 			const relevant = combined.filter((m) => {
 				if (seen.has(m.id)) return false;
 				seen.add(m.id);
-				return true;
+				return m.audience === "human" || m.audience === "both";
 			});
 			relevant.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 			return jsonResponse(relevant.slice(-limit));

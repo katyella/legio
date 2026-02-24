@@ -3864,4 +3864,78 @@ describe("GET /api/chat/unified/history", () => {
 		const body = (await json(res)) as Array<{ body: string }>;
 		expect(body.length).toBe(3);
 	});
+
+	it("includes messages where from=human even without explicit audience filtering by from/to", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		// Message from human to a non-standard agent
+		store.insert({
+			id: "unified-bidir-001",
+			from: "human",
+			to: "lead-1",
+			subject: "chat",
+			body: "Hello lead",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Response from agent to human
+		store.insert({
+			id: "unified-bidir-002",
+			from: "lead-1",
+			to: "human",
+			subject: "chat",
+			body: "Lead reply",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Agent-only message (should be excluded)
+		store.insert({
+			id: "unified-bidir-003",
+			from: "lead-1",
+			to: "coordinator",
+			subject: "status",
+			body: "Internal message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.close();
+
+		const res = await dispatch("/api/chat/unified/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string; to: string }>;
+		expect(body.length).toBe(2);
+		expect(body.map((m) => m.body)).toContain("Hello lead");
+		expect(body.map((m) => m.body)).toContain("Lead reply");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/chat/transcript-sync
+// ---------------------------------------------------------------------------
+
+describe("POST /api/chat/transcript-sync", () => {
+	it("returns 400 when agent field is missing", async () => {
+		const res = await dispatchPost("/api/chat/transcript-sync", {});
+		expect(res.status).toBe(400);
+	});
+
+	it("returns 404 when sessions.db does not exist", async () => {
+		const res = await dispatchPost("/api/chat/transcript-sync", { agent: "coordinator" });
+		expect(res.status).toBe(404);
+	});
+
+	it("returns 404 when no active session for agent", async () => {
+		// Create empty sessions.db
+		const sessStore = createSessionStore(join(legioDir, "sessions.db"));
+		sessStore.close();
+
+		const res = await dispatchPost("/api/chat/transcript-sync", { agent: "nonexistent" });
+		expect(res.status).toBe(404);
+	});
 });
