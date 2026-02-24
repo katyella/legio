@@ -90,11 +90,7 @@ function ModelBreakdown({ modelData }) {
 	return html`
 		<div class="flex flex-col gap-3">
 			${sorted.map((row) => {
-				const totalTokens =
-					(row.inputTokens || 0) +
-					(row.outputTokens || 0) +
-					(row.cacheReadTokens || 0) +
-					(row.cacheCreationTokens || 0);
+				const ioTokens = (row.inputTokens || 0) + (row.outputTokens || 0);
 				const pct = maxCost > 0 ? ((row.estimatedCostUsd || 0) / maxCost) * 100 : 0;
 				const color = modelColor(row.model);
 				return html`
@@ -110,7 +106,7 @@ function ModelBreakdown({ modelData }) {
 							></div>
 						</div>
 						<span class="font-mono text-xs text-gray-400 w-28 text-right shrink-0">
-							${formatNumber(totalTokens)} tok
+							${formatNumber(ioTokens)} tok
 						</span>
 						<span class="font-mono text-sm text-gray-300 w-20 text-right shrink-0">
 							${formatCost(row.estimatedCostUsd)}
@@ -392,7 +388,8 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 	);
 
 	const sessionCount = safeMetrics.length;
-	const totalTokens = totals.input + totals.output + totals.cacheRead + totals.cacheCreated;
+	const ioTokens = totals.input + totals.output;
+	const cacheTokens = totals.cacheRead + totals.cacheCreated;
 	const avgCost = totals.cost != null && sessionCount > 0 ? totals.cost / sessionCount : null;
 
 	// Group by capability when requested
@@ -519,8 +516,12 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 					value=${totals.cost != null ? formatCostShort(totals.cost) : "—"}
 				/>
 				<${StatCard}
-					label="Total Tokens"
-					value=${formatNumber(totalTokens)}
+					label="Input/Output"
+					value=${formatNumber(ioTokens)}
+				/>
+				<${StatCard}
+					label="Cache"
+					value=${formatNumber(cacheTokens)}
 				/>
 				<${StatCard}
 					label="Sessions"
