@@ -12,8 +12,8 @@ import {
 } from "./completions.ts";
 
 describe("COMMANDS array", () => {
-	it("should have exactly 33 commands", () => {
-		expect(COMMANDS).toHaveLength(33);
+	it("should have exactly 34 commands", () => {
+		expect(COMMANDS).toHaveLength(34);
 	});
 
 	it("should include all expected command names", () => {
@@ -51,6 +51,7 @@ describe("COMMANDS array", () => {
 		expect(names).toContain("up");
 		expect(names).toContain("down");
 		expect(names).toContain("gateway");
+		expect(names).toContain("stop");
 	});
 });
 

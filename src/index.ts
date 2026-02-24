@@ -36,6 +36,7 @@ import { serverCommand } from "./commands/server.ts";
 import { slingCommand } from "./commands/sling.ts";
 import { specCommand } from "./commands/spec.ts";
 import { statusCommand } from "./commands/status.ts";
+import { stopCommand } from "./commands/stop.ts";
 import { supervisorCommand } from "./commands/supervisor.ts";
 import { traceCommand } from "./commands/trace.ts";
 import { upCommand } from "./commands/up.ts";
@@ -84,6 +85,7 @@ Commands:
   server <sub>            Local web UI (start)
   up                      Start everything (init + server + coordinator)
   down                    Stop everything (coordinator + server)
+  stop                    Stop active agent sessions (deepest-first)
 Options:
   --help, -h              Show this help
   --version, -v           Show version
@@ -126,6 +128,7 @@ const COMMANDS = [
 	"server",
 	"up",
 	"down",
+	"stop",
 ];
 
 function editDistance(a: string, b: string): number {
@@ -298,6 +301,9 @@ async function main(): Promise<void> {
 			break;
 		case "down":
 			await downCommand(commandArgs);
+			break;
+		case "stop":
+			await stopCommand(commandArgs);
 			break;
 		default: {
 			process.stderr.write(`Unknown command: ${command}\n`);

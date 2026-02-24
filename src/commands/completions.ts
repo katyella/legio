@@ -659,6 +659,15 @@ export const COMMANDS: readonly CommandDef[] = [
 			{ name: "--help", desc: "Show help" },
 		],
 	},
+	{
+		name: "stop",
+		desc: "Stop active agent sessions (deepest-first)",
+		flags: [
+			{ name: "--agent", desc: "Stop only the named agent", takesValue: true },
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+	},
 ] as const;
 
 export function generateBash(): string {
