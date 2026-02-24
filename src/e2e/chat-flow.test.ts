@@ -12,8 +12,6 @@
  * Uses real SQLite databases in temp directories. No mocking of store logic.
  * Mock setup mirrors routes.test.ts (see header there for rationale).
  *
- * NOTE: Tests 3 and 4 (bidirectional history) test the CORRECT expected behavior.
- * They may fail until the routes builder fixes the history queries to be bidirectional.
  */
 
 import { accessSync, constants as fsConstants, readFileSync } from "node:fs";
@@ -291,8 +289,7 @@ describe("E2E: chat flow", () => {
 		expect(messages[0]?.body).toBe("hello agent");
 	});
 
-	// Skipped until routes-fix-builder merges: history queries need to be bidirectional
-	it.skip("GET /api/coordinator/chat/history returns bidirectional messages", async () => {
+	it("GET /api/coordinator/chat/history returns bidirectional messages", async () => {
 		// Seed both directions: human→coordinator and coordinator→human
 		const mailStore = createMailStore(join(legioDir, "mail.db"));
 		mailStore.insert({
@@ -328,8 +325,7 @@ describe("E2E: chat flow", () => {
 		expect(messages.some((m) => m.from === "coordinator" && m.to === "human")).toBe(true);
 	});
 
-	// Skipped until routes-fix-builder merges: history queries need to be bidirectional
-	it.skip("GET /api/agents/:name/chat/history returns bidirectional messages", async () => {
+	it("GET /api/agents/:name/chat/history returns bidirectional messages", async () => {
 		// Seed both directions: human→agent and agent→human
 		const mailStore = createMailStore(join(legioDir, "mail.db"));
 		mailStore.insert({

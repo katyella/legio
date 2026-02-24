@@ -40,6 +40,7 @@ export function CoordinatorChat({ coordRunning }) {
 	const prevFromAgentCountRef = useRef(0);
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
+	const thinkingTimeoutRef = useRef(null);
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
@@ -67,6 +68,25 @@ export function CoordinatorChat({ coordRunning }) {
 			clearInterval(interval);
 		};
 	}, []);
+
+	// Poll POST /api/chat/transcript-sync to sync coordinator transcript responses into mail.db
+	useEffect(() => {
+		let cancelled = false;
+		async function syncTranscript() {
+			if (cancelled) return;
+			try {
+				await postJson("/api/chat/transcript-sync", { agent: "coordinator" });
+			} catch (_err) {
+				// non-fatal
+			}
+		}
+		syncTranscript();
+		const interval = setInterval(syncTranscript, thinking ? 2000 : 10000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [thinking]);
 
 	// Consume pendingChatContext from issue click-through
 	useEffect(() => {
@@ -100,6 +120,21 @@ export function CoordinatorChat({ coordRunning }) {
 		}
 		prevFromAgentCountRef.current = fromAgentCount;
 	}, [fromAgentCount]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	// Auto-clear thinking after 120 seconds to prevent it from getting stuck forever
+	useEffect(() => {
+		if (thinking) {
+			thinkingTimeoutRef.current = setTimeout(() => {
+				setThinking(false);
+			}, 120000);
+		}
+		return () => {
+			if (thinkingTimeoutRef.current) {
+				clearTimeout(thinkingTimeoutRef.current);
+				thinkingTimeoutRef.current = null;
+			}
+		};
+	}, [thinking]);
 
 	// Merge history + pending, deduplicate by id, sort oldest first
 	const seenIds = new Set();
