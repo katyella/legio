@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
-import { loadConfig } from "../config.ts";
+import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { HeadlessCoordinator } from "../server/headless.ts";
 import { openSessionStore } from "../sessions/compat.ts";
@@ -424,7 +424,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 			const headless = headlessFactory.create({
 				command: claudeCmd,
 				cwd: projectRoot,
-				env: { LEGIO_AGENT_NAME: COORDINATOR_NAME },
+				env: { ...collectProviderEnv(), LEGIO_AGENT_NAME: COORDINATOR_NAME },
 			});
 
 			headless.start();
@@ -495,6 +495,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// Tmux path: existing behavior
 		// ----------------------------------------------------------------
 		const pid = await tmux.createSession(tmuxSession, projectRoot, claudeCmd, {
+			...collectProviderEnv(),
 			LEGIO_AGENT_NAME: COORDINATOR_NAME,
 		});
 

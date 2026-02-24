@@ -18,7 +18,7 @@ import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { createBeadsClient } from "../beads/client.ts";
-import { loadConfig } from "../config.ts";
+import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
@@ -229,6 +229,7 @@ async function startSupervisor(args: string[]): Promise<void> {
 		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
 		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSession, projectRoot, claudeCmd, {
+			...collectProviderEnv(),
 			LEGIO_AGENT_NAME: flags.name,
 		});
 
