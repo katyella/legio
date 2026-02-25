@@ -6,7 +6,7 @@ import { fetchJson, postJson } from "../lib/api.js";
 import { html, useCallback, useEffect, useState } from "../lib/preact-setup.js";
 import { appState } from "../lib/state.js";
 import { agentColor, stateColor, stateIcon, timeAgo } from "../lib/utils.js";
-import { CoordinatorChat } from "./coordinator-chat.js";
+import { GatewayChat } from "./gateway-chat.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -754,7 +754,7 @@ export function DashboardView() {
 					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
 					style="flex: 58 1 0%"
 				>
-					<${CoordinatorChat} mail=${mail} coordRunning=${coordRunning} gwRunning=${gwRunning} />
+					<${GatewayChat} gwRunning=${gwRunning} />
 				</div>
 
 				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MailFeed -->
