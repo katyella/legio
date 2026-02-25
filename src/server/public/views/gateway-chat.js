@@ -75,6 +75,26 @@ export function GatewayChat({ gwRunning }) {
 		};
 	}, [thinking]);
 
+	// Subscribe to WebSocket mail_new events via appState.mail signal for instant updates
+	useEffect(() => {
+		const mailMessages = appState.mail.value ?? [];
+		const gatewayMessages = mailMessages.filter(
+			(m) =>
+				((m.from === "human" && m.to === "gateway") ||
+					(m.from === "gateway" && m.to === "human")) &&
+				(m.audience === "human" || m.audience === "both"),
+		);
+		if (gatewayMessages.length === 0) return;
+		setHistoryMessages((prev) => {
+			const existingIds = new Set(prev.map((m) => m.id));
+			const newMsgs = gatewayMessages.filter((m) => !existingIds.has(m.id));
+			if (newMsgs.length === 0) return prev;
+			return [...prev, ...newMsgs].sort(
+				(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+			);
+		});
+	}, [appState.mail.value]); // eslint-disable-line react-hooks/exhaustive-deps
+
 	// Poll POST /api/chat/transcript-sync to sync gateway transcript responses into mail.db
 	useEffect(() => {
 		let cancelled = false;

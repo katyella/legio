@@ -865,6 +865,7 @@ export async function handleApiRequest(
 			audience: "human",
 		});
 		mailStore.close();
+		wsManager?.broadcastEvent({ type: "mail_new", data: savedMessage });
 
 		try {
 			await sendKeys(tmuxSession, text);
@@ -1069,7 +1070,7 @@ export async function handleApiRequest(
 				const mailStore = createMailStore(join(legioDir, "mail.db"));
 				try {
 					for (const msg of assistantMessages) {
-						mailStore.insert({
+						const savedMsg = mailStore.insert({
 							id: "",
 							from: agentName,
 							to: "human",
@@ -1080,6 +1081,7 @@ export async function handleApiRequest(
 							threadId: null,
 							audience: "human",
 						});
+						wsManager?.broadcastEvent({ type: "mail_new", data: savedMsg });
 					}
 				} finally {
 					mailStore.close();
