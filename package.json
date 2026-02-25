@@ -61,5 +61,15 @@
 		"@types/ws": "^8.5.13",
 		"typescript": "^5.9.0",
 		"vitest": "^4.0.18"
+	},
+	"optionalDependencies": {
+		"@biomejs/cli-darwin-arm64": "^2.3.15",
+		"@biomejs/cli-darwin-x64": "^2.3.15",
+		"@biomejs/cli-linux-arm64": "^2.3.15",
+		"@biomejs/cli-linux-arm64-musl": "^2.3.15",
+		"@biomejs/cli-linux-x64": "^2.3.15",
+		"@biomejs/cli-linux-x64-musl": "^2.3.15",
+		"@biomejs/cli-win32-arm64": "^2.3.15",
+		"@biomejs/cli-win32-x64": "^2.3.15"
 	}
 }
