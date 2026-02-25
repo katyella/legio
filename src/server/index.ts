@@ -183,7 +183,7 @@ export async function createServer(
 				const content = await readFile(filePath);
 				const ext = extname(filePath);
 				const mimeType = MIME_TYPES[ext] ?? "application/octet-stream";
-				res.writeHead(200, { "Content-Type": mimeType });
+				res.writeHead(200, { "Content-Type": mimeType, "Cache-Control": "no-cache" });
 				res.end(content);
 				return;
 			}

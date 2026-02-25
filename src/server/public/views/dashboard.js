@@ -115,12 +115,18 @@ function MetricsStrip({ agents, status }) {
 
 function MailFeed({ mail }) {
 	const [activeFilters, setActiveFilters] = useState(new Set());
+	const [expandedId, setExpandedId] = useState(null);
 
 	const sorted = [...mail]
+		.filter((m) => m.audience !== "human")
 		.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 		.slice(0, 50);
 
 	const filtered = activeFilters.size === 0 ? sorted : sorted.filter((m) => activeFilters.has(m.type));
+
+	const toggleExpand = useCallback((id) => {
+		setExpandedId((prev) => (prev === id ? null : id));
+	}, []);
 
 	const allTypes = Object.keys(MAIL_TYPE_COLORS);
 
@@ -169,25 +175,66 @@ function MailFeed({ mail }) {
 				${
 					filtered.length === 0
 						? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">No recent mail</div>`
-						: filtered.map(
-								(m) => html`
+						: filtered.map((m) => {
+								const isExpanded = expandedId === m.id;
+								let parsedPayload = null;
+								if (m.payload) {
+									try {
+										parsedPayload = typeof m.payload === "string" ? JSON.parse(m.payload) : m.payload;
+									} catch {
+										parsedPayload = m.payload;
+									}
+								}
+								return html`
 								<div
 									key=${m.id}
-									class="flex items-center gap-1.5 px-2 py-1 text-xs hover:bg-white/5 rounded-sm"
+									class="rounded-sm ${isExpanded ? "bg-white/5 border border-[#2a2a2a]" : "border border-transparent"}"
 								>
-									<span
-										class=${`px-1 rounded font-mono flex-shrink-0 ${MAIL_TYPE_COLORS[m.type] ?? "bg-[#333] text-[#999]"}`}
+									<div
+										class="flex items-center gap-1.5 px-2 py-1 text-xs cursor-pointer hover:bg-white/5 rounded-sm"
+										onClick=${() => toggleExpand(m.id)}
 									>
-										${m.type || "mail"}
-									</span>
-									<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.from}</span>
-									<span class="text-[#444] flex-shrink-0">\u2192</span>
-									<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.to}</span>
-									<span class="flex-1 truncate text-[#999] min-w-0">${m.subject || ""}</span>
-									<span class="text-[#444] flex-shrink-0 ml-auto">${timeAgo(m.createdAt)}</span>
+										<span
+											class=${`px-1 rounded font-mono flex-shrink-0 ${MAIL_TYPE_COLORS[m.type] ?? "bg-[#333] text-[#999]"}`}
+										>
+											${m.type || "mail"}
+										</span>
+										<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.from}</span>
+										<span class="text-[#444] flex-shrink-0">\u2192</span>
+										<span class="text-[#777] flex-shrink-0 truncate max-w-[5rem]">${m.to}</span>
+										<span class="flex-1 truncate text-[#999] min-w-0">${m.subject || ""}</span>
+										<span class="text-[#444] flex-shrink-0 ml-auto">${timeAgo(m.createdAt)}</span>
+										<span class="text-[#444] flex-shrink-0 ml-1">${isExpanded ? "\u25B2" : "\u25BC"}</span>
+									</div>
+									${isExpanded ? html`
+										<div class="px-2 pb-2 text-xs border-t border-[#2a2a2a] mt-0.5 pt-1.5 space-y-1">
+											${m.priority && m.priority !== "normal" ? html`
+												<div class="flex gap-1.5">
+													<span class="text-[#555] flex-shrink-0">priority:</span>
+													<span class="text-yellow-400 font-mono">${m.priority}</span>
+												</div>
+											` : null}
+											${m.body ? html`
+												<div>
+													<div class="text-[#555] mb-0.5">body:</div>
+													<div class="text-[#aaa] whitespace-pre-wrap break-words font-mono bg-[#111] rounded px-2 py-1 max-h-[10rem] overflow-y-auto">
+														${m.body}
+													</div>
+												</div>
+											` : null}
+											${parsedPayload ? html`
+												<div>
+													<div class="text-[#555] mb-0.5">payload:</div>
+													<div class="text-[#aaa] whitespace-pre-wrap break-words font-mono bg-[#111] rounded px-2 py-1 max-h-[10rem] overflow-y-auto">
+														${JSON.stringify(parsedPayload, null, 2)}
+													</div>
+												</div>
+											` : null}
+										</div>
+									` : null}
 								</div>
-							`,
-							)
+							`;
+							})
 				}
 			</div>
 		</div>
