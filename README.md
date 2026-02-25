@@ -29,7 +29,7 @@ Coordinator (persistent orchestrator at project root)
 |-------|------|--------|
 | **Coordinator** | Persistent orchestrator — decomposes objectives, dispatches agents, tracks task groups | Read-only |
 | **Supervisor** | Per-project team lead — manages worker lifecycle, handles nudge/escalation | Read-only |
-| **Gateway** | Persistent gateway agent for external access and routing | Read-only |
+| **Gateway** | Planning companion — analyzes codebase, decomposes objectives into issues, bridges human intent and agent work | Read-only |
 | **CTO** | Strategic technical leadership | Read-only |
 | **Scout** | Read-only exploration and research | Read-only |
 | **Builder** | Implementation and code changes | Read-write |
@@ -61,14 +61,15 @@ Coordinator (persistent orchestrator at project root)
 ## Installation
 
 ```bash
-# Clone the repository
+npm install -g legio
+```
+
+### From Source
+
+```bash
 git clone https://github.com/katyella/legio.git
 cd legio
-
-# Install dependencies
 npm install
-
-# Link the CLI globally
 npm link
 ```
 
