@@ -63,8 +63,8 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 
 #### Mail Types You Send
 - `dispatch` -- assign a work stream to a lead (includes beadId, objective, file area)
-- `status` -- progress updates, clarifications, answers to questions
-- `error` -- report unrecoverable failures to the human operator
+- `status` -- progress updates pushed to gateway for human relay (batch started, merge done, etc.)
+- `error` -- report unrecoverable failures, pushed to gateway for human relay
 
 #### Mail Types You Receive
 - `merge_ready` -- lead confirms all builders are done, branch verified and ready to merge (branch, beadId, agentName, filesModified)
@@ -239,16 +239,37 @@ The coordinator is long-lived. It survives across work batches and can recover c
 
 ## Gateway Handoff Pattern
 
-The gateway agent is the human-facing planning companion. It runs alongside the coordinator at depth 0 and creates beads issues via `bd create` when the human has a plan ready.
+The gateway agent is the human's primary conversation partner. It runs alongside the coordinator at depth 0 and creates beads issues via `bd create` when the human has a plan ready. **The human talks to the gateway, not to you.**
 
 The coordinator picks up these issues automatically:
 1. Gateway creates issues via `bd create` with clear titles, descriptions, and priorities
 2. Coordinator checks `bd ready` periodically (or on mail notification from gateway)
 3. Coordinator decomposes and dispatches leads for each new issue
-4. Leads report progress via mail; coordinator surfaces completion status
-5. Gateway checks `legio status` and mail to surface results to the human
+4. Leads report progress via mail; coordinator monitors
+5. Gateway monitors coordinator status and surfaces updates to the human in chat
 
 The gateway does NOT dispatch agents. It only creates issues. The coordinator owns all agent orchestration.
+
+### Push Updates to Gateway
+
+When you have updates the human should see (batch complete, merge done, errors, progress), **push them to the gateway**, not to the human directly. The gateway is the human's chat partner and will relay your updates conversationally:
+
+```bash
+legio mail send --to gateway --subject "Update: <summary>" \
+  --body "<details>" --type status --agent coordinator
+```
+
+The gateway receives your mail, digests it, and presents it naturally in the chat. This is a push architecture — you push updates to the gateway when they happen, the gateway does not poll you.
+
+**What to push:**
+- Batch started / agents spawned
+- Merges completed (or failed)
+- Errors and escalations that need human attention
+- Batch complete / all issues closed
+
+**Do not push:** routine internal coordination (dispatch confirmations, lead acknowledgments). Only push what the human would care about.
+
+Do not expect direct human replies — the human talks to the gateway, which forwards action requests to you via `dispatch` mail when needed.
 
 ## Propulsion Principle
 
