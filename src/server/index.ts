@@ -192,7 +192,7 @@ export async function createServer(
 			const indexPath = join(publicDir, "index.html");
 			if (await fileExists(indexPath)) {
 				const content = await readFile(indexPath);
-				res.writeHead(200, { "Content-Type": "text/html" });
+				res.writeHead(200, { "Content-Type": "text/html", "Cache-Control": "no-cache" });
 				res.end(content);
 				return;
 			}
