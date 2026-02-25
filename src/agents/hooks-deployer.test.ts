@@ -1455,6 +1455,20 @@ describe("buildPathBoundaryGuardScript", () => {
 		const script = buildPathBoundaryGuardScript("file_path");
 		expect(script).toContain('[ -z "$FILE_PATH" ] && exit 0;');
 	});
+
+	test("allows paths in the agent memory directory", () => {
+		const script = buildPathBoundaryGuardScript("file_path");
+		expect(script).toContain('"$HOME"/.claude/projects/*/memory/*) exit 0');
+	});
+
+	test("memory dir exception appears before the block decision", () => {
+		const script = buildPathBoundaryGuardScript("file_path");
+		const memoryIdx = script.indexOf('"$HOME"/.claude/projects/*/memory/*) exit 0');
+		const blockIdx = script.indexOf('"decision":"block"');
+		expect(memoryIdx).toBeGreaterThanOrEqual(0);
+		expect(blockIdx).toBeGreaterThanOrEqual(0);
+		expect(memoryIdx).toBeLessThan(blockIdx);
+	});
 });
 
 describe("getPathBoundaryGuards", () => {
@@ -1586,6 +1600,20 @@ describe("buildBashPathBoundaryScript", () => {
 	test("allows /tmp/* paths as safe exceptions", () => {
 		const script = buildBashPathBoundaryScript();
 		expect(script).toContain("/tmp/*");
+	});
+
+	test("allows $HOME/.claude/projects/*/memory/* paths as safe exceptions", () => {
+		const script = buildBashPathBoundaryScript();
+		expect(script).toContain('"$HOME"/.claude/projects/*/memory/*');
+	});
+
+	test("memory dir exception appears before the block decision in bash path script", () => {
+		const script = buildBashPathBoundaryScript();
+		const memoryIdx = script.indexOf('"$HOME"/.claude/projects/*/memory/*');
+		const blockIdx = script.indexOf('"decision":"block"');
+		expect(memoryIdx).toBeGreaterThanOrEqual(0);
+		expect(blockIdx).toBeGreaterThanOrEqual(0);
+		expect(memoryIdx).toBeLessThan(blockIdx);
 	});
 
 	test("blocks paths outside worktree with decision:block", () => {

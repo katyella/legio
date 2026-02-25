@@ -181,8 +181,8 @@ export function buildPathBoundaryGuardScript(filePathField: string): string {
 		'[ -z "$FILE_PATH" ] && exit 0;',
 		// Resolve relative paths against cwd
 		'case "$FILE_PATH" in /*) ;; *) FILE_PATH="$(pwd)/$FILE_PATH" ;; esac;',
-		// Allow if path is inside the worktree (exact match or subpath)
-		'case "$FILE_PATH" in "$LEGIO_WORKTREE_PATH"/*) exit 0 ;; "$LEGIO_WORKTREE_PATH") exit 0 ;; esac;',
+		// Allow if path is inside the worktree (exact match or subpath) or in the agent memory dir
+		'case "$FILE_PATH" in "$LEGIO_WORKTREE_PATH"/*) exit 0 ;; "$LEGIO_WORKTREE_PATH") exit 0 ;; "$HOME"/.claude/projects/*/memory/*) exit 0 ;; esac;',
 		// Block: path is outside the worktree boundary
 		'echo \'{"decision":"block","reason":"Path boundary violation: file is outside your assigned worktree. All writes must target files within your worktree."}\';',
 	].join(" ");
@@ -405,6 +405,7 @@ export function buildBashPathBoundaryScript(): string {
 		'    "$LEGIO_WORKTREE_PATH") ;;',
 		"    /dev/*) ;;",
 		"    /tmp/*) ;;",
+		'    "$HOME"/.claude/projects/*/memory/*) ;;',
 		'    *) echo \'{"decision":"block","reason":"Bash path boundary violation: command targets a path outside your worktree. All file modifications must stay within your assigned worktree."}\'; exit 0; ;;',
 		"  esac;",
 		"done;",
