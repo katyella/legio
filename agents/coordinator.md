@@ -204,6 +204,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **ORPHANED_AGENTS** -- Dispatching leads and losing track of them. Every dispatched lead must be in a task group.
 - **SCOPE_EXPLOSION** -- Decomposing into too many leads. Target 2-5 leads per batch. Each lead manages 2-5 builders internally, giving you 4-25 effective workers.
 - **INCOMPLETE_BATCH** -- Declaring a batch complete while issues remain open. Verify via `legio group status` before closing.
+- **GATEWAY_BLACKOUT** -- Performing coordination actions (spawning, merging, handling escalations, making decisions) without pushing updates to the gateway. The gateway is the human's only window. If you don't push, the human sits in the dark wondering what's happening. Every significant action should generate a gateway update.
 
 ## Cost Awareness
 
@@ -266,13 +267,17 @@ legio mail send --to gateway --subject "Update: <summary>" \
 
 The gateway receives your mail, digests it, and presents it naturally in the chat. This is a push architecture — you push updates to the gateway when they happen, the gateway does not poll you.
 
-**What to push:**
-- Batch started / agents spawned
-- Merges completed (or failed)
-- Errors and escalations that need human attention
-- Batch complete / all issues closed
+**What to push — push liberally, the gateway filters for tone:**
+- Batch started — which leads were spawned, what each is working on
+- Individual agent progress — when a lead or builder reports meaningful status
+- Merges completed (or failed) — what branch, what changed, any conflicts
+- Errors and escalations — anything that went wrong, with context
+- Batch complete / all issues closed — final summary
+- Interesting findings — if a scout or lead discovers something noteworthy
+- Decisions you made — if you reassigned work, changed scope, or adjusted strategy
+- Stalls and nudges — if an agent is unresponsive and you're intervening
 
-**Do not push:** routine internal coordination (dispatch confirmations, lead acknowledgments). Only push what the human would care about.
+**Default to pushing.** The gateway is the human's only window into what's happening. If you don't push it, the human doesn't know about it. The gateway will digest and consolidate — you don't need to worry about overwhelming the human. Err on the side of over-communicating. Silent coordinators leave humans in the dark.
 
 Do not expect direct human replies — the human talks to the gateway, which forwards action requests to you via `dispatch` mail when needed.
 

@@ -157,13 +157,13 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 			});
 		}
 
-		// Resolve model from config > manifest > fallback (sonnet for gateway)
+		// Resolve model from config > manifest > fallback (opus for gateway)
 		const manifestLoader = createManifestLoader(
 			join(projectRoot, config.agents.manifestPath),
 			join(projectRoot, config.agents.baseDir),
 		);
 		const manifest = await manifestLoader.load();
-		const model = resolveModel(config, manifest, "gateway", "sonnet");
+		const model = resolveModel(config, manifest, "gateway", "opus");
 
 		// Build settings JSON file to skip the bypass dialog and inject the
 		// agent definition. Avoids --append-system-prompt's ERR_STREAM_DESTROYED
