@@ -130,8 +130,10 @@ Legio includes a browser-based dashboard for real-time fleet monitoring. Start i
 | **Costs** | Token usage and cost breakdown |
 | **Tasks** | Beads issue tracking and status |
 | **Chat** | Task-based conversations grouped by issue |
-| **Strategy** | Strategic planning and oversight |
-| **Gateway** | External access and routing (accessible via agent inspect) |
+| **Setup** | Initialization wizard and configuration |
+| **Gateway Chat** | Gateway agent conversation interface |
+| **Inspect** | Deep per-agent inspection |
+| **Task Detail** | Task overview with agents and communication tabs |
 
 **Tech:** Preact + HTM + Tailwind CSS, WebSocket for real-time updates, zero build step.
 
@@ -349,7 +351,16 @@ When the server is running, a full REST API is available at `http://localhost:41
 | `POST /api/agents/spawn` | Spawn agent from UI |
 | `POST /api/coordinator/chat` | Send chat message to coordinator |
 | `GET /api/coordinator/chat/history` | Coordinator chat history |
-| `GET /api/strategy` | Strategy data |
+| `POST /api/gateway/chat` | Send chat message to gateway |
+| `GET /api/gateway/chat/history` | Gateway chat history |
+| `GET /api/chat/unified/history` | Unified chat timeline |
+| `POST /api/chat/transcript-sync` | Sync transcript data |
+| `GET /api/ideas` | Ideas list |
+| `POST /api/ideas` | Create idea |
+| `PUT /api/ideas/:id` | Update idea |
+| `DELETE /api/ideas/:id` | Delete idea |
+| `POST /api/ideas/:id/dispatch` | Dispatch idea to agents |
+| `POST /api/ideas/:id/backlog` | Move idea to backlog |
 | `GET /api/mail` | All messages |
 | `GET /api/mail/unread` | Unread messages |
 | `GET /api/mail/conversations` | Thread grouping |

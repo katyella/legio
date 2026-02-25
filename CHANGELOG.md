@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-02-25
+
 ### Added
 
 #### legio stop Command
@@ -23,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TerminalPanel extraction** — standalone component extracted from `coordinator-chat.js` with diff-based streaming and loading indicator
 
 #### Dashboard & Frontend
-- **PlanningView** — replaced `StrategyView` with `PlanningView` combining gateway chat + ideas sidebar
 - **Ideas CRUD API** — replaced strategy routes with full ideas CRUD (`GET/POST /api/ideas`, `PUT/DELETE /api/ideas/:id`, `POST /api/ideas/:id/dispatch`)
 - **MailFeed in dashboard** — replaced MergeQueue widget with MailFeed in sidebar; click-to-expand items, `audience=human` messages hidden, `Cache-Control: no-cache`
 - **MailFeed type filter chips** — filter by message type in dashboard MailFeed
@@ -43,12 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Universal remote-block guard** — PreToolUse hook blocks all git push; mulch diff PostToolUse hook added to template
 - **Transcript sync** — `extractAssistantText`/`parseTranscriptTexts` with line-offset watermark; syncs to `chat.db` on session-end
 - **Run ID in metrics** — `run_id` column in `metrics.db` + `getSessionsByRun()` for per-run cost queries
+- **Hook enforcement** — block AskUserQuestion, EnterPlanMode, EnterWorktree for all agents via PreToolUse hooks
+
+#### Testing
+- 2384 tests across 85 files
 
 ### Changed
 - **Dashboard sidebar** — MailFeed replaced MergeQueue widget
-- **StrategyView → PlanningView** — complete rewrite combining gateway chat + ideas sidebar
 - **Strategy routes → Ideas CRUD API** — `/api/strategy` endpoints replaced with `/api/ideas` CRUD
 - **Chat architecture** — coordinator/chat migrated from `chat.db` to `mail.db` for unified messaging across all agent types
+- **Sling dispatch ordering** — write dispatch mail to mail.db before tmux session creation to fix race condition
 
 ### Fixed
 - **Server not stopping on `legio down`** — PID mismatch fix
@@ -71,6 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Zombie reconciliation** — removed `updateLastActivity` from coordinator and gateway to stop false-positive zombie resets
 - **Cache tokens** — included in CostsView total tokens stat card
 - **Zombie recovery** — `getByRunIncludeOrphans()` added to `SessionStore` for cross-run session lookup
+- **Gateway-chat.js enter lag** — move setInput(empty) and setThinking(true) before await postJson to eliminate input clearing lag
+- **Gateway-chat.js history flickering** — prevent full re-render on unchanged history by comparing message arrays before setState
+
+### Removed
+- **Planning tab** — removed PlanningView from dashboard and deleted strategy.js
+- **Orphaned frontend views** — deleted 6 unused views (command.js, coordinator-chat.js, gateway.js, raw-chat.js, terminal.js, events.js redirects), removed #command/#gateway hash redirects, dropped dead state fields
+- **chat.db stack** — removed ChatStore, chat.db creation, and chat-related routes; simplified sessions/compat.ts
 
 ## [0.5.4] - 2026-02-17
 
@@ -396,7 +408,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Biome configuration for formatting and linting
 - TypeScript strict mode with `noUncheckedIndexedAccess`
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.5.5...HEAD
+[0.5.5]: https://github.com/katyella/legio/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/katyella/legio/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/katyella/legio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/katyella/legio/compare/v0.5.1...v0.5.2
