@@ -4,7 +4,7 @@
  * Uses DI (DownDeps) to inject mock subprocess calls. No real coordinator/server
  * in tests.
  *
- * WHY DI instead of mock.module: mock.module() in bun:test is process-global
+ * WHY DI instead of mock.module: mock.module() in vitest is process-global
  * and leaks across test files. DI keeps mocks scoped to each test invocation.
  */
 

@@ -4,7 +4,7 @@
  * Uses DI (UpDeps) to inject mock subprocess calls, filesystem checks,
  * and PID reads. No real init/server/coordinator in tests.
  *
- * WHY DI instead of mock.module: mock.module() in bun:test is process-global
+ * WHY DI instead of mock.module: mock.module() in vitest is process-global
  * and leaks across test files. DI keeps mocks scoped to each test invocation.
  */
 

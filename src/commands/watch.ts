@@ -186,7 +186,7 @@ export async function watchCommand(args: string[]): Promise<void> {
 		const legioBin = await resolveLegioBin();
 
 		// Spawn a detached background process running `legio watch` (without --background)
-		const child = spawn("bun", ["run", legioBin, ...childArgs], {
+		const child = spawn(process.execPath, ["--import", "tsx", legioBin, ...childArgs], {
 			cwd,
 			stdio: "ignore",
 			detached: true,

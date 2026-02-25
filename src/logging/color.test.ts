@@ -18,7 +18,7 @@ async function runBun(
 	envOverrides: Record<string, string | undefined>,
 ): Promise<string> {
 	return new Promise((resolve, reject) => {
-		const proc = spawn("bun", ["-e", code], {
+		const proc = spawn("node", ["-e", code], {
 			cwd: projectRoot,
 			env: makeEnv(envOverrides),
 			stdio: ["ignore", "pipe", "pipe"],

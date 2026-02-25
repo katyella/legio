@@ -173,7 +173,7 @@ interface CleanResult {
  *
  * Project-scoped: only kills tmux sessions whose names appear in the
  * project's sessions.db (or sessions.json). This prevents cross-project
- * kills during dogfooding, where `bun test` might run inside a live swarm.
+ * kills during dogfooding, where `npm test` might run inside a live swarm.
  *
  * Falls back to killing all "legio-{projectName}-" prefixed tmux sessions
  * only if the SessionStore is unavailable (graceful degradation for broken state).

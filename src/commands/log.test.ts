@@ -1053,7 +1053,7 @@ describe("logCommand", () => {
 			sessionId: "sess-insight",
 			eventType: "tool_start",
 			toolName: "Bash",
-			toolArgs: JSON.stringify({ command: "bun test" }),
+			toolArgs: JSON.stringify({ command: "npm test" }),
 			toolDurationMs: null,
 			level: "error",
 			data: "Test failed",
@@ -1259,7 +1259,7 @@ describe("logCommand --stdin integration", () => {
 
 	/**
 	 * Helper: run `legio log` as a subprocess with stdin piped.
-	 * Uses bun to run the CLI entry point directly.
+	 * Uses node to run the CLI entry point directly.
 	 */
 	async function runLogWithStdin(
 		event: string,
@@ -1339,7 +1339,7 @@ try {
 		// First create a tool-start event
 		const startPayload = {
 			tool_name: "Bash",
-			tool_input: { command: "bun test" },
+			tool_input: { command: "npm test" },
 			session_id: "sess-test-002",
 		};
 		const startResult = await runLogWithStdin("tool-start", "correlate-agent", startPayload);
@@ -1351,7 +1351,7 @@ try {
 		// Now send tool-end
 		const endPayload = {
 			tool_name: "Bash",
-			tool_input: { command: "bun test" },
+			tool_input: { command: "npm test" },
 			session_id: "sess-test-002",
 		};
 		const endResult = await runLogWithStdin("tool-end", "correlate-agent", endPayload);
