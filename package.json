@@ -1,6 +1,6 @@
 {
 	"name": "legio",
-	"version": "0.5.4",
+	"version": "0.5.5",
 	"description": "Multi-agent orchestration for Claude Code — spawn worker agents in git worktrees via tmux, coordinate through SQLite mail, merge with tiered conflict resolution",
 	"author": "Jaymin West",
 	"license": "MIT",
