@@ -41,12 +41,14 @@ export function GatewayChat({ gwRunning }) {
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
 	const thinkingTimeoutRef = useRef(null);
+	const thinkingCountRef = useRef(0);
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
 		" placeholder-[#666] outline-none focus:border-[#E64415]";
 
 	// Load gateway chat history on mount and poll for updates
+	// Poll faster (2000ms) when thinking so we catch replies quickly
 	useEffect(() => {
 		let cancelled = false;
 
@@ -66,12 +68,12 @@ export function GatewayChat({ gwRunning }) {
 		}
 
 		fetchHistory();
-		const interval = setInterval(fetchHistory, 5000);
+		const interval = setInterval(fetchHistory, thinking ? 2000 : 5000);
 		return () => {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, []);
+	}, [thinking]);
 
 	// Poll POST /api/chat/transcript-sync to sync gateway transcript responses into mail.db
 	useEffect(() => {
@@ -106,7 +108,9 @@ export function GatewayChat({ gwRunning }) {
 
 	useEffect(() => {
 		if (fromAgentCount > prevFromAgentCountRef.current) {
-			setThinking(false);
+			// Decrement thinking counter; clear indicator only when all sends have been replied to
+			thinkingCountRef.current = Math.max(0, thinkingCountRef.current - 1);
+			if (thinkingCountRef.current === 0) setThinking(false);
 			// Deduplicate pending messages that now appear in history
 			setPendingMessages((prev) =>
 				prev.filter(
@@ -125,12 +129,31 @@ export function GatewayChat({ gwRunning }) {
 		prevFromAgentCountRef.current = fromAgentCount;
 	}, [fromAgentCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Auto-clear thinking after 120 seconds to prevent it from getting stuck forever
+	// Remove pending messages whenever history updates (catches the case where agent hasn't replied yet)
+	useEffect(() => {
+		if (historyMessages.length === 0) return;
+		setPendingMessages((prev) =>
+			prev.filter(
+				(pm) =>
+					!historyMessages.some(
+						(hm) =>
+							hm.from === "human" &&
+							hm.body === pm.body &&
+							Math.abs(
+								new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
+							) < 60000,
+					),
+			),
+		);
+	}, [historyMessages]);
+
+	// Auto-clear thinking after 60 seconds to prevent it from getting stuck forever
 	useEffect(() => {
 		if (thinking) {
 			thinkingTimeoutRef.current = setTimeout(() => {
+				thinkingCountRef.current = 0;
 				setThinking(false);
-			}, 120000);
+			}, 60000);
 		}
 		return () => {
 			if (thinkingTimeoutRef.current) {
@@ -196,10 +219,11 @@ export function GatewayChat({ gwRunning }) {
 
 		try {
 			setInput("");
+			thinkingCountRef.current += 1;
 			setThinking(true);
 			await postJson("/api/gateway/chat", { text });
-			// Remove optimistic pending (history poll will pick it up)
-			setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
+			// Do NOT remove pending here — let the historyMessages useEffect deduplicate
+			// once the history poll confirms the message, preventing a visible flash/gap.
 			try {
 				await postJson("/api/audit", {
 					type: "command",
