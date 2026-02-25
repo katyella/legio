@@ -114,20 +114,62 @@ function MetricsStrip({ agents, status }) {
 // ---------------------------------------------------------------------------
 
 function MailFeed({ mail }) {
+	const [activeFilters, setActiveFilters] = useState(new Set());
+
 	const sorted = [...mail]
 		.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 		.slice(0, 50);
+
+	const filtered = activeFilters.size === 0 ? sorted : sorted.filter((m) => activeFilters.has(m.type));
+
+	const allTypes = Object.keys(MAIL_TYPE_COLORS);
+
+	const toggleFilter = useCallback((type) => {
+		setActiveFilters((prev) => {
+			const next = new Set(prev);
+			if (next.has(type)) {
+				next.delete(type);
+			} else {
+				next.add(type);
+			}
+			return next;
+		});
+	}, []);
+
+	const clearFilters = useCallback(() => {
+		setActiveFilters(new Set());
+	}, []);
 
 	return html`
 		<div class="bg-[#1a1a1a] border-t border-[#2a2a2a] shrink-0">
 			<div class="border-b border-[#2a2a2a] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
 				Mail Feed
 			</div>
+			<!-- Filter chips -->
+			<div class="flex flex-wrap gap-1 px-2 py-1.5 border-b border-[#2a2a2a]">
+				<button
+					onClick=${clearFilters}
+					class=${`px-1.5 py-0.5 rounded text-xs font-mono cursor-pointer border-none ${activeFilters.size === 0 ? "bg-white/20 text-white" : "bg-[#2a2a2a] text-[#666]"}`}
+				>
+					All
+				</button>
+				${allTypes.map(
+					(type) => html`
+						<button
+							key=${type}
+							onClick=${() => toggleFilter(type)}
+							class=${`px-1.5 py-0.5 rounded text-xs font-mono cursor-pointer border-none ${activeFilters.has(type) ? MAIL_TYPE_COLORS[type] ?? "bg-[#333] text-[#999]" : "bg-[#2a2a2a] text-[#666]"}`}
+						>
+							${type}
+						</button>
+					`,
+				)}
+			</div>
 			<div class="overflow-y-auto max-h-[30vh] p-2 space-y-0.5">
 				${
-					sorted.length === 0
+					filtered.length === 0
 						? html`<div class="px-2 py-4 text-center text-gray-500 text-xs">No recent mail</div>`
-						: sorted.map(
+						: filtered.map(
 								(m) => html`
 								<div
 									key=${m.id}
