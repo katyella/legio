@@ -9,6 +9,8 @@
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522-green)](https://nodejs.org)
 [![GitHub release](https://img.shields.io/github/v/release/katyella/legio)](https://github.com/katyella/legio/releases)
 
+Built on [Overstory](https://github.com/jayminwest/overstory).
+
 Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a single Claude Code session into a multi-agent team by spawning worker agents in git worktrees via tmux, coordinating them through a custom SQLite mail system, and merging their work back with tiered conflict resolution. Includes a built-in web UI for real-time fleet monitoring and orchestration.
 
 > **Warning: Agent swarms are not a universal solution.** Do not deploy Legio without understanding the risks of multi-agent orchestration — compounding error rates, cost amplification, debugging complexity, and merge conflicts are the normal case, not edge cases. Read [STEELMAN.md](STEELMAN.md) for a full risk analysis and the [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) ([web version](https://jayminwest.com/agentic-engineering-book)) before using this tool in production.
