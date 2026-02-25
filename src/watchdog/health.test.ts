@@ -236,6 +236,19 @@ describe("evaluateHealth", () => {
 		expect(check.action).toBe("none");
 	});
 
+	test("persistent capability: gateway with stale activity → still working", () => {
+		const staleActivity = new Date(Date.now() - 60_000).toISOString();
+		const session = makeSession({
+			capability: "gateway",
+			state: "working",
+			lastActivity: staleActivity,
+		});
+		const check = evaluateHealth(session, true, THRESHOLDS);
+
+		expect(check.state).toBe("working");
+		expect(check.action).toBe("none");
+	});
+
 	test("persistent capability: coordinator booting → transitions to working", () => {
 		const session = makeSession({
 			capability: "coordinator",

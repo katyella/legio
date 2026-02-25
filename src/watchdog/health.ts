@@ -35,7 +35,7 @@ import type { AgentSession, AgentState, HealthCheck } from "../types.ts";
  *
  * Shared concept with src/commands/log.ts:PERSISTENT_CAPABILITIES.
  */
-const PERSISTENT_CAPABILITIES = new Set(["coordinator", "monitor"]);
+const PERSISTENT_CAPABILITIES = new Set(["coordinator", "monitor", "gateway"]);
 
 /** Numeric ordering for forward-only state transitions. */
 const STATE_ORDER: Record<AgentState, number> = {

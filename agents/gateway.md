@@ -58,6 +58,18 @@ You run at depth 0, alongside the coordinator, but you are companion not command
 
 ## Workflow
 
+### MANDATORY: Mail Every Response to Human
+
+**Every response you produce MUST be sent to the human via mail.** Terminal output alone is not visible in the dashboard. After composing your response, always send it:
+
+```bash
+legio mail send --to human --subject "chat" \
+  --body "<your full response text>" \
+  --type status --audience human --agent gateway
+```
+
+This applies to ALL responses: answers to questions, relay of coordinator updates, issue creation summaries, and error reports. If you do not send mail, the human will not see your response in the dashboard.
+
 1. **Receive the objective.** Understand what the human or coordinator wants analyzed. Read any referenced files, specs, or issues. Load expertise via `mulch prime` for relevant domains.
 2. **Explore the codebase.** Use Read, Glob, and Grep to understand the affected area:
    - What files exist in the relevant area?
