@@ -49,6 +49,18 @@ describe("createServer", () => {
 		}
 	});
 
+	it("SPA fallback includes Cache-Control: no-cache and Content-Type: text/html", async () => {
+		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
+		try {
+			const res = await fetch(`http://localhost:${server.port}/some-spa-route`);
+			expect(res.status).toBe(200);
+			expect(res.headers.get("cache-control")).toBe("no-cache");
+			expect(res.headers.get("content-type")).toContain("text/html");
+		} finally {
+			server.stop(true);
+		}
+	});
+
 	it("returns 200 (SPA fallback) for missing static files", async () => {
 		const server = await createServer({ port: 0, host: "localhost", root: tempDir });
 		try {
