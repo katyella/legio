@@ -4,7 +4,8 @@
  * Single command to cleanly stop the full legio stack:
  * 1. Stop coordinator (if running) via legio coordinator stop
  *    This also stops the watchdog and monitor agents.
- * 2. Stop server (if running) via legio server stop
+ * 2. Stop gateway (if running) via legio gateway stop
+ * 3. Stop server (if running) via legio server stop
  *
  * Running legio down when nothing is running prints "Nothing to stop".
  */
@@ -62,8 +63,9 @@ Options:
   --json         JSON output
   --help, -h     Show this help
 
-legio down stops the coordinator (including watchdog and monitor) and the
-server. Running legio down when nothing is running is a safe no-op.`;
+legio down stops the coordinator (including watchdog and monitor), the
+gateway agent, and the server. Running legio down when nothing is running
+is a safe no-op.`;
 
 /**
  * Entry point for \`legio down [options]\`.
@@ -82,6 +84,7 @@ export async function downCommand(args: string[], deps: DownDeps = {}): Promise<
 	const projectRoot = deps._projectRoot ?? process.cwd();
 
 	let coordinatorStopped = false;
+	let gatewayStopped = false;
 	let serverStopped = false;
 
 	// 1. Stop coordinator (if running) — also stops watchdog + monitor
@@ -92,18 +95,26 @@ export async function downCommand(args: string[], deps: DownDeps = {}): Promise<
 	}
 	// Non-zero exit means coordinator was not running — that's fine, not an error.
 
-	// 2. Stop server — delegate all PID checking to `legio server stop`
+	// 2. Stop gateway (if running) — non-fatal if not running
+	const gatewayStop = await run(["legio", "gateway", "stop"], { cwd: projectRoot });
+	if (gatewayStop.exitCode === 0) {
+		gatewayStopped = true;
+		if (!json && gatewayStop.stdout) process.stdout.write(gatewayStop.stdout);
+	}
+	// Non-zero exit means gateway was not running — that's fine, not an error.
+
+	// 3. Stop server — delegate all PID checking to `legio server stop`
 	const serverStop = await run(["legio", "server", "stop"], { cwd: projectRoot });
 	if (serverStop.exitCode === 0 && !serverStop.stdout.includes("not running")) {
 		serverStopped = true;
 		if (!json && serverStop.stdout) process.stdout.write(serverStop.stdout);
 	}
 
-	const nothingToStop = !coordinatorStopped && !serverStopped;
+	const nothingToStop = !coordinatorStopped && !gatewayStopped && !serverStopped;
 
 	if (json) {
 		process.stdout.write(
-			`${JSON.stringify({ coordinatorStopped, serverStopped, nothingToStop })}\n`,
+			`${JSON.stringify({ coordinatorStopped, gatewayStopped, serverStopped, nothingToStop })}\n`,
 		);
 	} else if (nothingToStop) {
 		process.stdout.write("Nothing to stop\n");
