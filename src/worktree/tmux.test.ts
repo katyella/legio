@@ -9,6 +9,7 @@ import {
 	createSession,
 	getDescendantPids,
 	getPanePid,
+	hasTuiMarkers,
 	isProcessAlive,
 	isSessionAlive,
 	killProcessTree,
@@ -977,15 +978,49 @@ describe("capturePaneContent", () => {
 	});
 });
 
+describe("hasTuiMarkers", () => {
+	test("returns true for 'bypass permissions' marker", () => {
+		expect(hasTuiMarkers("Claude Code — bypass permissions")).toBe(true);
+	});
+
+	test("returns true for horizontal line box-drawing character ─", () => {
+		expect(hasTuiMarkers("────────────────────────────────")).toBe(true);
+	});
+
+	test("returns true for bold horizontal line box-drawing character ━", () => {
+		expect(hasTuiMarkers("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")).toBe(true);
+	});
+
+	test("returns true for top-left corner box-drawing character ╭", () => {
+		expect(hasTuiMarkers("╭─ Claude Code ──────────────────╮")).toBe(true);
+	});
+
+	test("returns true for bottom-left corner box-drawing character ╰", () => {
+		expect(hasTuiMarkers("╰────────────────────────────────╯")).toBe(true);
+	});
+
+	test("returns false for plain shell prompt", () => {
+		expect(hasTuiMarkers("user@host:~$ ")).toBe(false);
+	});
+
+	test("returns false for empty string", () => {
+		expect(hasTuiMarkers("")).toBe(false);
+	});
+
+	test("returns false for generic non-TUI content", () => {
+		expect(hasTuiMarkers("> ready for input")).toBe(false);
+	});
+});
+
 describe("waitForTuiReady", () => {
 	beforeEach(() => {
 		mockSpawn.mockReset();
 	});
 
-	test("resolves immediately when pane already has content", async () => {
-		mockSpawn.mockImplementation(() => createMockProcess("> ready\n", "", 0));
+	test("resolves immediately when pane already has TUI markers", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("╭─ Claude Code ──╮\n", "", 0));
 
-		await waitForTuiReady("legio-agent");
+		await waitForTuiReady("legio-agent", { postReadyDelay: 0 });
 
 		// Should call capture-pane once and return without timeout
 		expect(mockSpawn).toHaveBeenCalledTimes(1);
@@ -995,7 +1030,7 @@ describe("waitForTuiReady", () => {
 		expect([command, ...args]).toEqual(["tmux", "capture-pane", "-t", "legio-agent", "-p"]);
 	});
 
-	test("polls until pane content appears", async () => {
+	test("polls until pane shows TUI markers", async () => {
 		let callCount = 0;
 		mockSpawn.mockImplementation(() => {
 			callCount++;
@@ -1003,30 +1038,59 @@ describe("waitForTuiReady", () => {
 				// First two polls: empty pane
 				return createMockProcess("", "", 0);
 			}
-			// Third poll: content appeared
-			return createMockProcess("> ready for input\n", "", 0);
+			// Third poll: TUI marker appeared
+			return createMockProcess("╭─ Claude Code ────────────────────╮\n", "", 0);
 		});
 
-		await waitForTuiReady("legio-agent", { timeout: 5_000, interval: 10 });
+		await waitForTuiReady("legio-agent", { timeout: 5_000, interval: 10, postReadyDelay: 0 });
 
 		// Should have polled 3 times
 		expect(mockSpawn).toHaveBeenCalledTimes(3);
 	});
 
-	test("resolves without throwing when timeout expires with empty pane", async () => {
-		// Always return empty content
+	test("does not trigger ready on plain shell prompt (regression)", async () => {
+		let callCount = 0;
+		mockSpawn.mockImplementation(() => {
+			callCount++;
+			if (callCount <= 2) {
+				// Shell prompt only — no TUI markers
+				return createMockProcess("user@host:~$ ", "", 0);
+			}
+			// Eventually return TUI content
+			return createMockProcess("╭─ Claude Code ──╮\n", "", 0);
+		});
+
+		await waitForTuiReady("legio-agent", { timeout: 5_000, interval: 10, postReadyDelay: 0 });
+
+		// Polled past the shell prompt, resolved only when TUI markers appeared
+		expect(mockSpawn).toHaveBeenCalledTimes(3);
+	});
+
+	test("resolves without throwing when timeout expires with no TUI markers", async () => {
+		// Always return empty content (no TUI markers)
 		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
 
 		const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
 		// Short timeout so test is fast
 		await expect(
-			waitForTuiReady("legio-agent", { timeout: 100, interval: 10 }),
+			waitForTuiReady("legio-agent", { timeout: 100, interval: 10, postReadyDelay: 0 }),
 		).resolves.toBeUndefined();
 
 		// Should emit a warning on timeout
 		expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining("Warning"));
 
 		stderrSpy.mockRestore();
+	});
+
+	test("applies postReadyDelay after marker detection", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("╭─ Claude Code ──╮\n", "", 0));
+
+		const start = Date.now();
+		await waitForTuiReady("legio-agent", { timeout: 5_000, interval: 10, postReadyDelay: 100 });
+		const elapsed = Date.now() - start;
+
+		// Should have waited at least ~100ms for the post-ready delay
+		expect(elapsed).toBeGreaterThanOrEqual(80);
 	});
 });

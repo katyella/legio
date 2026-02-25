@@ -496,29 +496,66 @@ export async function capturePaneContent(name: string): Promise<string> {
 }
 
 /**
- * Poll a tmux pane until Claude Code's TUI has rendered content, indicating
+ * Strings that indicate Claude Code's TUI is rendered and ready.
+ *
+ * These markers appear in the pane once Claude Code has initialized its TUI:
+ * - Permission mode prompt text
+ * - Box-drawing characters used in the TUI chrome (separators, borders)
+ *
+ * Checking for these avoids false-positive ready detection on the bare shell
+ * prompt that appears before Claude Code starts.
+ */
+const TUI_READY_MARKERS = [
+	"bypass permissions", // Permission mode prompt
+	"─", // Unicode box-drawing horizontal line (TUI separator)
+	"━", // Bold box-drawing horizontal line (TUI separator variant)
+	"╭", // Box-drawing top-left corner
+	"╰", // Box-drawing bottom-left corner
+];
+
+/**
+ * Check whether pane content contains Claude Code TUI markers.
+ *
+ * @param content - Pane content to check
+ * @returns true if any TUI marker is present
+ */
+export function hasTuiMarkers(content: string): boolean {
+	return TUI_READY_MARKERS.some((marker) => content.includes(marker));
+}
+
+/**
+ * Poll a tmux pane until Claude Code's TUI has rendered its chrome, indicating
  * it is ready to accept input.
  *
- * Replaces fixed-duration sleeps with an adaptive wait that fires as soon as
- * the pane has content, bounded by a configurable timeout. If the timeout
- * expires before content appears, a warning is emitted to stderr and the
- * function resolves normally (graceful fallback — the caller proceeds anyway).
+ * Waits for TUI-specific markers (box-drawing characters, permission prompts)
+ * rather than any non-empty content, preventing false-positive ready detection
+ * on the shell prompt that appears before Claude Code initializes.
+ *
+ * After markers are detected, an additional `postReadyDelay` (default 500ms)
+ * is applied as defense in depth to let the TUI finish initialization.
+ *
+ * If the timeout expires before markers appear, a warning is emitted to stderr
+ * and the function resolves normally (graceful fallback — the caller proceeds).
  *
  * @param sessionName - Tmux session name to poll
  * @param opts.timeout - Maximum time to wait in ms (default: 15_000)
  * @param opts.interval - Polling interval in ms (default: 500)
+ * @param opts.postReadyDelay - Extra delay after marker detection in ms (default: 500)
  */
 export async function waitForTuiReady(
 	sessionName: string,
-	opts?: { timeout?: number; interval?: number },
+	opts?: { timeout?: number; interval?: number; postReadyDelay?: number },
 ): Promise<void> {
 	const timeoutMs = opts?.timeout ?? 15_000;
 	const intervalMs = opts?.interval ?? 500;
+	const postReadyDelayMs = opts?.postReadyDelay ?? 500;
 	const deadline = Date.now() + timeoutMs;
 
 	while (Date.now() < deadline) {
 		const content = await capturePaneContent(sessionName);
-		if (content.trim().length > 0) {
+		if (hasTuiMarkers(content)) {
+			// Defense in depth: wait for TUI to finish initialization
+			await setTimeout(postReadyDelayMs);
 			return;
 		}
 		await setTimeout(intervalMs);
