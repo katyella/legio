@@ -146,14 +146,6 @@ function App() {
 				window.location.hash = "#tasks";
 				return; // will re-trigger the hash change handler
 			}
-			if (hash === "#command" || hash === "command") {
-				window.location.hash = "#dashboard";
-				return; // will re-trigger the hash change handler
-			}
-			if (hash === "#gateway" || hash === "gateway") {
-				window.location.hash = "#dashboard";
-				return; // will re-trigger the hash change handler
-			}
 			if (hash === "#strategy" || hash === "strategy") {
 				window.location.hash = "#planning";
 				return; // will re-trigger the hash change handler
@@ -163,14 +155,6 @@ function App() {
 		// Redirect legacy #issues hash on initial load
 		if (location.hash === "#issues" || location.hash === "issues") {
 			window.location.hash = "#tasks";
-		}
-		// Redirect legacy #command hash on initial load
-		if (location.hash === "#command" || location.hash === "command") {
-			window.location.hash = "#dashboard";
-		}
-		// Redirect legacy #gateway hash on initial load
-		if (location.hash === "#gateway" || location.hash === "gateway") {
-			window.location.hash = "#dashboard";
 		}
 		// Redirect legacy #strategy hash on initial load
 		if (location.hash === "#strategy" || location.hash === "strategy") {
