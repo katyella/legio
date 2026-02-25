@@ -46,6 +46,27 @@ const NATIVE_TEAM_TOOLS = [
 	"TaskStop",
 ];
 
+/**
+ * Interactive tools that require human input unavailable in non-interactive tmux sessions.
+ * All legio agents run non-interactively — these tools cause indefinite hangs if invoked.
+ */
+const INTERACTIVE_TOOLS: ReadonlyArray<{ name: string; reason: string }> = [
+	{
+		name: "AskUserQuestion",
+		reason:
+			"Legio agents run non-interactively — use legio mail send --type question to ask your parent instead",
+	},
+	{
+		name: "EnterPlanMode",
+		reason:
+			"Legio agents run non-interactively — execute immediately per the propulsion principle",
+	},
+	{
+		name: "EnterWorktree",
+		reason: "Legio agents already have assigned worktrees — nested worktrees are not allowed",
+	},
+];
+
 /** Tools that non-implementation agents must not use. */
 const WRITE_TOOLS = ["Write", "Edit", "NotebookEdit"];
 
@@ -436,6 +457,13 @@ export function getCapabilityGuards(capability: string): HookEntry[] {
 		blockGuard(tool, `Legio agents must use 'legio sling' for delegation — ${tool} is not allowed`),
 	);
 	guards.push(...teamToolGuards);
+
+	// Block interactive tools that require human input for ALL legio agents.
+	// These tools hang indefinitely in non-interactive tmux sessions.
+	const interactiveToolGuards = INTERACTIVE_TOOLS.map(({ name, reason }) =>
+		blockGuard(name, reason),
+	);
+	guards.push(...interactiveToolGuards);
 
 	if (NON_IMPLEMENTATION_CAPABILITIES.has(capability)) {
 		const toolGuards = WRITE_TOOLS.map((tool) =>

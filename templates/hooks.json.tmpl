@@ -24,6 +24,33 @@
 		],
 		"PreToolUse": [
 			{
+				"matcher": "AskUserQuestion",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; echo '{\"decision\":\"block\",\"reason\":\"Legio agents run non-interactively — use legio mail send --type question to ask your parent instead\"}'"
+					}
+				]
+			},
+			{
+				"matcher": "EnterPlanMode",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; echo '{\"decision\":\"block\",\"reason\":\"Legio agents run non-interactively — execute immediately per the propulsion principle\"}'"
+					}
+				]
+			},
+			{
+				"matcher": "EnterWorktree",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; echo '{\"decision\":\"block\",\"reason\":\"Legio agents already have assigned worktrees — nested worktrees are not allowed\"}'"
+					}
+				]
+			},
+			{
 				"matcher": "Bash",
 				"hooks": [
 					{
