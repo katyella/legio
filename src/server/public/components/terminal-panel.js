@@ -38,12 +38,14 @@ function diffCapture(baselineText, currentText) {
 export function TerminalPanel({ chatTarget, thinking }) {
 	const [expanded, setExpanded] = useState(false);
 	const [streamText, setStreamText] = useState("");
+	const [loading, setLoading] = useState(false);
 	const baselineCaptureRef = useRef(null);
 	const terminalRef = useRef(null);
 
 	// Reset when chatTarget changes
 	useEffect(() => {
 		setStreamText("");
+		setLoading(false);
 		baselineCaptureRef.current = null;
 	}, [chatTarget]);
 
@@ -51,11 +53,13 @@ export function TerminalPanel({ chatTarget, thinking }) {
 	useEffect(() => {
 		if (!thinking && !expanded) {
 			setStreamText("");
+			setLoading(false);
 			baselineCaptureRef.current = null;
 			return;
 		}
 
 		let cancelled = false;
+		setLoading(true);
 
 		async function pollCapture() {
 			try {
@@ -63,6 +67,7 @@ export function TerminalPanel({ chatTarget, thinking }) {
 				if (!res.ok || cancelled) return;
 				const data = await res.json();
 				const output = stripAnsi(data.output || "");
+				if (!cancelled) setLoading(false);
 
 				if (thinking) {
 					// Streaming mode: diff against baseline to show new output
@@ -122,7 +127,9 @@ export function TerminalPanel({ chatTarget, thinking }) {
 						${
 							streamText
 								? html`<pre class="text-xs text-[#ccc] font-mono whitespace-pre-wrap break-words">${streamText}</pre>`
-								: html`<div class="text-xs text-[#444] py-1 italic">No output yet</div>`
+								: loading
+									? html`<div class="text-xs text-[#666] py-1 italic animate-pulse">Connecting...</div>`
+									: html`<div class="text-xs text-[#444] py-1 italic">No output yet</div>`
 						}
 					</div>
 				`
