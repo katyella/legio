@@ -54,7 +54,11 @@ export function GatewayChat({ gwRunning }) {
 			try {
 				const data = await fetchJson("/api/gateway/chat/history?limit=200");
 				if (!cancelled) {
-					setHistoryMessages(Array.isArray(data) ? data : []);
+					const next = Array.isArray(data) ? data : [];
+					setHistoryMessages((prev) => {
+						if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+						return next;
+					});
 				}
 			} catch (_err) {
 				// non-fatal — history may not be available yet
@@ -191,6 +195,8 @@ export function GatewayChat({ gwRunning }) {
 		setPendingMessages((prev) => [...prev, pending]);
 
 		try {
+			setInput("");
+			setThinking(true);
 			await postJson("/api/gateway/chat", { text });
 			// Remove optimistic pending (history poll will pick it up)
 			setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
@@ -204,8 +210,6 @@ export function GatewayChat({ gwRunning }) {
 			} catch (_e) {
 				// intentionally ignored
 			}
-			setInput("");
-			setThinking(true);
 		} catch (err) {
 			setSendError(err.message || "Send failed");
 			setPendingMessages((prev) => prev.filter((m) => m.id !== pendingId));
