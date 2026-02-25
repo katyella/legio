@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### legio stop Command
+- `legio stop` — graceful shutdown with DI pattern (`StopDeps._tmux`) matching coordinator.ts, sorts active sessions deepest-first before killing to ensure leaf workers terminate before parents
+
+#### Gateway & Chat System
+- **Gateway chat integration** — `gateway-chat.js` component, gateway chat API persistence (POST/GET `/api/gateway/chat`), dashboard relay workflow
+- **Coordinator relay architecture** — push architecture for coordinator→gateway→human chat relay
+- **Chat persistence** — `CoordinatorChat` standalone component with persistent history, coordinator chat persistence API, `agents/:name/chat` routes, coordinator/chat migrated from `chat.db` to `mail.db` for unified messaging
+- **Unified chat timeline** — single chronological timeline for coordinator chat via `GET /api/chat/unified/history`
+- **Chat history polling** — history polling added to `chat.js` + e2e chat-flow tests
+- **Agent conversations in ChatView** — sidebar and input for per-agent conversations in conversation mode
+- **Server-side coordinator response capture** — via tmux polling (`captureCoordinatorResponse` fire-and-forget pattern)
+- **TerminalPanel extraction** — standalone component extracted from `coordinator-chat.js` with diff-based streaming and loading indicator
+
+#### Dashboard & Frontend
+- **PlanningView** — replaced `StrategyView` with `PlanningView` combining gateway chat + ideas sidebar
+- **Ideas CRUD API** — replaced strategy routes with full ideas CRUD (`GET/POST /api/ideas`, `PUT/DELETE /api/ideas/:id`, `POST /api/ideas/:id/dispatch`)
+- **MailFeed in dashboard** — replaced MergeQueue widget with MailFeed in sidebar; click-to-expand items, `audience=human` messages hidden, `Cache-Control: no-cache`
+- **MailFeed type filter chips** — filter by message type in dashboard MailFeed
+- **Hierarchical agent roster** — `buildAgentHierarchy()` returns depth-annotated list with lead emoji per depth level
+- **Collapsible cost sections** — Cost by Agent and Detailed Breakdown sections in CostsView
+- **TaskDetailView** — with Overview/Agents/Communication tabs
+- **Clickable closed tasks** — closed tasks now navigate to TaskDetailView in Issues view
+
+#### Provider & Model Configuration
+- **Provider env var threading** — `collectProviderEnv()` helper, `ModelAlias`/`ModelRef`/`ProviderConfig` types, provider env vars threaded through all 4 agent spawn sites
+
+#### Agent & Swarm Infrastructure
+- **Root-user guard** — blocks all spawn/start commands when running as root
+- **Unmerged branch safety** — `isBranchMerged()` check in `removeWorktree()` prevents accidental data loss
+- **sendKeys improvements** — error differentiation, `capturePaneContent`, `waitForTuiReady`; replaced hardcoded 3s sleeps
+- **Mulch domain inference** — `inferDomainsFromFiles()` integrated into `legio sling` for automatic expertise priming
+- **Universal remote-block guard** — PreToolUse hook blocks all git push; mulch diff PostToolUse hook added to template
+- **Transcript sync** — `extractAssistantText`/`parseTranscriptTexts` with line-offset watermark; syncs to `chat.db` on session-end
+- **Run ID in metrics** — `run_id` column in `metrics.db` + `getSessionsByRun()` for per-run cost queries
+
+### Changed
+- **Dashboard sidebar** — MailFeed replaced MergeQueue widget
+- **StrategyView → PlanningView** — complete rewrite combining gateway chat + ideas sidebar
+- **Strategy routes → Ideas CRUD API** — `/api/strategy` endpoints replaced with `/api/ideas` CRUD
+- **Chat architecture** — coordinator/chat migrated from `chat.db` to `mail.db` for unified messaging across all agent types
+
+### Fixed
+- **Server not stopping on `legio down`** — PID mismatch fix
+- **Auto-scroll** — corrected `useEffect` dep array and used `requestAnimationFrame`
+- **Transcript-sync polling and thinking timeout** — in coordinator-chat.js
+- **Token stat card** — split Total Tokens into Input/Output and Cache columns
+- **Bidirectional unified chat history** — query by `from='human'` and `to='human'` separately; + transcript-sync route
+- **MODEL_PRICING** — updated pricing for Opus 4.5+/4.6 and Haiku 4.5
+- **README inaccuracies** — corrected agent types table, views, API routes, deps, scripts
+- **Bidirectional chat history** — fixed for both coordinator and `agents/:name/chat` endpoints
+- **Daemon spawn env** — strip `__LEGIO_TSX_LOADED` from child env; hardened bin shim for node_modules
+- **captureCoordinatorResponse removal** — removed polling approach along with `diffCaptureServer`
+- **sendKeys** — split literal text and Enter into separate tmux `send-keys` calls
+- **Terminal capture** — shows full pane capture when expanded but not in thinking state
+- **SQLite UTC timestamps** — normalize by appending `Z` suffix in `mapHistoryMessage`
+- **Chat target switching bugs** — stale target state fixed in coordinator-chat.js
+- **Gateway premature completion** — added `gateway` to `PERSISTENT_CAPABILITIES` list
+- **Agent start hanging via API** — prevent gateway/coordinator/supervisor start from hanging on API routes
+- **Metrics time-filtering** — removed erroneous `OR completed_at IS NULL` predicate
+- **Zombie reconciliation** — removed `updateLastActivity` from coordinator and gateway to stop false-positive zombie resets
+- **Cache tokens** — included in CostsView total tokens stat card
+- **Zombie recovery** — `getByRunIncludeOrphans()` added to `SessionStore` for cross-run session lookup
+
 ## [0.5.4] - 2026-02-17
 
 ### Added
