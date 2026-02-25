@@ -239,6 +239,7 @@ export function GatewayChat({ gwRunning }) {
 
 		try {
 			setInput("");
+			inputRef.current?.focus();
 			thinkingCountRef.current += 1;
 			setThinking(true);
 			await postJson("/api/gateway/chat", { text });
