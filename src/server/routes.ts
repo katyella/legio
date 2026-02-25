@@ -988,6 +988,20 @@ export async function handleApiRequest(
 			return errorResponse(`Gateway tmux session "${tmuxSession}" is not alive`, 404);
 		}
 
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		const savedMessage = mailStore.insert({
+			id: "",
+			from: "human",
+			to: "gateway",
+			subject: "chat",
+			body: text,
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		mailStore.close();
+
 		try {
 			await sendKeys(tmuxSession, text);
 		} catch (err) {
@@ -996,7 +1010,7 @@ export async function handleApiRequest(
 			);
 		}
 
-		return jsonResponse({ ok: true, sent: text });
+		return jsonResponse(savedMessage, 201);
 	}
 
 	// -------------------------------------------------------------------------
@@ -1919,6 +1933,35 @@ export async function handleApiRequest(
 			const humanToCoord = store.getAll({ from: "human", to: "coordinator" });
 			const coordToHuman = store.getAll({ from: "coordinator", to: "human" });
 			const combined = [...humanToCoord, ...coordToHuman];
+			const seen = new Set<string>();
+			const relevant = combined.filter((m) => {
+				if (seen.has(m.id)) return false;
+				seen.add(m.id);
+				return m.audience === "human" || m.audience === "both";
+			});
+			relevant.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+			return jsonResponse(relevant.slice(-limit));
+		} finally {
+			store.close();
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// Gateway Chat — GET /api/gateway/chat/history
+	// -------------------------------------------------------------------------
+
+	if (path === "/api/gateway/chat/history") {
+		const limitParam = url.searchParams.get("limit");
+		const limit = limitParam !== null ? Math.max(1, parseInt(limitParam, 10) || 100) : 100;
+		const dbPath = join(legioDir, "mail.db");
+		if (!(await fileExists(dbPath))) {
+			return jsonResponse([]);
+		}
+		const store = createMailStore(dbPath);
+		try {
+			const humanToGateway = store.getAll({ from: "human", to: "gateway" });
+			const gatewayToHuman = store.getAll({ from: "gateway", to: "human" });
+			const combined = [...humanToGateway, ...gatewayToHuman];
 			const seen = new Set<string>();
 			const relevant = combined.filter((m) => {
 				if (seen.has(m.id)) return false;

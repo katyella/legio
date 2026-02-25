@@ -3038,6 +3038,243 @@ describe("POST /api/gateway/chat", () => {
 		const body = (await json(res)) as { error: string };
 		expect(body.error).toContain("not alive");
 	});
+
+	it("persists message to mail.db and returns it with 201", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-persist-001",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway",
+			state: "working",
+			pid: 12345,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		const res = await dispatchPost("/api/gateway/chat", { text: "Hello gateway" });
+		expect(res.status).toBe(201);
+		const body = (await json(res)) as {
+			id: string;
+			from: string;
+			to: string;
+			subject: string;
+			body: string;
+			type: string;
+			audience: string;
+			priority: string;
+		};
+		expect(body.from).toBe("human");
+		expect(body.to).toBe("gateway");
+		expect(body.subject).toBe("chat");
+		expect(body.body).toBe("Hello gateway");
+		expect(body.type).toBe("status");
+		expect(body.audience).toBe("human");
+		expect(body.priority).toBe("normal");
+		expect(typeof body.id).toBe("string");
+		expect(body.id.length).toBeGreaterThan(0);
+
+		// Verify message persisted in mail.db
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		const messages = mailStore.getAll({ from: "human", to: "gateway", audience: "human" });
+		mailStore.close();
+		expect(messages.length).toBe(1);
+		expect(messages[0]?.body).toBe("Hello gateway");
+	});
+
+	it("still sends keys to tmux after persisting", async () => {
+		const dbPath = join(legioDir, "sessions.db");
+		const store = createSessionStore(dbPath);
+		const now = new Date().toISOString();
+		store.upsert({
+			id: "sess-gw-keys-001",
+			agentName: "gateway",
+			capability: "coordinator",
+			worktreePath: "/tmp/wt/gateway",
+			branchName: "main",
+			beadId: "gateway-task",
+			tmuxSession: "legio-test-gateway",
+			state: "working",
+			pid: 12345,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		store.close();
+
+		mockSendKeys.mockClear();
+		const res = await dispatchPost("/api/gateway/chat", { text: "send this" });
+		expect(res.status).toBe(201);
+		expect(mockSendKeys).toHaveBeenCalledWith("legio-test-gateway", "send this");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/gateway/chat/history
+// ---------------------------------------------------------------------------
+
+describe("GET /api/gateway/chat/history", () => {
+	it("returns empty array when mail.db does not exist", async () => {
+		const res = await dispatch("/api/gateway/chat/history");
+		expect(res.status).toBe(200);
+		expect(await json(res)).toEqual([]);
+	});
+
+	it("returns bidirectional messages in chronological order", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "gw-hist-001",
+			from: "human",
+			to: "gateway",
+			subject: "chat",
+			body: "Human question",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "gw-hist-002",
+			from: "gateway",
+			to: "human",
+			subject: "chat",
+			body: "Gateway answer",
+			type: "result",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/gateway/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string; from: string }>;
+		expect(body.length).toBe(2);
+		const bodies = body.map((m) => m.body);
+		expect(bodies).toContain("Human question");
+		expect(bodies).toContain("Gateway answer");
+	});
+
+	it("filters out non-human-audience messages", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		store.insert({
+			id: "gw-agent-msg-001",
+			from: "worker",
+			to: "gateway",
+			subject: "status",
+			body: "Agent message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.insert({
+			id: "gw-human-msg-001",
+			from: "human",
+			to: "gateway",
+			subject: "chat",
+			body: "Human message",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.insert({
+			id: "gw-agent-resp-001",
+			from: "gateway",
+			to: "human",
+			subject: "response",
+			body: "Agent-only gateway response",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "agent",
+		});
+		store.close();
+
+		const res = await dispatch("/api/gateway/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("Human message");
+	});
+
+	it("respects ?limit= query param", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		for (let i = 0; i < 5; i++) {
+			store.insert({
+				id: `gw-limit-${String(i).padStart(3, "0")}`,
+				from: "human",
+				to: "gateway",
+				subject: "chat",
+				body: `Message ${i}`,
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+		}
+		store.close();
+
+		const res = await dispatch("/api/gateway/chat/history", { limit: "3" });
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as unknown[];
+		expect(body.length).toBe(3);
+	});
+
+	it("excludes messages between unrelated agent pairs", async () => {
+		const mailDbPath = join(legioDir, "mail.db");
+		const store = createMailStore(mailDbPath);
+		// Human to gateway - should appear
+		store.insert({
+			id: "gw-related-001",
+			from: "human",
+			to: "gateway",
+			subject: "chat",
+			body: "To gateway",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		// Worker to builder - unrelated pair, should not appear
+		store.insert({
+			id: "gw-unrelated-001",
+			from: "worker",
+			to: "builder",
+			subject: "status",
+			body: "Worker to builder",
+			type: "status",
+			priority: "normal",
+			threadId: null,
+			audience: "human",
+		});
+		store.close();
+
+		const res = await dispatch("/api/gateway/chat/history");
+		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ body: string }>;
+		expect(body.length).toBe(1);
+		expect(body[0]?.body).toBe("To gateway");
+	});
 });
 
 // ---------------------------------------------------------------------------
