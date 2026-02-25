@@ -10,21 +10,9 @@
  */
 
 import { spawn } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { isProcessRunning } from "../watchdog/health.ts";
 
 function hasFlag(args: string[], flag: string): boolean {
 	return args.includes(flag);
-}
-
-async function fileExists(path: string): Promise<boolean> {
-	try {
-		await access(path);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 /**
@@ -57,30 +45,12 @@ async function runCommand(
 	});
 }
 
-/**
- * Read a PID from a PID file (first line). Returns null if not found or invalid.
- */
-async function readPidFromFile(path: string): Promise<number | null> {
-	try {
-		const text = await readFile(path, "utf-8");
-		const firstLine = text.trim().split("\n")[0] ?? "";
-		const pid = Number.parseInt(firstLine, 10);
-		if (Number.isNaN(pid) || pid <= 0) return null;
-		return pid;
-	} catch {
-		return null;
-	}
-}
-
 /** Dependency injection interface for testing. */
 export interface DownDeps {
 	_runCommand?: (
 		cmd: string[],
 		opts?: { cwd?: string },
 	) => Promise<{ stdout: string; stderr: string; exitCode: number }>;
-	_fileExists?: (path: string) => Promise<boolean>;
-	_readPid?: (path: string) => Promise<number | null>;
-	_isProcessRunning?: (pid: number) => boolean;
 	_projectRoot?: string;
 }
 
@@ -109,9 +79,6 @@ export async function downCommand(args: string[], deps: DownDeps = {}): Promise<
 
 	const json = hasFlag(args, "--json");
 	const run = deps._runCommand ?? runCommand;
-	const fileExistsFn = deps._fileExists ?? fileExists;
-	const readPidFn = deps._readPid ?? readPidFromFile;
-	const isRunningFn = deps._isProcessRunning ?? isProcessRunning;
 	const projectRoot = deps._projectRoot ?? process.cwd();
 
 	let coordinatorStopped = false;
@@ -125,20 +92,11 @@ export async function downCommand(args: string[], deps: DownDeps = {}): Promise<
 	}
 	// Non-zero exit means coordinator was not running — that's fine, not an error.
 
-	// 2. Check server PID and stop if running
-	const pidFile = join(projectRoot, ".legio", "server.pid");
-	const pidFileExists = await fileExistsFn(pidFile);
-
-	if (pidFileExists) {
-		const pid = await readPidFn(pidFile);
-		const serverRunning = pid !== null && isRunningFn(pid);
-		if (serverRunning) {
-			const serverStop = await run(["legio", "server", "stop"], { cwd: projectRoot });
-			if (serverStop.exitCode === 0) {
-				serverStopped = true;
-				if (!json && serverStop.stdout) process.stdout.write(serverStop.stdout);
-			}
-		}
+	// 2. Stop server — delegate all PID checking to `legio server stop`
+	const serverStop = await run(["legio", "server", "stop"], { cwd: projectRoot });
+	if (serverStop.exitCode === 0 && !serverStop.stdout.includes("not running")) {
+		serverStopped = true;
+		if (!json && serverStop.stdout) process.stdout.write(serverStop.stdout);
 	}
 
 	const nothingToStop = !coordinatorStopped && !serverStopped;

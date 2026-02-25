@@ -275,6 +275,16 @@ export async function startServer(options: ServerOptions): Promise<void> {
 
 	const server = await createServer(options);
 
+	// When running as a daemon, the PID file was written by the parent with the
+	// shim wrapper's PID. The shim re-execs via spawnSync, so the actual server
+	// runs in a grandchild process with a different PID. Overwrite the PID file
+	// with our real PID so that `legio server stop` sends SIGTERM to the right
+	// process.
+	if (process.env.LEGIO_SERVER_DAEMON === "1") {
+		const { writeServerPid } = await import("../commands/server.ts");
+		await writeServerPid(options.root, process.pid);
+	}
+
 	const url = `http://${host}:${server.port}`;
 	process.stdout.write(`Legio web UI running at ${url}\n`);
 

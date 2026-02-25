@@ -1,8 +1,8 @@
 /**
  * Tests for legio down command.
  *
- * Uses DI (DownDeps) to inject mock subprocess calls, filesystem checks,
- * and PID reads. No real coordinator/server in tests.
+ * Uses DI (DownDeps) to inject mock subprocess calls. No real coordinator/server
+ * in tests.
  *
  * WHY DI instead of mock.module: mock.module() in bun:test is process-global
  * and leaks across test files. DI keeps mocks scoped to each test invocation.
@@ -41,7 +41,17 @@ const COORD_STOP_FAIL = {
 };
 
 /** Server stop success response. */
-const SERVER_STOP_OK = { stdout: "Server stopped\n", stderr: "", exitCode: 0 };
+const SERVER_STOP_OK = { stdout: "Server stopped (PID 42000)\n", stderr: "", exitCode: 0 };
+
+/** Server stop response when not running. */
+const SERVER_NOT_RUNNING = { stdout: "Server not running\n", stderr: "", exitCode: 0 };
+
+/** Server stop response when stale PID cleaned. */
+const SERVER_STALE_PID = {
+	stdout: "Server not running (stale PID file cleaned up)\n",
+	stderr: "",
+	exitCode: 0,
+};
 
 describe("downCommand", () => {
 	let capturedStdout: string;
@@ -80,14 +90,12 @@ describe("downCommand", () => {
 		expect(capturedStdout).toContain("legio down");
 	});
 
-	it("prints Nothing to stop when coordinator not running and no server PID", async () => {
+	it("prints Nothing to stop when coordinator not running and server not running", async () => {
 		const deps: DownDeps = {
 			_runCommand: makeRunCommand({
 				"legio coordinator stop": COORD_STOP_FAIL,
+				"legio server stop": SERVER_NOT_RUNNING,
 			}),
-			_fileExists: async () => false, // no server.pid
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -96,14 +104,12 @@ describe("downCommand", () => {
 		expect(capturedStdout).toContain("Nothing to stop");
 	});
 
-	it("prints Nothing to stop when coordinator not running and server PID is dead", async () => {
+	it("prints Nothing to stop when server has stale PID", async () => {
 		const deps: DownDeps = {
 			_runCommand: makeRunCommand({
 				"legio coordinator stop": COORD_STOP_FAIL,
+				"legio server stop": SERVER_STALE_PID,
 			}),
-			_fileExists: async () => true, // server.pid exists
-			_readPid: async () => 12345,
-			_isProcessRunning: () => false, // but process is dead
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -118,11 +124,9 @@ describe("downCommand", () => {
 			_runCommand: async (cmd) => {
 				commands.push(cmd);
 				if (cmd[0] === "legio" && cmd[1] === "coordinator") return COORD_STOP_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_NOT_RUNNING;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => false,
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -135,7 +139,7 @@ describe("downCommand", () => {
 		expect(capturedStdout).toContain("Legio stack stopped");
 	});
 
-	it("stops server when running (PID alive)", async () => {
+	it("stops server when running", async () => {
 		const commands: string[][] = [];
 		const deps: DownDeps = {
 			_runCommand: async (cmd) => {
@@ -144,9 +148,6 @@ describe("downCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server" && cmd[2] === "stop") return SERVER_STOP_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => true, // server.pid exists
-			_readPid: async () => 42000,
-			_isProcessRunning: () => true, // alive
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -168,9 +169,6 @@ describe("downCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_STOP_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => true,
-			_readPid: async () => 42000,
-			_isProcessRunning: () => true,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -187,17 +185,15 @@ describe("downCommand", () => {
 		expect(capturedStdout).toContain("Legio stack stopped");
 	});
 
-	it("skips server stop when server PID file does not exist", async () => {
+	it("always calls legio server stop (delegates PID checking)", async () => {
 		const commands: string[][] = [];
 		const deps: DownDeps = {
 			_runCommand: async (cmd) => {
 				commands.push(cmd);
 				if (cmd[0] === "legio" && cmd[1] === "coordinator") return COORD_STOP_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_NOT_RUNNING;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => false, // no server.pid
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -206,17 +202,15 @@ describe("downCommand", () => {
 		const serverStopCalled = commands.some(
 			(c) => c[0] === "legio" && c[1] === "server" && c[2] === "stop",
 		);
-		expect(serverStopCalled).toBe(false);
+		expect(serverStopCalled).toBe(true);
 	});
 
 	it("outputs JSON with correct fields when --json passed (nothing to stop)", async () => {
 		const deps: DownDeps = {
 			_runCommand: makeRunCommand({
 				"legio coordinator stop": COORD_STOP_FAIL,
+				"legio server stop": SERVER_NOT_RUNNING,
 			}),
-			_fileExists: async () => false,
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -236,10 +230,8 @@ describe("downCommand", () => {
 		const deps: DownDeps = {
 			_runCommand: makeRunCommand({
 				"legio coordinator stop": COORD_STOP_OK,
+				"legio server stop": SERVER_NOT_RUNNING,
 			}),
-			_fileExists: async () => false,
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -262,9 +254,6 @@ describe("downCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_STOP_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => true,
-			_readPid: async () => 99,
-			_isProcessRunning: () => true,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -284,10 +273,8 @@ describe("downCommand", () => {
 		const deps: DownDeps = {
 			_runCommand: makeRunCommand({
 				"legio coordinator stop": COORD_STOP_FAIL,
+				"legio server stop": SERVER_NOT_RUNNING,
 			}),
-			_fileExists: async () => false,
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
 			_projectRoot: "/tmp/test-project",
 		};
 
@@ -310,9 +297,6 @@ describe("downCommand", () => {
 				}
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
-			_fileExists: async () => true,
-			_readPid: async () => 99,
-			_isProcessRunning: () => true,
 			_projectRoot: "/tmp/test-project",
 		};
 
