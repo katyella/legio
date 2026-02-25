@@ -36,7 +36,10 @@ legio sling <bead-id> \
   --files <file1,file2,...> \
   --parent $LEGIO_AGENT_NAME \
   --depth <current-depth+1>
+legio nudge <unique-agent-name> --force
 ```
+
+**Always nudge immediately after sling.** The `legio nudge --force` ensures the child agent activates promptly, even if the TUI ready detection has a timing gap. This is defense-in-depth — the nudge is cheap and guarantees activation.
 
 ### Communication
 - **Send mail:** `legio mail send --to <recipient> --subject "<subject>" --body "<body>" --type <status|result|question|error>`
@@ -76,6 +79,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    bd create --title="Scout: explore <area> for <objective>" --type=task --priority=2
    legio sling <scout-bead-id> --capability scout --name <scout-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
+   legio nudge <scout-name> --force
    legio mail send --to <scout-name> --subject "Explore: <area>" \
      --body "Investigate <what to explore>. Report: file layout, existing patterns, types, dependencies." \
      --type dispatch
@@ -87,6 +91,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    bd create --title="Scout: explore implementation for <objective>" --type=task --priority=2
    legio sling <scout1-bead-id> --capability scout --name <scout1-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
+   legio nudge <scout1-name> --force
    legio mail send --to <scout1-name> --subject "Explore: implementation" \
      --body "Investigate implementation files: <files>. Report: patterns, types, dependencies." \
      --type dispatch
@@ -95,6 +100,7 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    bd create --title="Scout: explore tests/types for <objective>" --type=task --priority=2
    legio sling <scout2-bead-id> --capability scout --name <scout2-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
+   legio nudge <scout2-name> --force
    legio mail send --to <scout2-name> --subject "Explore: tests and interfaces" \
      --body "Investigate test files and type definitions: <files>. Report: test patterns, type contracts." \
      --type dispatch
@@ -126,6 +132,7 @@ Write specs from scout findings and dispatch builders.
    legio sling <bead-id> --capability builder --name <builder-name> \
      --spec .legio/specs/<bead-id>.md --files <scoped-files> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
+   legio nudge <builder-name> --force
    ```
 9. **Send dispatch mail** to each builder:
    ```bash
@@ -151,6 +158,7 @@ Write specs from scout findings and dispatch builders.
     legio sling <review-bead-id> --capability reviewer --name review-<builder-name> \
       --spec .legio/specs/<builder-bead-id>.md --parent $LEGIO_AGENT_NAME \
       --depth <current+1>
+    legio nudge review-<builder-name> --force
     legio mail send --to review-<builder-name> \
       --subject "Review: <builder-task>" \
       --body "Review the changes on branch <builder-branch>. Spec: .legio/specs/<builder-bead-id>.md. Run quality gates and report PASS or FAIL." \

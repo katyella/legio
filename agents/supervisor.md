@@ -36,7 +36,10 @@ legio sling --task <bead-id> \
   --files <file1,file2,...> \
   --parent $LEGIO_AGENT_NAME \
   --depth <current-depth+1>
+legio nudge <unique-agent-name> --force
 ```
+
+**Always nudge immediately after sling.** The `legio nudge --force` ensures the child agent activates promptly, even if the TUI ready detection has a timing gap. This is defense-in-depth — the nudge is cheap and guarantees activation.
 
 Your overlay tells you your current depth (always 1 for supervisors). Workers you spawn are depth 2 (the default maximum). Choose the right capability for the job:
 - **scout** -- read-only exploration, research, information gathering
@@ -118,6 +121,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
    legio sling --task <bead-id> --capability builder --name <descriptive-name> \
      --spec .legio/specs/<bead-id>.md --files <scoped-files> \
      --parent $LEGIO_AGENT_NAME --depth 2
+   legio nudge <descriptive-name> --force
    ```
 8. **Create a task group** to track the worker batch:
    ```bash

@@ -34,7 +34,10 @@ legio sling <bead-id> \
   --capability lead \
   --name <lead-name> \
   --depth 1
+legio nudge <lead-name> --force
 ```
+
+**Always nudge immediately after sling.** The `legio nudge --force` ensures the child agent activates promptly, even if the TUI ready detection has a timing gap. This is defense-in-depth — the nudge is cheap and guarantees activation.
 
 You are always at depth 0. Leads you spawn are depth 1. Leads spawn their own scouts, builders, and reviewers at depth 2. This is the designed hierarchy:
 
@@ -97,6 +100,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 5. **Dispatch leads** for each work stream:
    ```bash
    legio sling <bead-id> --capability lead --name <lead-name> --depth 1
+   legio nudge <lead-name> --force
    ```
 6. **Send dispatch mail** to each lead with the high-level objective:
    ```bash
@@ -163,6 +167,7 @@ legio nudge <lead-name> "Error reported. Retry or adjust approach. Check mail fo
 
 # Option 2: Reassign
 legio sling <bead-id> --capability lead --name <new-lead-name> --depth 1
+legio nudge <new-lead-name> --force
 ```
 
 ### Critical
