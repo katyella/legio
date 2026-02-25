@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { HierarchyError, ValidationError } from "../errors.ts";
+import { HierarchyError } from "../errors.ts";
 import {
 	type BeaconOptions,
+	buildAutoDispatch,
 	buildBeacon,
 	calculateStaggerDelay,
 	parentHasScouts,
@@ -430,6 +431,100 @@ describe("buildBeacon", () => {
 		expect(beacon).toContain("[LEGIO] worker-3 (builder)");
 		expect(beacon).toContain("task:legio-deep");
 		expect(beacon).toContain("Depth: 2 | Parent: lead-main");
+	});
+});
+
+/**
+ * Tests for the auto-dispatch mail message builder.
+ *
+ * buildAutoDispatch is a pure function that produces the dispatch mail written
+ * to mail.db before tmux session creation. This guarantees the assignment mail
+ * exists when the agent's SessionStart hook fires `legio mail check`.
+ */
+
+describe("buildAutoDispatch", () => {
+	test("defaults from to 'orchestrator' when parentAgent is null", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "test-builder",
+			taskId: "legio-abc",
+			specPath: null,
+			branchName: "legio/test-builder/legio-abc",
+		});
+
+		expect(msg.from).toBe("orchestrator");
+	});
+
+	test("uses parent name as from when parentAgent is provided", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: "lead-alpha",
+			agentName: "test-builder",
+			taskId: "legio-abc",
+			specPath: null,
+			branchName: "legio/test-builder/legio-abc",
+		});
+
+		expect(msg.from).toBe("lead-alpha");
+	});
+
+	test("to matches agentName", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "my-special-builder",
+			taskId: "legio-xyz",
+			specPath: null,
+			branchName: "legio/my-special-builder/legio-xyz",
+		});
+
+		expect(msg.to).toBe("my-special-builder");
+	});
+
+	test("type is 'dispatch'", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "test-builder",
+			taskId: "legio-abc",
+			specPath: null,
+			branchName: "legio/test-builder/legio-abc",
+		});
+
+		expect(msg.type).toBe("dispatch");
+	});
+
+	test("subject includes the task ID", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "test-builder",
+			taskId: "legio-task-99",
+			specPath: null,
+			branchName: "legio/test-builder/legio-task-99",
+		});
+
+		expect(msg.subject).toContain("legio-task-99");
+	});
+
+	test("body includes spec path when provided", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "test-builder",
+			taskId: "legio-abc",
+			specPath: "/some/path/to/spec.md",
+			branchName: "legio/test-builder/legio-abc",
+		});
+
+		expect(msg.body).toContain("/some/path/to/spec.md");
+	});
+
+	test("body includes 'none' when spec path is null", () => {
+		const msg = buildAutoDispatch({
+			parentAgent: null,
+			agentName: "test-builder",
+			taskId: "legio-abc",
+			specPath: null,
+			branchName: "legio/test-builder/legio-abc",
+		});
+
+		expect(msg.body).toContain("none");
 	});
 });
 

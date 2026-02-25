@@ -29,6 +29,7 @@ import type { BeadIssue } from "../beads/client.ts";
 import { createBeadsClient } from "../beads/client.ts";
 import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
+import { createMailStore } from "../mail/store.ts";
 import { createMulchClient, inferDomainsFromFiles } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
@@ -112,6 +113,32 @@ export function buildBeacon(opts: BeaconOptions): string {
 		`Startup: read .claude/CLAUDE.md, run mulch prime, check mail (legio mail check --agent ${opts.agentName}), then begin task ${opts.taskId}`,
 	];
 	return parts.join(" — ");
+}
+
+/**
+ * Build the auto-dispatch mail message object that sling writes to mail.db
+ * before creating the tmux session. This guarantees the dispatch mail exists
+ * when the agent's SessionStart hook fires `legio mail check`.
+ *
+ * Pure function — no side effects, easily testable.
+ */
+export function buildAutoDispatch(opts: {
+	parentAgent: string | null;
+	agentName: string;
+	taskId: string;
+	specPath: string | null;
+	branchName: string;
+}): { from: string; to: string; subject: string; body: string; type: string; priority: string } {
+	const from = opts.parentAgent ?? "orchestrator";
+	const specDisplay = opts.specPath ?? "none";
+	return {
+		from,
+		to: opts.agentName,
+		subject: `dispatch: ${opts.taskId}`,
+		body: `Assigned task ${opts.taskId}. Spec: ${specDisplay}. Branch: ${opts.branchName}. Begin immediately.`,
+		type: "dispatch",
+		priority: "normal",
+	};
 }
 
 /**
@@ -479,6 +506,33 @@ export async function slingCommand(args: string[]): Promise<void> {
 				expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
 				recentTasks: [],
 			});
+		}
+
+		// 11b. Write dispatch mail BEFORE creating the tmux session so the mail
+		// exists when the agent's SessionStart hook fires `legio mail check`.
+		// Without this, there is a race: the agent boots, checks mail, finds nothing,
+		// and idles without an assignment.
+		const dispatchMsg = buildAutoDispatch({
+			parentAgent,
+			agentName: name,
+			taskId,
+			specPath: absoluteSpecPath,
+			branchName,
+		});
+		const mailStore = createMailStore(join(legioDir, "mail.db"));
+		try {
+			mailStore.insert({
+				id: `dispatch-${Date.now()}-${name}`,
+				from: dispatchMsg.from,
+				to: dispatchMsg.to,
+				subject: dispatchMsg.subject,
+				body: dispatchMsg.body,
+				type: dispatchMsg.type as "dispatch",
+				priority: dispatchMsg.priority as "normal",
+				threadId: null,
+			});
+		} finally {
+			mailStore.close();
 		}
 
 		// 12. Create tmux session running claude in interactive mode
