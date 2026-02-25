@@ -3,11 +3,6 @@
  *
  * Uses real SQLite databases in temp directories. No mocking of store logic.
  * gatherStatus/gatherInspectData are integration calls — tested via error paths.
- *
- * better-sqlite3 shim: during the Node.js migration, stores now import from better-sqlite3.
- * We redirect to better-sqlite3 which has a compatible synchronous API.
- * The shim normalises $key → key in param objects (bun:sqlite vs better-sqlite3 convention).
- * Real SQLite operations still happen — this is not mocking store logic.
  */
 
 import { accessSync, constants as fsConstants, readFileSync } from "node:fs";
@@ -37,84 +32,6 @@ vi.stubGlobal("Bun", {
 		const { writeFileSync } = await import("node:fs");
 		writeFileSync(path, content, "utf-8");
 	},
-});
-
-// Redirect bun:sqlite → better-sqlite3 for Node.js/vitest compatibility.
-vi.mock("bun:sqlite", async () => {
-	const mod = await import("better-sqlite3");
-	const BetterDb = mod.default;
-
-	// bun:sqlite accepts { $key: value } but better-sqlite3 expects { key: value }.
-	function normalizeParams(params: unknown): unknown {
-		if (typeof params !== "object" || params === null || Array.isArray(params)) {
-			return params;
-		}
-		const result: Record<string, unknown> = {};
-		for (const [key, val] of Object.entries(params as Record<string, unknown>)) {
-			result[key.startsWith("$") ? key.slice(1) : key] = val;
-		}
-		return result;
-	}
-
-	class CompatStatement {
-		private _stmt: ReturnType<InstanceType<typeof BetterDb>["prepare"]>;
-		constructor(stmt: ReturnType<InstanceType<typeof BetterDb>["prepare"]>) {
-			this._stmt = stmt;
-		}
-		// bun:sqlite returns null for missing row; better-sqlite3 returns undefined.
-		// Use [] for parameterless calls (better-sqlite3 types require at least 1 arg).
-		get(params?: unknown) {
-			const bound =
-				params !== undefined
-					? (normalizeParams(params) as Record<string, unknown>)
-					: ([] as unknown as Record<string, unknown>);
-			return (this._stmt.get(bound) as unknown) ?? null;
-		}
-		all(params?: unknown) {
-			const bound =
-				params !== undefined
-					? (normalizeParams(params) as Record<string, unknown>)
-					: ([] as unknown as Record<string, unknown>);
-			return this._stmt.all(bound);
-		}
-		run(params?: unknown) {
-			const bound =
-				params !== undefined
-					? (normalizeParams(params) as Record<string, unknown>)
-					: ([] as unknown as Record<string, unknown>);
-			this._stmt.run(bound);
-		}
-		// bun:sqlite-specific; map to all() for compatibility
-		values(params?: unknown) {
-			const bound =
-				params !== undefined
-					? (normalizeParams(params) as Record<string, unknown>)
-					: ([] as unknown as Record<string, unknown>);
-			return this._stmt.all(bound);
-		}
-	}
-
-	class Database {
-		private _db: InstanceType<typeof BetterDb>;
-		constructor(path: string) {
-			this._db = new BetterDb(path);
-		}
-		exec(sql: string) {
-			return this._db.exec(sql);
-		}
-		prepare(sql: string) {
-			return new CompatStatement(this._db.prepare(sql));
-		}
-		// bun:sqlite alias for prepare
-		query(sql: string) {
-			return new CompatStatement(this._db.prepare(sql));
-		}
-		close() {
-			return this._db.close();
-		}
-	}
-
-	return { Database };
 });
 
 // Mock the beads client so strategy tests can run without `bd` on PATH.
