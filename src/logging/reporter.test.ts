@@ -146,7 +146,7 @@ describe("printToConsole", () => {
 	test("sends info events to console.log", () => {
 		logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 		errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-		// Clear any calls captured during spy setup (bun's test reporter
+		// Clear any calls captured during spy setup (vitest's test reporter
 		// may flush output through console.log between spy creation and here)
 		logSpy.mockClear();
 		errorSpy.mockClear();

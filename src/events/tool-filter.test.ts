@@ -5,14 +5,14 @@ describe("filterToolArgs", () => {
 	describe("Bash", () => {
 		test("keeps command and description, drops timeout/run_in_background/dangerouslyDisableSandbox", () => {
 			const result = filterToolArgs("Bash", {
-				command: "bun test",
+				command: "npm test",
 				description: "Run tests",
 				timeout: 60000,
 				run_in_background: true,
 				dangerouslyDisableSandbox: false,
 			});
 			expect(result.args).toEqual({
-				command: "bun test",
+				command: "npm test",
 				description: "Run tests",
 			});
 			expect(result.args).not.toHaveProperty("timeout");
@@ -21,8 +21,8 @@ describe("filterToolArgs", () => {
 		});
 
 		test("summary shows first 80 chars of command", () => {
-			const result = filterToolArgs("Bash", { command: "bun test" });
-			expect(result.summary).toBe("bash: bun test");
+			const result = filterToolArgs("Bash", { command: "npm test" });
+			expect(result.summary).toBe("bash: npm test");
 		});
 
 		test("summary truncates long commands at 80 chars", () => {
@@ -226,9 +226,9 @@ describe("filterToolArgs", () => {
 
 		test("summary shows query", () => {
 			const result = filterToolArgs("WebSearch", {
-				query: "bun test runner",
+				query: "npm test runner",
 			});
-			expect(result.summary).toBe("search: bun test runner");
+			expect(result.summary).toBe("search: npm test runner");
 		});
 	});
 

@@ -265,7 +265,7 @@ describe("inspectCommand", () => {
 			eventStore.insert(
 				makeEvent({ toolName: "Edit", toolArgs: '{"file_path": "src/commands/inspect.ts"}' }),
 			);
-			eventStore.insert(makeEvent({ toolName: "Bash", toolArgs: '{"command": "bun test"}' }));
+			eventStore.insert(makeEvent({ toolName: "Bash", toolArgs: '{"command": "npm test"}' }));
 			eventStore.close();
 
 			const data = await gatherInspectData(tempDir, "builder-1", { noTmux: true });
@@ -335,7 +335,7 @@ describe("inspectCommand", () => {
 			store.close();
 
 			const eventStore = createEventStore(eventsDbPath);
-			eventStore.insert(makeEvent({ toolName: "Bash", toolArgs: '{"command": "bun test"}' }));
+			eventStore.insert(makeEvent({ toolName: "Bash", toolArgs: '{"command": "npm test"}' }));
 			eventStore.close();
 
 			const data = await gatherInspectData(tempDir, "builder-1", { noTmux: true });

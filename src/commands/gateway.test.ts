@@ -6,7 +6,7 @@
  * mock.module() to avoid the process-global mock leak issue
  * (see mulch record mx-56558b).
  *
- * WHY DI instead of mock.module: mock.module() in vitest/bun:test is process-global
+ * WHY DI instead of mock.module: mock.module() in vitest is process-global
  * and leaks across test files. The DI approach (same pattern as coordinator.ts
  * _tmux/_sleep) ensures mocks are scoped to each test invocation.
  */
