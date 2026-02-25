@@ -151,9 +151,11 @@ export function CoordinatorChat({ coordRunning }) {
 	useEffect(() => {
 		const feed = feedRef.current;
 		if (feed && isNearBottomRef.current) {
-			feed.scrollTop = feed.scrollHeight;
+			requestAnimationFrame(() => {
+				feed.scrollTop = feed.scrollHeight;
+			});
 		}
-	});
+	}, [allMessages.length, thinking]);
 
 	// Restore cursor position after programmatic input update (e.g., @-mention insertion)
 	useEffect(() => {
