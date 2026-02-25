@@ -59,6 +59,8 @@ Coordinator (persistent orchestrator at project root)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - git
 - tmux
+- [bd (beads)](https://github.com/jayminwest/beads) — issue tracking CLI
+- [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI
 
 ## Installation
 
@@ -85,6 +87,9 @@ cd your-project
 # Bootstrap everything — init, start server, open browser
 legio up
 
+# Verify setup is healthy
+legio doctor
+
 # When you're done, shut it all down
 legio down
 ```
@@ -105,6 +110,7 @@ legio server start --daemon
 legio coordinator start
 
 # Or spawn individual worker agents
+# Task IDs come from beads: run `bd ready` to find available work, or `bd create` to create new tasks
 legio sling <task-id> --capability builder --name my-builder
 
 # Check agent status
@@ -424,13 +430,7 @@ Version is maintained in two places that must stay in sync:
 1. `package.json` — `"version"` field
 2. `src/index.ts` — `VERSION` constant
 
-Use the bump script to update both:
-
-```bash
-npm run version:bump <major|minor|patch>
-```
-
-Git tags are created automatically by GitHub Actions when a version bump is pushed to `main`.
+Version bumps are handled by the GitHub Actions `workflow_dispatch` workflow. Do not bump versions manually.
 
 ## Project Structure
 
