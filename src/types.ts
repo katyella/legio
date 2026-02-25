@@ -739,22 +739,3 @@ export interface StrategyFile {
 	recommendations: StrategyRecommendation[];
 }
 
-// === Raw Chat ===
-
-export type ChatRole = "user" | "assistant";
-
-export interface ChatSession {
-	id: string;
-	title: string;
-	model: string;
-	createdAt: string;
-	updatedAt: string;
-}
-
-export interface ChatMessage {
-	id: string;
-	sessionId: string;
-	role: ChatRole;
-	content: string;
-	createdAt: string;
-}

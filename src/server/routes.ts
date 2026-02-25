@@ -32,7 +32,6 @@ import type {
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { isSessionAlive, sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
-import { createChatStore } from "./chat-store.ts";
 import { HeadlessCoordinator } from "./headless.ts";
 
 // TODO: move Idea and IdeasFile to types.ts
@@ -244,65 +243,6 @@ async function parseJsonBody(request: Request): Promise<Record<string, unknown> 
 		return errorResponse("Request body must be a JSON object", 400);
 	}
 	return body as Record<string, unknown>;
-}
-
-// ---------------------------------------------------------------------------
-// Claude API helper
-// ---------------------------------------------------------------------------
-
-/**
- * Call the Claude Messages API with a given message history.
- * Returns the assistant text content on success, or an error object on failure.
- */
-async function callClaudeApi(
-	messages: Array<{ role: string; content: string }>,
-	model: string,
-): Promise<{ content: string } | { error: string }> {
-	const apiKey = process.env.ANTHROPIC_API_KEY;
-	if (!apiKey) {
-		return { error: "ANTHROPIC_API_KEY environment variable is not set" };
-	}
-
-	let response: globalThis.Response;
-	try {
-		response = await fetch("https://api.anthropic.com/v1/messages", {
-			method: "POST",
-			headers: {
-				"x-api-key": apiKey,
-				"anthropic-version": "2023-06-01",
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({ model, max_tokens: 4096, messages }),
-		});
-	} catch (err) {
-		return { error: `Network error: ${err instanceof Error ? err.message : String(err)}` };
-	}
-
-	if (!response.ok) {
-		return { error: `Claude API error: ${response.status} ${response.statusText}` };
-	}
-
-	let data: unknown;
-	try {
-		data = await response.json();
-	} catch {
-		return { error: "Failed to parse Claude API response" };
-	}
-
-	if (
-		typeof data === "object" &&
-		data !== null &&
-		"content" in data &&
-		Array.isArray((data as { content: unknown }).content)
-	) {
-		const content = (data as { content: Array<{ type: string; text?: string }> }).content;
-		const first = content[0];
-		if (first && first.type === "text" && typeof first.text === "string") {
-			return { content: first.text };
-		}
-	}
-
-	return { error: "Unexpected response format from Claude API" };
 }
 
 // ---------------------------------------------------------------------------
@@ -868,82 +808,6 @@ export async function handleApiRequest(
 			return jsonResponse(result.data);
 		}
 		return errorResponse(result.error);
-	}
-
-	// -------------------------------------------------------------------------
-	// Chat — GET /api/chat/config (before GET-only guard)
-	// -------------------------------------------------------------------------
-
-	if (request.method === "GET" && path === "/api/chat/config") {
-		const available = !!process.env.ANTHROPIC_API_KEY;
-		return jsonResponse({ available, defaultModel: "claude-sonnet-4-20250514" });
-	}
-
-	// -------------------------------------------------------------------------
-	// Chat — POST routes (before the GET-only guard)
-	// -------------------------------------------------------------------------
-
-	if (request.method === "POST" && path === "/api/chat/sessions") {
-		const parsed = await parseJsonBody(request);
-		if (parsed instanceof Response) return parsed;
-		const title = typeof parsed.title === "string" ? parsed.title : undefined;
-		const model = typeof parsed.model === "string" ? parsed.model : undefined;
-		const store = createChatStore(join(legioDir, "chat.db"));
-		try {
-			const session = store.createSession({ title, model });
-			return jsonResponse(session, 201);
-		} finally {
-			store.close();
-		}
-	}
-
-	{
-		const params = matchRoute(path, "/api/chat/sessions/:id/messages");
-		if (request.method === "POST" && params) {
-			const { id } = params;
-			if (!id) return errorResponse("Missing session ID", 400);
-			const parsed = await parseJsonBody(request);
-			if (parsed instanceof Response) return parsed;
-			const content = typeof parsed.content === "string" ? parsed.content : null;
-			if (!content || content.trim().length === 0) {
-				return errorResponse("Missing required field: content", 400);
-			}
-			const store = createChatStore(join(legioDir, "chat.db"));
-			try {
-				const session = store.getSession(id);
-				if (!session) return errorResponse(`Session not found: ${id}`, 404);
-				// Persist user message
-				store.addMessage(id, "user", content);
-				// Build message history for Claude
-				const history = store.getMessages(id).map((m) => ({ role: m.role, content: m.content }));
-				// Call Claude API
-				const result = await callClaudeApi(history, session.model);
-				if ("error" in result) {
-					return errorResponse(result.error, 502);
-				}
-				// Persist assistant response
-				const assistantMsg = store.addMessage(id, "assistant", result.content);
-				return jsonResponse(assistantMsg, 201);
-			} finally {
-				store.close();
-			}
-		}
-	}
-
-	{
-		const params = matchRoute(path, "/api/chat/sessions/:id");
-		if (request.method === "DELETE" && params) {
-			const { id } = params;
-			if (!id) return errorResponse("Missing session ID", 400);
-			const store = createChatStore(join(legioDir, "chat.db"));
-			try {
-				const deleted = store.deleteSession(id);
-				if (!deleted) return errorResponse(`Session not found: ${id}`, 404);
-				return jsonResponse({ ok: true });
-			} finally {
-				store.close();
-			}
-		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -2004,35 +1868,6 @@ export async function handleApiRequest(
 			return jsonResponse(relevant.slice(-limit));
 		} finally {
 			store.close();
-		}
-	}
-
-	// -------------------------------------------------------------------------
-	// Chat — GET routes
-	// -------------------------------------------------------------------------
-
-	if (path === "/api/chat/sessions") {
-		const store = createChatStore(join(legioDir, "chat.db"));
-		try {
-			return jsonResponse(store.listSessions());
-		} finally {
-			store.close();
-		}
-	}
-
-	{
-		const params = matchRoute(path, "/api/chat/sessions/:id/messages");
-		if (params) {
-			const { id } = params;
-			if (!id) return errorResponse("Missing session ID", 400);
-			const store = createChatStore(join(legioDir, "chat.db"));
-			try {
-				const session = store.getSession(id);
-				if (!session) return errorResponse(`Session not found: ${id}`, 404);
-				return jsonResponse(store.getMessages(id));
-			} finally {
-				store.close();
-			}
 		}
 	}
 
