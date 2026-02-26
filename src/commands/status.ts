@@ -5,7 +5,7 @@
  * and merge queue state. --watch mode uses polling for live updates.
  */
 
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
@@ -79,7 +79,14 @@ export async function gatherStatus(
 
 	let sessions: AgentSession[];
 	try {
-		sessions = store.getAll();
+		const currentRunPath = join(legioDir, "current-run.txt");
+		let runId: string | undefined;
+		try {
+			runId = (await readFile(currentRunPath, "utf8")).trim();
+		} catch {
+			// current-run.txt does not exist
+		}
+		sessions = runId ? store.getByRunIncludeOrphans(runId) : store.getActive();
 
 		const worktrees = await listWorktrees(root);
 
