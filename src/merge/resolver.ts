@@ -24,7 +24,7 @@ import type {
 	ResolutionTier,
 } from "../types.ts";
 
-export interface MergeResolver {
+interface MergeResolver {
 	/** Attempt to merge the entry's branch into the canonical branch with tiered resolution. */
 	resolve(entry: MergeEntry, canonicalBranch: string, repoRoot: string): Promise<MergeResult>;
 }
