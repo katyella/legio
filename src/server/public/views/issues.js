@@ -70,6 +70,9 @@ function DispatchableCard({ issue }) {
 	const [dispatching, setDispatching] = useState(false);
 	const [dispatched, setDispatched] = useState(false);
 	const [dispatchError, setDispatchError] = useState(null);
+	const [closeConfirm, setCloseConfirm] = useState(false);
+	const [closing, setClosing] = useState(false);
+	const [closeError, setCloseError] = useState(null);
 
 	const isDispatchable = issue.status === "open" || issue.status === "in_progress";
 
@@ -91,6 +94,31 @@ function DispatchableCard({ issue }) {
 		[issue.id, dispatching, dispatched],
 	);
 
+	const handleClose = useCallback(
+		async (e) => {
+			e.stopPropagation();
+			if (closing) return;
+			if (!closeConfirm) {
+				setCloseConfirm(true);
+				return;
+			}
+			setClosing(true);
+			setCloseError(null);
+			try {
+				await postJson(`/api/issues/${issue.id}/close`, {});
+				appState.issues.value = appState.issues.value.map((i) =>
+					i.id === issue.id ? { ...i, status: "closed" } : i,
+				);
+			} catch (err) {
+				setCloseError(err.message || "Close failed");
+				setCloseConfirm(false);
+			} finally {
+				setClosing(false);
+			}
+		},
+		[issue.id, closing, closeConfirm],
+	);
+
 	return html`
 		<${IssueCard} issue=${issue}>
 			${
@@ -110,7 +138,19 @@ function DispatchableCard({ issue }) {
 					>
 						${dispatched ? "✓ Dispatched" : dispatching ? "Dispatching…" : "Dispatch"}
 					</button>
+					<button
+						onClick=${handleClose}
+						disabled=${closing}
+						class=${
+							closing
+								? "px-2 py-1 text-xs rounded-sm border border-[#444] text-[#999] cursor-wait"
+								: "px-2 py-1 text-xs rounded-sm border border-red-700 text-red-400 hover:bg-red-900/20"
+						}
+					>
+						${closing ? "Closing…" : closeConfirm ? "Confirm?" : "Close"}
+					</button>
 					${dispatchError ? html`<span class="text-red-400 text-xs">${dispatchError}</span>` : null}
+					${closeError ? html`<span class="text-red-400 text-xs">${closeError}</span>` : null}
 				</div>
 			`
 					: null

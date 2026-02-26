@@ -1135,6 +1135,28 @@ export async function handleApiRequest(
 		}
 	}
 
+	{
+		const params = matchRoute(path, "/api/issues/:id/close");
+		if (request.method === "POST" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing issue ID", 400);
+			try {
+				const body = await request.json().catch(() => ({})) as { reason?: string };
+				const reason = typeof body.reason === "string" ? body.reason : "Closed from dashboard";
+				const client = createBeadsClient(projectRoot);
+				await client.close(id, reason);
+				return jsonResponse({ success: true, id });
+			} catch (err) {
+				if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+					return errorResponse(`Issue not found: ${id}`, 404);
+				}
+				return errorResponse(
+					`Failed to close issue: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
