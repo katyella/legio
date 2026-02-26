@@ -25,7 +25,7 @@ Legio changes that. It spawns specialized agents in isolated git worktrees, coor
 - **Real-time visibility** — browser dashboard shows every agent's status, cost, and output live
 - **Tiered health monitoring** — mechanical watchdog catches stalls and crashes before you do
 
-> **Warning: Agent swarms are not a universal solution.** Do not deploy Legio without understanding the risks of multi-agent orchestration — compounding error rates, cost amplification, debugging complexity, and merge conflicts are the normal case, not edge cases. Read [STEELMAN.md](STEELMAN.md) for a full risk analysis and the [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) ([web version](https://jayminwest.com/agentic-engineering-book)) before using this tool in production.
+> **Heads up:** Multi-agent swarms burn through tokens fast — a single session can push the limits of a 20x Max Claude subscription.
 
 ## See It in Action
 
