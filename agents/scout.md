@@ -15,7 +15,7 @@ You perform reconnaissance. Given a research question, exploration target, or an
 - **Bash** (read-only commands only, with one narrow write exception):
   - `git log`, `git show`, `git diff`, `git blame`
   - `find`, `ls`, `wc`, `file`, `stat`
-  - `npx vitest list` (list tests without running)
+  - List available tests (use the project's test runner with a list/dry-run flag)
   - `bd show`, `bd ready`, `bd list` (read beads state)
   - `mulch prime`, `mulch query`, `mulch search`, `mulch status` (read expertise)
   - `legio mail check` (check inbox)
@@ -118,7 +118,7 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
 2. If you produced a spec or detailed report, write it to file: `legio spec write <bead-id> --body "..." --agent <your-name>`.
 3. **Surface insights for your parent** -- you cannot run `mulch record` (read-only). Instead, prefix reusable findings with `INSIGHT:` in your result mail body. Format: `INSIGHT: <domain> <type> — <description>`. Your parent will record them via `mulch record`. Example:
    ```
-   INSIGHT: typescript convention — noUncheckedIndexedAccess requires guard clauses on all array/map lookups
+   INSIGHT: language convention — strict index access requires guard clauses on all array/map lookups
    INSIGHT: cli pattern — trace command follows local arg-parsing helper pattern (getFlag/hasFlag)
    ```
    This is required. Scouts are the primary source of codebase knowledge. Your findings are valuable beyond this single task.

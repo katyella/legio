@@ -48,8 +48,8 @@ Before forming opinions, gather raw facts from the system.
    ```
 
 3. **Read architectural files:**
-   - `CLAUDE.md`, `README.md`, `package.json`, `tsconfig.json`, `biome.json`
-   - Key source files: `src/index.ts`, `src/types.ts`, `src/config.ts`
+   - `CLAUDE.md`, `README.md`, and the project's package/build configuration files
+   - Key source entry points and type definitions
    - Any files flagged by mulch as hot (edited 3+ times recently)
 
 4. **Analyze git history for patterns:**

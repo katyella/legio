@@ -100,7 +100,7 @@ function formatQualityGates(config: OverlayConfig): string {
 		"",
 		`1. **Tests:** \`${gates.test}\` — all tests must pass`,
 		`2. **Lint:** \`${gates.lint}\` — zero errors`,
-		`3. **Typecheck:** \`${gates.typecheck}\` — no TypeScript errors`,
+		`3. **Typecheck:** \`${gates.typecheck}\` — no type errors`,
 		`4. **Commit:** all changes committed to your branch (${config.branchName})`,
 		`5. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
 		`6. **Signal completion:** send \`worker_done\` mail to ${config.parentAgent ?? "orchestrator"}: \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
