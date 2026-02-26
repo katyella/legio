@@ -11,71 +11,48 @@
 
 Built on [Overstory](https://github.com/jayminwest/overstory).
 
-Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a single Claude Code session into a multi-agent team by spawning worker agents in git worktrees via tmux, coordinating them through a custom SQLite mail system, and merging their work back with tiered conflict resolution. Includes a built-in web UI for real-time fleet monitoring and orchestration.
+**Turn one Claude Code session into a multi-agent fleet.**
+
+Claude Code is powerful — but it works one task at a time, sequentially. One agent, one context window, one thread of execution.
+
+Legio changes that. It spawns specialized agents in isolated git worktrees, coordinates them through a typed SQLite messaging system, and merges their work back automatically with tiered conflict resolution. Your session becomes the orchestrator. The agents do the work in parallel.
 
 > **Warning: Agent swarms are not a universal solution.** Do not deploy Legio without understanding the risks of multi-agent orchestration — compounding error rates, cost amplification, debugging complexity, and merge conflicts are the normal case, not edge cases. Read [STEELMAN.md](STEELMAN.md) for a full risk analysis and the [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) ([web version](https://jayminwest.com/agentic-engineering-book)) before using this tool in production.
 
-## How It Works
+## Why Legio?
 
-CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator agent manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
+**The problem:** Claude Code runs a single agent in a single session. Ten files across three subsystems means sequential work — one change at a time, in one context window, with no parallelism.
 
-```
-Coordinator (persistent orchestrator at project root)
-  --> Supervisor (per-project team lead, depth 1)
-        --> Workers: Scout, Builder, Reviewer, Merger (depth 2)
-```
+**The solution:** A fleet of specialized agents, each with its own worktree, file scope, and tmux session. A coordinator decomposes the objective. Leads break it into tasks. Builders implement. Reviewers validate. Mergers integrate. All in parallel.
 
-### Agent Types
+**The payoff:**
 
-| Agent | Role | Access |
-|-------|------|--------|
-| **Coordinator** | Persistent orchestrator — decomposes objectives, dispatches agents, tracks task groups | Read-only |
-| **Supervisor** | Per-project team lead — manages worker lifecycle, handles nudge/escalation | Read-only |
-| **Gateway** | Planning companion — analyzes codebase, decomposes objectives into issues, bridges human intent and agent work | Read-only |
-| **CTO** | Strategic technical leadership | Read-only |
-| **Scout** | Read-only exploration and research | Read-only |
-| **Builder** | Implementation and code changes | Read-write |
-| **Reviewer** | Validation and code review | Read-only |
-| **Lead** | Team coordination, can spawn sub-workers | Read-write |
-| **Merger** | Branch merge specialist | Read-write |
-| **Monitor** | Tier 2 continuous fleet patrol — ongoing health monitoring | Read-only |
+- Parallel execution — 5-10 agents working simultaneously
+- Conflict-free isolation — every agent in its own git worktree with exclusive file ownership
+- Structured coordination — typed SQLite mail system, not ad-hoc prompts
+- Automatic merge pipeline — FIFO queue with 4-tier conflict resolution
+- Real-time visibility — browser dashboard shows every agent status, cost, and output live
+- Tiered health monitoring — mechanical watchdog catches stalls and crashes
 
-### Key Architecture
+## See It in Action
 
-- **Agent Definitions**: Two-layer system — base `.md` files define the HOW (workflow), per-task overlays define the WHAT (task scope). Base definition content is injected into spawned agent overlays automatically.
-- **Messaging**: Custom SQLite mail system with typed protocol — 8 message types (`worker_done`, `merge_ready`, `dispatch`, `escalation`, etc.) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
-- **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
-- **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
-- **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
-- **Web UI**: Browser-based dashboard with real-time WebSocket updates — agent monitoring, mail, terminal access, cost tracking, and setup wizard
-- **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
-- **Task Groups**: Batch coordination with auto-close when all member issues complete
-- **Session Lifecycle**: Checkpoint save/restore for compaction survivability, handoff orchestration for crash recovery
-- **Token Instrumentation**: Session metrics extracted from Claude Code transcript JSONL files
+<p align="center">
+  <img src="assets/dashboard.png" alt="Legio Dashboard — real-time agent monitoring" width="800">
+  <br>
+  <em>Dashboard: live view of agent status, mail feed, merge queue, and system metrics</em>
+</p>
 
-## Requirements
+<p align="center">
+  <img src="assets/gateway-chat.png" alt="Gateway Chat — conversational planning interface" width="800">
+  <br>
+  <em>Gateway Chat: natural language interface for planning and task decomposition</em>
+</p>
 
-- [Node.js](https://nodejs.org) (v22+)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- git
-- tmux
-- [bd (beads)](https://github.com/jayminwest/beads) — issue tracking CLI
-- [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI
-
-## Installation
-
-```bash
-npm install -g legio
-```
-
-### From Source
-
-```bash
-git clone https://github.com/katyella/legio.git
-cd legio
-npm install
-npm link
-```
+<p align="center">
+  <img src="assets/inspect.png" alt="Inspect — deep per-agent inspection" width="800">
+  <br>
+  <em>Inspect: deep dive into any agent's activity, tool calls, and terminal output</em>
+</p>
 
 ## Quick Start
 
@@ -126,6 +103,44 @@ legio nudge <agent-name>
 legio mail check --inject
 ```
 
+## How It Works
+
+CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator agent manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
+
+```
+Coordinator (persistent orchestrator at project root)
+  --> Lead (team lead, decomposes tasks, depth 1)
+        --> Workers: Scout, Builder, Reviewer, Merger (depth 2)
+```
+
+### Agent Types
+
+| Agent | Role | Access |
+|-------|------|--------|
+| **Coordinator** | Persistent orchestrator — decomposes objectives, dispatches agents, tracks task groups | Read-only |
+| **Lead** | Team coordination, can spawn sub-workers | Read-write |
+| **Gateway** | Planning companion — analyzes codebase, decomposes objectives into issues, bridges human intent and agent work | Read-only |
+| **Scout** | Read-only exploration and research | Read-only |
+| **Builder** | Implementation and code changes | Read-write |
+| **Reviewer** | Validation and code review | Read-only |
+| **Merger** | Branch merge specialist | Read-write |
+| **Supervisor** | Per-project team lead — manages worker lifecycle, handles nudge/escalation | Read-only |
+| **CTO** | Strategic technical leadership | Read-only |
+| **Monitor** | Tier 2 continuous fleet patrol — ongoing health monitoring | Read-only |
+
+### Key Architecture
+
+- **Agent Definitions**: Two-layer system — base `.md` files define the HOW (workflow), per-task overlays define the WHAT (task scope). Base definition content is injected into spawned agent overlays automatically.
+- **Messaging**: Custom SQLite mail system with typed protocol — 8 message types (`worker_done`, `merge_ready`, `dispatch`, `escalation`, etc.) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
+- **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
+- **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
+- **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
+- **Web UI**: Browser-based dashboard with real-time WebSocket updates — agent monitoring, mail, terminal access, cost tracking, and setup wizard
+- **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
+- **Task Groups**: Batch coordination with auto-close when all member issues complete
+- **Session Lifecycle**: Checkpoint save/restore for compaction survivability, handoff orchestration for crash recovery
+- **Token Instrumentation**: Session metrics extracted from Claude Code transcript JSONL files
+
 ## Web UI
 
 Legio includes a browser-based dashboard for real-time fleet monitoring. Start it with `legio server start` or `legio up`.
@@ -144,6 +159,30 @@ Legio includes a browser-based dashboard for real-time fleet monitoring. Start i
 | **Task Detail** | Task overview with agents and communication tabs |
 
 **Tech:** Preact + HTM + Tailwind CSS, WebSocket for real-time updates, zero build step.
+
+## Requirements
+
+- [Node.js](https://nodejs.org) (v22+)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- git
+- tmux
+- [bd (beads)](https://github.com/jayminwest/beads) — issue tracking CLI
+- [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI
+
+## Installation
+
+```bash
+npm install -g legio
+```
+
+### From Source
+
+```bash
+git clone https://github.com/katyella/legio.git
+cd legio
+npm install
+npm link
+```
 
 ## CLI Reference
 
