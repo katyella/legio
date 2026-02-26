@@ -396,7 +396,7 @@ describe("startGateway", () => {
 		expect(cmd).not.toContain("--model sonnet");
 	});
 
-	test("defaults to sonnet model when not in manifest", async () => {
+	test("defaults to opus model when not in manifest", async () => {
 		// Write manifest without gateway entry so resolveModel falls back to default
 		const manifest = {
 			version: "1.0",
@@ -414,7 +414,7 @@ describe("startGateway", () => {
 
 		expect(calls.createSession).toHaveLength(1);
 		const cmd = calls.createSession[0]?.command ?? "";
-		expect(cmd).toContain("--model sonnet");
+		expect(cmd).toContain("--model opus");
 	});
 
 	test("--json outputs JSON with expected fields", async () => {

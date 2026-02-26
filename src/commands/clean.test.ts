@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createEventStore } from "../events/store.ts";
@@ -298,8 +298,8 @@ describe("individual flags", () => {
 	test("--mail only wipes mail.db, leaves other state intact", async () => {
 		// Create mail and sessions
 		const mailDbPath = join(legioDir, "mail.db");
-		const store = createMailStore(mailDbPath);
-		store.insert({
+		const mailStore = createMailStore(mailDbPath);
+		mailStore.insert({
 			id: "msg-1",
 			from: "a",
 			to: "b",
@@ -309,10 +309,29 @@ describe("individual flags", () => {
 			priority: "normal",
 			threadId: null,
 		});
-		store.close();
+		mailStore.close();
 
-		const sessionsPath = join(legioDir, "sessions.json");
-		await writeFile(sessionsPath, '[{"id":"s1"}]\n');
+		// Seed sessions.db via SessionStore
+		const { store: sessionStore } = openSessionStore(legioDir);
+		sessionStore.upsert({
+			id: "s1",
+			agentName: "test-agent",
+			capability: "builder",
+			worktreePath: "/tmp/wt",
+			branchName: "legio/test/task",
+			beadId: "task-1",
+			tmuxSession: "legio-test-agent",
+			state: "completed",
+			pid: 12345,
+			parentAgent: null,
+			depth: 1,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		sessionStore.close();
 
 		await cleanCommand(["--mail"]);
 
@@ -321,9 +340,17 @@ describe("individual flags", () => {
 			.then(() => true)
 			.catch(() => false);
 		expect(mailExists).toBe(false);
-		// Sessions untouched
-		const sessionsContent = await readFile(sessionsPath, "utf-8");
-		expect(JSON.parse(sessionsContent)).toEqual([{ id: "s1" }]);
+		// Sessions untouched — sessions.db should still exist with data
+		const sessionsDbPath = join(legioDir, "sessions.db");
+		const sessionsDbExists = await access(sessionsDbPath)
+			.then(() => true)
+			.catch(() => false);
+		expect(sessionsDbExists).toBe(true);
+		const { store: verifyStore } = openSessionStore(legioDir);
+		const sessions = verifyStore.getAll();
+		verifyStore.close();
+		expect(sessions).toHaveLength(1);
+		expect(sessions[0]?.id).toBe("s1");
 	});
 
 	test("--sessions only wipes sessions.db", async () => {
@@ -476,10 +503,10 @@ describe("synthetic session-end events", () => {
 	}
 
 	test("logs session-end events for active agents before killing tmux", async () => {
-		// Write sessions.json with an active agent
-		const sessionsPath = join(legioDir, "sessions.json");
-		const sessions = [makeSession({ agentName: "builder-a", state: "working" })];
-		await writeFile(sessionsPath, JSON.stringify(sessions));
+		// Seed sessions.db with an active agent via SessionStore
+		const { store } = openSessionStore(legioDir);
+		store.upsert(makeSession({ agentName: "builder-a", state: "working" }));
+		store.close();
 
 		await cleanCommand(["--all"]);
 
@@ -502,13 +529,11 @@ describe("synthetic session-end events", () => {
 	});
 
 	test("logs events for multiple active agents", async () => {
-		const sessionsPath = join(legioDir, "sessions.json");
-		const sessions = [
-			makeSession({ id: "s1", agentName: "builder-a", state: "working" }),
-			makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }),
-			makeSession({ id: "s3", agentName: "builder-c", state: "working" }),
-		];
-		await writeFile(sessionsPath, JSON.stringify(sessions));
+		const { store } = openSessionStore(legioDir);
+		store.upsert(makeSession({ id: "s1", agentName: "builder-a", state: "working" }));
+		store.upsert(makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }));
+		store.upsert(makeSession({ id: "s3", agentName: "builder-c", state: "working" }));
+		store.close();
 
 		await cleanCommand(["--all"]);
 
@@ -526,12 +551,10 @@ describe("synthetic session-end events", () => {
 	});
 
 	test("skips completed and zombie sessions", async () => {
-		const sessionsPath = join(legioDir, "sessions.json");
-		const sessions = [
-			makeSession({ id: "s1", agentName: "completed-agent", state: "completed" }),
-			makeSession({ id: "s2", agentName: "zombie-agent", state: "zombie" }),
-		];
-		await writeFile(sessionsPath, JSON.stringify(sessions));
+		const { store } = openSessionStore(legioDir);
+		store.upsert(makeSession({ id: "s1", agentName: "completed-agent", state: "completed" }));
+		store.upsert(makeSession({ id: "s2", agentName: "zombie-agent", state: "zombie" }));
+		store.close();
 
 		await cleanCommand(["--all"]);
 
@@ -551,9 +574,9 @@ describe("synthetic session-end events", () => {
 	});
 
 	test("--worktrees also logs session-end events (not just --all)", async () => {
-		const sessionsPath = join(legioDir, "sessions.json");
-		const sessions = [makeSession({ agentName: "wt-agent", state: "working" })];
-		await writeFile(sessionsPath, JSON.stringify(sessions));
+		const { store } = openSessionStore(legioDir);
+		store.upsert(makeSession({ agentName: "wt-agent", state: "working" }));
+		store.close();
 
 		await cleanCommand(["--worktrees"]);
 
@@ -567,16 +590,16 @@ describe("synthetic session-end events", () => {
 	});
 
 	test("includes runId and sessionId from agent session", async () => {
-		const sessionsPath = join(legioDir, "sessions.json");
-		const sessions = [
+		const { store } = openSessionStore(legioDir);
+		store.upsert(
 			makeSession({
 				agentName: "tracked-agent",
 				id: "session-123",
 				runId: "run-456",
 				state: "working",
 			}),
-		];
-		await writeFile(sessionsPath, JSON.stringify(sessions));
+		);
+		store.close();
 
 		await cleanCommand(["--all"]);
 
@@ -591,8 +614,8 @@ describe("synthetic session-end events", () => {
 		expect(sessionEndEvents[0]?.runId).toBe("run-456");
 	});
 
-	test("handles missing sessions.json gracefully", async () => {
-		// No sessions.json file — should not error
+	test("handles missing sessions.db gracefully", async () => {
+		// No sessions.db file — should not error
 		await cleanCommand(["--all"]);
 		// Just verify it didn't crash
 		expect(stdoutOutput).toBeDefined();

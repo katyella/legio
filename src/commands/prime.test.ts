@@ -2,8 +2,8 @@ import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/p
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { openSessionStore } from "../sessions/compat.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
-import type { AgentSession } from "../types.ts";
 import { primeCommand } from "./prime.ts";
 
 /**
@@ -187,32 +187,27 @@ recentTasks:
 		});
 
 		test("agent with active session shows Activation section", async () => {
-			// Write sessions.json with active session
-			const sessions: AgentSession[] = [
-				{
-					id: "session-001",
-					agentName: "active-builder",
-					capability: "builder",
-					worktreePath: join(tempDir, ".legio", "worktrees", "active-builder"),
-					branchName: "legio/active-builder/task-001",
-					beadId: "task-001",
-					tmuxSession: "legio-active-builder",
-					state: "working",
-					pid: 12345,
-					parentAgent: null,
-					depth: 0,
-					runId: null,
-					startedAt: new Date().toISOString(),
-					lastActivity: new Date().toISOString(),
-					escalationLevel: 0,
-					stalledSince: null,
-				},
-			];
-
-			await writeFile(
-				join(tempDir, ".legio", "sessions.json"),
-				`${JSON.stringify(sessions, null, 2)}\n`,
-			);
+			// Seed sessions.db with active session via SessionStore
+			const { store } = openSessionStore(join(tempDir, ".legio"));
+			store.upsert({
+				id: "session-001",
+				agentName: "active-builder",
+				capability: "builder",
+				worktreePath: join(tempDir, ".legio", "worktrees", "active-builder"),
+				branchName: "legio/active-builder/task-001",
+				beadId: "task-001",
+				tmuxSession: "legio-active-builder",
+				state: "working",
+				pid: 12345,
+				parentAgent: null,
+				depth: 0,
+				runId: null,
+				startedAt: new Date().toISOString(),
+				lastActivity: new Date().toISOString(),
+				escalationLevel: 0,
+				stalledSince: null,
+			});
+			store.close();
 
 			await primeCommand(["--agent", "active-builder"]);
 			const out = output();
@@ -224,32 +219,27 @@ recentTasks:
 		});
 
 		test("agent with completed session does NOT show Activation", async () => {
-			// Write sessions.json with completed session
-			const sessions: AgentSession[] = [
-				{
-					id: "session-002",
-					agentName: "completed-builder",
-					capability: "builder",
-					worktreePath: join(tempDir, ".legio", "worktrees", "completed-builder"),
-					branchName: "legio/completed-builder/task-002",
-					beadId: "task-002",
-					tmuxSession: "legio-completed-builder",
-					state: "completed",
-					pid: null,
-					parentAgent: null,
-					depth: 0,
-					runId: null,
-					startedAt: new Date(Date.now() - 3600000).toISOString(),
-					lastActivity: new Date().toISOString(),
-					escalationLevel: 0,
-					stalledSince: null,
-				},
-			];
-
-			await writeFile(
-				join(tempDir, ".legio", "sessions.json"),
-				`${JSON.stringify(sessions, null, 2)}\n`,
-			);
+			// Seed sessions.db with completed session via SessionStore
+			const { store } = openSessionStore(join(tempDir, ".legio"));
+			store.upsert({
+				id: "session-002",
+				agentName: "completed-builder",
+				capability: "builder",
+				worktreePath: join(tempDir, ".legio", "worktrees", "completed-builder"),
+				branchName: "legio/completed-builder/task-002",
+				beadId: "task-002",
+				tmuxSession: "legio-completed-builder",
+				state: "completed",
+				pid: null,
+				parentAgent: null,
+				depth: 0,
+				runId: null,
+				startedAt: new Date(Date.now() - 3600000).toISOString(),
+				lastActivity: new Date().toISOString(),
+				escalationLevel: 0,
+				stalledSince: null,
+			});
+			store.close();
 
 			await primeCommand(["--agent", "completed-builder"]);
 			const out = output();
