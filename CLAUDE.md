@@ -146,7 +146,6 @@ legio/                        # This repo (the legio tool itself)
     cto.md                        # Strategic analyst (read-only, outputs strategy.json)
     monitor.md                    # Tier 2 continuous fleet patrol (no worktree)
   templates/
-    CLAUDE.md.tmpl                # Template for orchestrator CLAUDE.md
     overlay.md.tmpl               # Template for per-worker overlay
     hooks.json.tmpl               # Template for settings.local.json
   # Tests colocated: src/config.test.ts, src/mail/store.test.ts, etc.
