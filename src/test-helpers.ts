@@ -61,6 +61,25 @@ export async function createTempGitRepo(): Promise<string> {
 }
 
 /**
+ * Clone from the shared fixture repo (set by vitest globalSetup via LEGIO_TEST_FIXTURE_REPO).
+ * Falls back to `createTempGitRepo()` when the env var is not set (e.g., in unit tests).
+ *
+ * @returns The absolute path to the cloned temp git repo.
+ */
+export async function cloneFixtureRepo(): Promise<string> {
+	const fixturePath = process.env.LEGIO_TEST_FIXTURE_REPO;
+	if (!fixturePath) {
+		return createTempGitRepo();
+	}
+	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
+	// Avoid --local (hardlinks trigger EFAULT in Bun's rm).
+	await runGitInDir(".", ["clone", fixturePath, dir]);
+	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
+	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
+	return dir;
+}
+
+/**
  * Add and commit a file to a git repo.
  *
  * @param repoDir - Absolute path to the git repo

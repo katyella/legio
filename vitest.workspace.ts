@@ -24,6 +24,7 @@ export default [
 	defineConfig({
 		test: {
 			name: "integration",
+			globalSetup: ["src/global-setup.ts"],
 			include: [
 				"src/commands/coordinator.test.ts",
 				"src/merge/resolver.test.ts",

@@ -5,8 +5,8 @@ import { ValidationError } from "../errors.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import {
 	cleanupTempDir,
+	cloneFixtureRepo,
 	commitFile,
-	createTempGitRepo,
 	getDefaultBranch,
 	runGitInDir,
 } from "../test-helpers.ts";
@@ -19,7 +19,7 @@ describe("mergeCommand", () => {
 
 	beforeEach(async () => {
 		originalCwd = process.cwd();
-		repoDir = await createTempGitRepo();
+		repoDir = await cloneFixtureRepo();
 		defaultBranch = await getDefaultBranch(repoDir);
 		process.chdir(repoDir);
 	});
