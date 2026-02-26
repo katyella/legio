@@ -54,8 +54,6 @@ function getStateIcon(state: AgentSession["state"]): string {
 			return `${color.yellow}⏳${color.reset}`; // Yellow hourglass
 		case "working":
 			return `${color.green}●${color.reset}`; // Green circle
-		case "stalled":
-			return `${color.yellow}⚠${color.reset}`; // Yellow warning
 		case "completed":
 			return `${color.blue}✓${color.reset}`; // Blue checkmark
 		case "zombie":

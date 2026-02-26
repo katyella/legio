@@ -158,8 +158,6 @@ function getStateIcon(state: string): string {
 			return "●";
 		case "booting":
 			return "○";
-		case "stalled":
-			return "◌";
 		default:
 			return " ";
 	}

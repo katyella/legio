@@ -95,8 +95,7 @@ export async function gatherStatus(
 		for (const session of sessions) {
 			if (
 				session.state === "booting" ||
-				session.state === "working" ||
-				session.state === "stalled"
+				session.state === "working"
 			) {
 				const tmuxAlive = tmuxSessions.some((s) => s.name === session.tmuxSession);
 				if (!tmuxAlive) {

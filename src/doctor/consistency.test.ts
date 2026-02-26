@@ -96,7 +96,6 @@ describe("checkConsistency", () => {
 				tier0IntervalMs: 30000,
 				tier1Enabled: false,
 				tier2Enabled: false,
-				staleThresholdMs: 60000,
 				zombieThresholdMs: 300000,
 				nudgeIntervalMs: 30000,
 			},

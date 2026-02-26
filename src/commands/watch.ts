@@ -155,7 +155,6 @@ export async function watchCommand(args: string[]): Promise<void> {
 		? Number.parseInt(intervalStr, 10)
 		: config.watchdog.tier0IntervalMs;
 
-	const staleThresholdMs = config.watchdog.staleThresholdMs;
 	const zombieThresholdMs = config.watchdog.zombieThresholdMs;
 	const pidFilePath = join(config.project.root, ".legio", "watchdog.pid");
 
@@ -217,10 +216,7 @@ export async function watchCommand(args: string[]): Promise<void> {
 	const { stop } = startDaemon({
 		root: config.project.root,
 		intervalMs,
-		staleThresholdMs,
 		zombieThresholdMs,
-		nudgeIntervalMs: config.watchdog.nudgeIntervalMs,
-		tier1Enabled: config.watchdog.tier1Enabled,
 		onHealthCheck(check) {
 			const timestamp = new Date().toISOString().slice(11, 19);
 			process.stdout.write(`[${timestamp}] ${formatCheck(check)}\n`);

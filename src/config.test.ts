@@ -113,7 +113,6 @@ agents:
   staggerDelayMs: 5000
 watchdog:
   tier0IntervalMs: 60000
-  staleThresholdMs: 120000
   zombieThresholdMs: 300000
 `);
 
@@ -194,7 +193,7 @@ project:
 		await writeConfig(`
 watchdog:
   tier0Enabled: false
-  staleThresholdMs: 120000
+  zombieThresholdMs: 120000
 `);
 		await writeFile(
 			join(tempDir, ".legio", "config.local.yaml"),
@@ -205,7 +204,7 @@ watchdog:
 		// Local override
 		expect(config.watchdog.tier0Enabled).toBe(true);
 		// Non-overridden value from config.yaml preserved
-		expect(config.watchdog.staleThresholdMs).toBe(120000);
+		expect(config.watchdog.zombieThresholdMs).toBe(120000);
 	});
 
 	test("migrates deprecated watchdog tier1/tier2 keys to tier0/tier1", async () => {
@@ -294,15 +293,6 @@ agents:
 		await writeConfig(`
 mulch:
   primeFormat: yaml
-`);
-		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
-	});
-
-	test("rejects zombieThresholdMs <= staleThresholdMs", async () => {
-		await writeConfig(`
-watchdog:
-  staleThresholdMs: 300000
-  zombieThresholdMs: 300000
 `);
 		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
 	});
@@ -449,7 +439,6 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.agents.maxDepth).toBe(2);
 		expect(DEFAULT_CONFIG.agents.staggerDelayMs).toBe(2_000);
 		expect(DEFAULT_CONFIG.watchdog.tier0IntervalMs).toBe(30_000);
-		expect(DEFAULT_CONFIG.watchdog.staleThresholdMs).toBe(300_000);
 		expect(DEFAULT_CONFIG.watchdog.zombieThresholdMs).toBe(600_000);
 	});
 

@@ -223,8 +223,6 @@ function getStateColor(state: string): string {
 			return color.green;
 		case "booting":
 			return color.yellow;
-		case "stalled":
-			return color.red;
 		case "zombie":
 			return color.dim;
 		case "completed":
@@ -243,8 +241,6 @@ function getStateIcon(state: string): string {
 			return "●";
 		case "booting":
 			return "◐";
-		case "stalled":
-			return "⚠";
 		case "zombie":
 			return "○";
 		case "completed":
@@ -281,9 +277,9 @@ function renderAgentPanel(
 	const separator = horizontalLine(width, BOX.tee, BOX.horizontal, BOX.teeRight);
 	output += `${CURSOR.cursorTo(startRow + 2, 1)}${separator}\n`;
 
-	// Sort agents: active first (working, booting, stalled), then completed, then zombie
+	// Sort agents: active first (working, booting), then completed, then zombie
 	const agents = [...data.status.agents].sort((a, b) => {
-		const activeStates = ["working", "booting", "stalled"];
+		const activeStates = ["working", "booting"];
 		const aActive = activeStates.includes(a.state);
 		const bActive = activeStates.includes(b.state);
 		if (aActive && !bActive) return -1;

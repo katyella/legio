@@ -275,14 +275,14 @@ describe("show run details", () => {
 				id: "s-1",
 				runId,
 				capability: "reviewer",
-				state: "stalled",
+				state: "working",
 			}),
 		);
 
 		const agents = sessionStore.getByRun(runId);
 		expect(agents).toHaveLength(1);
 		expect(agents[0]?.capability).toBe("reviewer");
-		expect(agents[0]?.state).toBe("stalled");
+		expect(agents[0]?.state).toBe("working");
 	});
 });
 

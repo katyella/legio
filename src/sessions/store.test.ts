@@ -166,18 +166,16 @@ describe("getActive", () => {
 		expect(result).toEqual([]);
 	});
 
-	test("returns booting, working, and stalled sessions", () => {
+	test("returns booting and working sessions", () => {
 		store.upsert(makeSession({ agentName: "booting-1", id: "s-1", state: "booting" }));
 		store.upsert(makeSession({ agentName: "working-1", id: "s-2", state: "working" }));
-		store.upsert(makeSession({ agentName: "stalled-1", id: "s-3", state: "stalled" }));
 
 		const result = store.getActive();
-		expect(result).toHaveLength(3);
+		expect(result).toHaveLength(2);
 
 		const states = result.map((s) => s.state);
 		expect(states).toContain("booting");
 		expect(states).toContain("working");
-		expect(states).toContain("stalled");
 	});
 
 	test("excludes completed and zombie sessions", () => {
@@ -390,8 +388,8 @@ describe("updateLastActivity", () => {
 		expect(result?.stalledSince).toBeNull();
 	});
 
-	test("does not affect working, completed, or stalled sessions", () => {
-		for (const state of ["working", "completed", "stalled"] as const) {
+	test("does not affect working or completed sessions", () => {
+		for (const state of ["working", "completed"] as const) {
 			store.upsert(
 				makeSession({ agentName: `agent-${state}`, id: `s-${state}`, state, escalationLevel: 2 }),
 			);

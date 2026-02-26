@@ -555,7 +555,7 @@ describe("checkParentAgentLimit", () => {
 		const sessions = [
 			makeChildSession("lead-alpha", "working"),
 			makeChildSession("lead-alpha", "booting"),
-			makeChildSession("lead-alpha", "stalled"),
+			makeChildSession("lead-alpha", "working"),
 		];
 		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-4")).not.toThrow();
 	});

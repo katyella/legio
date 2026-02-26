@@ -36,7 +36,6 @@ const mockConfig: LegioConfig = {
 		tier0IntervalMs: 30000,
 		tier1Enabled: false,
 		tier2Enabled: false,
-		staleThresholdMs: 300000,
 		zombieThresholdMs: 600000,
 		nudgeIntervalMs: 60000,
 	},

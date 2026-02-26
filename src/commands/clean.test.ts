@@ -506,7 +506,7 @@ describe("synthetic session-end events", () => {
 		const sessions = [
 			makeSession({ id: "s1", agentName: "builder-a", state: "working" }),
 			makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }),
-			makeSession({ id: "s3", agentName: "builder-c", state: "stalled" }),
+			makeSession({ id: "s3", agentName: "builder-c", state: "working" }),
 		];
 		await writeFile(sessionsPath, JSON.stringify(sessions));
 

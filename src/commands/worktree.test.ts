@@ -448,7 +448,7 @@ describe("worktreeCommand", () => {
 					branchName: "legio/stalled-agent/task-stuck",
 					beadId: "task-stuck",
 					tmuxSession: "legio-stalled-agent",
-					state: "stalled",
+					state: "working",
 					pid: 12345,
 					parentAgent: null,
 					depth: 0,
@@ -456,7 +456,7 @@ describe("worktreeCommand", () => {
 					startedAt: new Date().toISOString(),
 					lastActivity: new Date().toISOString(),
 					escalationLevel: 0,
-					stalledSince: new Date().toISOString(),
+					stalledSince: null,
 				},
 			]);
 
@@ -574,7 +574,7 @@ describe("worktreeCommand", () => {
 					worktreePath: stalledPath,
 					branchName: "legio/stalled-agent/task-stuck",
 					beadId: "task-stuck",
-					state: "stalled",
+					state: "working",
 				}),
 			]);
 
