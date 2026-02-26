@@ -56,10 +56,25 @@ function formatMulchExpertise(expertise: string | undefined): string {
 /** Capabilities that are read-only and should not get quality gates for commits/tests/lint. */
 const READ_ONLY_CAPABILITIES = new Set(["scout", "reviewer"]);
 
+/** Shape of per-project quality gate commands. Added to OverlayConfig by legio-787k (parallel). */
+type QualityGates = { test: string; lint: string; typecheck: string };
+
+/** OverlayConfig extended with the optional qualityGates field (landing via legio-787k). */
+type OverlayConfigWithGates = OverlayConfig & { qualityGates?: QualityGates };
+
+/** Default quality gate commands used when config.qualityGates is not provided. */
+const DEFAULT_QUALITY_GATES: QualityGates = {
+	test: "npm test",
+	lint: "npm run lint",
+	typecheck: "npm run typecheck",
+};
+
 /**
  * Format the quality gates section. Read-only agents (scout, reviewer) get
  * a lightweight section that only tells them to close the issue and report.
  * Writable agents get the full quality gates (tests, lint, build, commit).
+ *
+ * Uses `config.qualityGates` when present; falls back to npm defaults.
  */
 function formatQualityGates(config: OverlayConfig): string {
 	if (READ_ONLY_CAPABILITIES.has(config.capability)) {
@@ -76,14 +91,16 @@ function formatQualityGates(config: OverlayConfig): string {
 		].join("\n");
 	}
 
+	const gates = (config as OverlayConfigWithGates).qualityGates ?? DEFAULT_QUALITY_GATES;
+
 	return [
 		"## Quality Gates",
 		"",
 		"Before reporting completion, you MUST pass all quality gates:",
 		"",
-		"1. **Tests:** `npm test` — all tests must pass",
-		"2. **Lint:** `npm run lint` — zero errors",
-		"3. **Typecheck:** `npm run typecheck` — no TypeScript errors",
+		`1. **Tests:** \`${gates.test}\` — all tests must pass`,
+		`2. **Lint:** \`${gates.lint}\` — zero errors`,
+		`3. **Typecheck:** \`${gates.typecheck}\` — no TypeScript errors`,
 		`4. **Commit:** all changes committed to your branch (${config.branchName})`,
 		`5. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
 		`6. **Signal completion:** send \`worker_done\` mail to ${config.parentAgent ?? "orchestrator"}: \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
