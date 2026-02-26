@@ -187,6 +187,55 @@ export function validateHierarchy(
 }
 
 /**
+ * Check if a parent agent has reached its child agent budget ceiling.
+ * @throws AgentError if the parent already has maxAgentsPerLead active children.
+ */
+export function checkParentAgentLimit(
+	sessions: ReadonlyArray<{ parentAgent: string | null; state: string }>,
+	parentAgent: string,
+	maxAgentsPerLead: number,
+	agentName: string,
+): void {
+	const activeChildren = sessions.filter(
+		(s) => s.parentAgent === parentAgent && s.state !== "zombie" && s.state !== "completed",
+	);
+	if (activeChildren.length >= maxAgentsPerLead) {
+		throw new AgentError(
+			`Parent "${parentAgent}" has reached its child agent limit: ${activeChildren.length}/${maxAgentsPerLead} active children`,
+			{ agentName },
+		);
+	}
+}
+
+/**
+ * Check if a lead agent is already active for the given task ID.
+ * Prevents two leads from concurrently working the same issue.
+ * @throws AgentError if a lead is already active for this task.
+ */
+export function checkDuplicateLead(
+	sessions: ReadonlyArray<{ beadId: string; capability: string; state: string; agentName: string }>,
+	taskId: string,
+	capability: string,
+	agentName: string,
+): void {
+	if (capability !== "lead") return; // Only applies to leads
+
+	const existingLead = sessions.find(
+		(s) =>
+			s.beadId === taskId &&
+			s.capability === "lead" &&
+			s.state !== "zombie" &&
+			s.state !== "completed",
+	);
+	if (existingLead) {
+		throw new AgentError(
+			`Lead already active for task "${taskId}": ${existingLead.agentName}. Cannot spawn duplicate lead "${agentName}".`,
+			{ agentName },
+		);
+	}
+}
+
+/**
  * Entry point for `legio sling <task-id> [flags]`.
  *
  * Flags:
@@ -382,6 +431,19 @@ export async function slingCommand(args: string[]): Promise<void> {
 				"   Leads should spawn scouts in Phase 1 before building. See agents/lead.md.\n",
 			);
 		}
+
+		// 5d. Enforce per-lead agent budget ceiling
+		if (parentAgent !== null) {
+			checkParentAgentLimit(
+				activeSessions,
+				parentAgent,
+				config.agents.maxAgentsPerLead ?? 5,
+				name,
+			);
+		}
+
+		// 5e. Prevent duplicate leads on the same task
+		checkDuplicateLead(activeSessions, taskId, capability, name);
 
 		// 6. Validate bead exists and is in a workable state (if beads enabled)
 		const beads = createBeadsClient(config.project.root);

@@ -22,6 +22,7 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		maxConcurrent: 25,
 		staggerDelayMs: 2_000,
 		maxDepth: 2,
+		maxAgentsPerLead: 5,
 	},
 	worktrees: {
 		baseDir: ".legio/worktrees",

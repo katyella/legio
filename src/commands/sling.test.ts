@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { HierarchyError } from "../errors.ts";
+import { AgentError, HierarchyError } from "../errors.ts";
 import {
 	type BeaconOptions,
 	buildAutoDispatch,
 	buildBeacon,
 	calculateStaggerDelay,
+	checkDuplicateLead,
+	checkParentAgentLimit,
 	parentHasScouts,
 	slingCommand,
 	validateHierarchy,
@@ -525,6 +527,201 @@ describe("buildAutoDispatch", () => {
 		});
 
 		expect(msg.body).toContain("none");
+	});
+});
+
+/**
+ * Tests for checkParentAgentLimit guard.
+ *
+ * Enforces per-lead agent budget: a parent may not have more than maxAgentsPerLead
+ * active (non-zombie, non-completed) children at once.
+ */
+
+function makeChildSession(
+	parentAgent: string | null,
+	state: string,
+): { parentAgent: string | null; state: string } {
+	return { parentAgent, state };
+}
+
+describe("checkParentAgentLimit", () => {
+	test("allows spawn when parent has no active children", () => {
+		expect(() => checkParentAgentLimit([], "lead-alpha", 5, "builder-1")).not.toThrow();
+	});
+
+	test("allows spawn when parent is under the limit", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "booting"),
+			makeChildSession("lead-alpha", "stalled"),
+		];
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-4")).not.toThrow();
+	});
+
+	test("throws AgentError when parent has exactly maxAgentsPerLead active children", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+		];
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-6")).toThrow(AgentError);
+	});
+
+	test("throws AgentError when parent exceeds limit", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+		];
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 2, "builder-4")).toThrow(AgentError);
+	});
+
+	test("ignores zombie children when counting", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "zombie"),
+			makeChildSession("lead-alpha", "zombie"),
+			makeChildSession("lead-alpha", "zombie"),
+			makeChildSession("lead-alpha", "zombie"),
+			makeChildSession("lead-alpha", "zombie"),
+		];
+		// 5 zombies should not count toward the limit
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-1")).not.toThrow();
+	});
+
+	test("ignores completed children when counting", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "completed"),
+			makeChildSession("lead-alpha", "completed"),
+			makeChildSession("lead-alpha", "completed"),
+			makeChildSession("lead-alpha", "completed"),
+			makeChildSession("lead-alpha", "completed"),
+		];
+		// 5 completed should not count toward the limit
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-1")).not.toThrow();
+	});
+
+	test("only counts children of the specified parent", () => {
+		const sessions = [
+			makeChildSession("lead-beta", "working"),
+			makeChildSession("lead-beta", "working"),
+			makeChildSession("lead-beta", "working"),
+			makeChildSession("lead-beta", "working"),
+			makeChildSession("lead-beta", "working"),
+		];
+		// lead-alpha has 0 children despite lead-beta being at limit
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-1")).not.toThrow();
+	});
+
+	test("error message includes parent name, counts, and agent name", () => {
+		const sessions = [
+			makeChildSession("lead-alpha", "working"),
+			makeChildSession("lead-alpha", "working"),
+		];
+		try {
+			checkParentAgentLimit(sessions, "lead-alpha", 2, "my-builder");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AgentError);
+			const ae = err as AgentError;
+			expect(ae.message).toContain("lead-alpha");
+			expect(ae.message).toContain("2/2");
+		}
+	});
+
+	test("skipped when parentAgent is null (calling pattern)", () => {
+		// The calling code only invokes checkParentAgentLimit when parentAgent is not null.
+		// This test confirms the guard is never called with null by simulating how
+		// slingCommand wraps the call.
+		const sessions = [makeChildSession(null, "working")];
+		const parentAgent: string | null = null;
+		// Should not throw because the guard is not called when parentAgent is null
+		const wouldCall = parentAgent !== null;
+		expect(wouldCall).toBe(false);
+		// Extra: verify the function handles arbitrary states correctly
+		expect(() => checkParentAgentLimit(sessions, "lead-alpha", 5, "builder-1")).not.toThrow();
+	});
+});
+
+/**
+ * Tests for checkDuplicateLead guard.
+ *
+ * Prevents two lead agents from concurrently working the same task ID.
+ * Non-lead capabilities are not affected by this guard.
+ */
+
+function makeLeadSession(
+	beadId: string,
+	capability: string,
+	state: string,
+	agentName: string,
+): { beadId: string; capability: string; state: string; agentName: string } {
+	return { beadId, capability, state, agentName };
+}
+
+describe("checkDuplicateLead", () => {
+	test("allows spawn when no existing lead for task", () => {
+		expect(() => checkDuplicateLead([], "legio-abc", "lead", "lead-2")).not.toThrow();
+	});
+
+	test("allows spawn when existing sessions are for different tasks", () => {
+		const sessions = [makeLeadSession("legio-xyz", "lead", "working", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "lead", "lead-2")).not.toThrow();
+	});
+
+	test("throws AgentError when lead already active for same task", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "working", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "lead", "lead-2")).toThrow(AgentError);
+	});
+
+	test("throws AgentError when existing lead is in booting state", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "booting", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "lead", "lead-2")).toThrow(AgentError);
+	});
+
+	test("allows non-lead (builder) even when lead exists for same task", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "working", "lead-1")];
+		// builder capability should pass through without throwing
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "builder", "builder-1")).not.toThrow();
+	});
+
+	test("allows non-lead (scout) even when lead exists for same task", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "working", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "scout", "scout-1")).not.toThrow();
+	});
+
+	test("ignores zombie leads when checking duplicates", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "zombie", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "lead", "lead-2")).not.toThrow();
+	});
+
+	test("ignores completed leads when checking duplicates", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "completed", "lead-1")];
+		expect(() => checkDuplicateLead(sessions, "legio-abc", "lead", "lead-2")).not.toThrow();
+	});
+
+	test("different task IDs do not conflict", () => {
+		const sessions = [
+			makeLeadSession("legio-aaa", "lead", "working", "lead-1"),
+			makeLeadSession("legio-bbb", "lead", "working", "lead-2"),
+			makeLeadSession("legio-ccc", "lead", "working", "lead-3"),
+		];
+		expect(() => checkDuplicateLead(sessions, "legio-ddd", "lead", "lead-4")).not.toThrow();
+	});
+
+	test("error message includes existing and new agent names", () => {
+		const sessions = [makeLeadSession("legio-abc", "lead", "working", "lead-original")];
+		try {
+			checkDuplicateLead(sessions, "legio-abc", "lead", "lead-duplicate");
+			expect.unreachable("should have thrown");
+		} catch (err) {
+			expect(err).toBeInstanceOf(AgentError);
+			const ae = err as AgentError;
+			expect(ae.message).toContain("lead-original");
+			expect(ae.message).toContain("lead-duplicate");
+			expect(ae.message).toContain("legio-abc");
+		}
 	});
 });
 

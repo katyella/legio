@@ -452,4 +452,8 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.watchdog.staleThresholdMs).toBe(300_000);
 		expect(DEFAULT_CONFIG.watchdog.zombieThresholdMs).toBe(600_000);
 	});
+
+	test("agents.maxAgentsPerLead defaults to 5", () => {
+		expect(DEFAULT_CONFIG.agents.maxAgentsPerLead).toBe(5);
+	});
 });
