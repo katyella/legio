@@ -1141,7 +1141,7 @@ export async function handleApiRequest(
 			const { id } = params;
 			if (!id) return errorResponse("Missing issue ID", 400);
 			try {
-				const body = await request.json().catch(() => ({})) as { reason?: string };
+				const body = (await request.json().catch(() => ({}))) as { reason?: string };
 				const reason = typeof body.reason === "string" ? body.reason : "Closed from dashboard";
 				const client = createBeadsClient(projectRoot);
 				await client.close(id, reason);
