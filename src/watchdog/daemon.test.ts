@@ -1296,7 +1296,6 @@ describe("daemon mulch failure recording", () => {
 	});
 
 	test("Tier 0: recordFailure called at escalation level 3+ (progressive termination)", async () => {
-
 		const staleActivity = new Date(Date.now() - 60_000).toISOString();
 		const stalledSince = new Date(Date.now() - 200_000).toISOString();
 		const session = makeSession({
@@ -1522,6 +1521,11 @@ describe("daemon recovery", () => {
 		});
 		expect(successEvent).toBeDefined();
 		expect(successEvent?.level).toBe("info");
+
+		// State must be "completed" after successful recovery, not "zombie"
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).not.toBe("zombie");
+		expect(reloaded[0]?.state).toBe("completed");
 	});
 
 	test("checkpoint exists, sling fails → sling called, agent stays zombie, recovery_failed event", async () => {

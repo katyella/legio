@@ -20,8 +20,8 @@
  * truth. See health.ts for the full ZFC documentation.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCheckpoint } from "../agents/checkpoint.ts";
 import { nudgeAgent } from "../commands/nudge.ts";
@@ -139,7 +139,11 @@ async function readRecoveryCount(agentsDir: string, agentName: string): Promise<
  * Write the recovery attempt count for an agent to disk.
  * Creates the directory if it doesn't exist.
  */
-async function writeRecoveryCount(agentsDir: string, agentName: string, count: number): Promise<void> {
+async function writeRecoveryCount(
+	agentsDir: string,
+	agentName: string,
+	count: number,
+): Promise<void> {
 	const dir = join(agentsDir, agentName);
 	await mkdir(dir, { recursive: true });
 	await writeFile(join(dir, "recovery-count"), String(count), "utf-8");
@@ -148,7 +152,10 @@ async function writeRecoveryCount(agentsDir: string, agentName: string, count: n
 /**
  * Default sling implementation: spawn `legio sling` as a subprocess.
  */
-async function reSling(args: string[], root: string): Promise<{ exitCode: number; stderr: string }> {
+async function reSling(
+	args: string[],
+	root: string,
+): Promise<{ exitCode: number; stderr: string }> {
 	return new Promise((resolve) => {
 		const proc = spawn("legio", ["sling", ...args], {
 			cwd: root,
@@ -169,7 +176,7 @@ async function sendMailSubprocess(args: string[], root: string): Promise<void> {
 	return new Promise((resolve) => {
 		const proc = spawn("legio", ["mail", "send", ...args], {
 			cwd: root,
-			stdio: ["ignore", "pipe", "pipe"],
+			stdio: ["ignore", "ignore", "ignore"],
 		});
 		proc.on("close", () => resolve());
 	});
@@ -191,8 +198,16 @@ async function attemptRecovery(options: {
 	loadCheckpointFn: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
 	sendRecoveryMail: (args: string[]) => Promise<void>;
 }): Promise<{ recovered: boolean }> {
-	const { session, legioDir, root, maxRecoveryAttempts, eventStore, runId, sling, loadCheckpointFn, sendRecoveryMail } =
-		options;
+	const {
+		session,
+		legioDir,
+		maxRecoveryAttempts,
+		eventStore,
+		runId,
+		sling,
+		loadCheckpointFn,
+		sendRecoveryMail,
+	} = options;
 	const agentsDir = join(legioDir, "agents");
 
 	// Load checkpoint — if none exists, recovery is not possible
@@ -437,7 +452,8 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 	const maxRecoveryAttempts = options.maxRecoveryAttempts ?? 1;
 	const slingFn = options._sling ?? ((args: string[]) => reSling(args, root));
 	const loadCheckpointFn = options._loadCheckpoint ?? loadCheckpoint;
-	const sendRecoveryMailFn = options._sendRecoveryMail ?? ((args: string[]) => sendMailSubprocess(args, root));
+	const sendRecoveryMailFn =
+		options._sendRecoveryMail ?? ((args: string[]) => sendMailSubprocess(args, root));
 
 	const legioDir = join(root, ".legio");
 	const { store } = openSessionStore(legioDir);
@@ -525,6 +541,13 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 					// Reset escalation tracking on terminal state
 					store.updateEscalation(session.agentName, 0, null);
 					session.state = "zombie";
+					session.escalationLevel = 0;
+					session.stalledSince = null;
+				} else {
+					// Recovery succeeded — clear zombie state set by transitionState above
+					store.updateState(session.agentName, "completed");
+					store.updateEscalation(session.agentName, 0, null);
+					session.state = "completed";
 					session.escalationLevel = 0;
 					session.stalledSince = null;
 				}
