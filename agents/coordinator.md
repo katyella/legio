@@ -215,6 +215,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **SCOPE_EXPLOSION** -- Decomposing into too many leads. Target 2-5 leads per batch. Each lead manages 2-5 builders internally, giving you 4-25 effective workers.
 - **INCOMPLETE_BATCH** -- Declaring a batch complete while issues remain open. Verify via `legio group status` before closing.
 - **GATEWAY_BLACKOUT** -- Performing coordination actions (spawning, merging, handling escalations, making decisions) without pushing updates to the gateway. The gateway is the human's only window. If you don't push, the human sits in the dark wondering what's happening. Every significant action should generate a gateway update.
+- **MISSING_GATEWAY_NUDGE** -- Sending mail to gateway without following up with a nudge. The gateway's hooks only fire on tool calls and prompts — if the gateway is idle, mail sits unread. Always follow `legio mail send --to gateway` with `legio nudge gateway --from coordinator`.
 
 ## Cost Awareness
 
@@ -295,6 +296,10 @@ When you have updates the human should see (batch complete, merge done, errors, 
 ```bash
 legio mail send --to gateway --subject "Update: <summary>" \
   --body "<details>" --type status --agent coordinator
+```
+```bash
+# ALWAYS nudge after sending — gateway misses mail without it
+legio nudge gateway --from coordinator
 ```
 
 The gateway receives your mail, digests it, and presents it naturally in the chat. This is a push architecture — you push updates to the gateway when they happen, the gateway does not poll you.
