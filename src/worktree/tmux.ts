@@ -8,6 +8,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { AgentError } from "../errors.ts";
@@ -376,6 +377,9 @@ export async function killSession(name: string): Promise<void> {
 		await killProcessTree(panePid);
 	}
 
+	// Step 2b: Stop pipe-pane streaming (best-effort, ignore errors)
+	await stopPipePane(name);
+
 	// Step 3: Kill the tmux session itself
 	const { exitCode, stderr } = await runCommand(["tmux", "kill-session", "-t", name]);
 
@@ -493,6 +497,79 @@ export async function capturePaneContent(name: string): Promise<string> {
 		return "";
 	}
 	return stdout;
+}
+
+/**
+ * Start continuous terminal output streaming for a tmux session via pipe-pane.
+ *
+ * Runs `tmux pipe-pane -t sessionName 'cat >> logPath'` to append all pane
+ * output to a log file. Creates the log directory if it does not exist.
+ *
+ * @param sessionName - Tmux session name to pipe output from
+ * @param logPath - Absolute path to the log file to write output to
+ * @throws AgentError if pipe-pane fails to start
+ */
+export async function startPipePane(sessionName: string, logPath: string): Promise<void> {
+	await mkdir(dirname(logPath), { recursive: true });
+	const { exitCode, stderr } = await runCommand([
+		"tmux",
+		"pipe-pane",
+		"-t",
+		sessionName,
+		`cat >> ${logPath}`,
+	]);
+	if (exitCode !== 0) {
+		throw new AgentError(
+			`Failed to start pipe-pane for session "${sessionName}": ${stderr.trim()}`,
+			{ agentName: sessionName },
+		);
+	}
+}
+
+/**
+ * Stop continuous terminal output streaming for a tmux session.
+ *
+ * Runs `tmux pipe-pane -t sessionName` with no command to close any active
+ * pipe. Errors are silently ignored — the session may not have an active
+ * pipe or may already be gone.
+ *
+ * @param sessionName - Tmux session name to stop piping output from
+ */
+export async function stopPipePane(sessionName: string): Promise<void> {
+	// tmux pipe-pane with no command closes any active pipe
+	await runCommand(["tmux", "pipe-pane", "-t", sessionName]);
+}
+
+/**
+ * Read the last N lines from a terminal log file.
+ *
+ * Returns null if the log file does not exist. Returns the full content
+ * if tailLines is not specified.
+ *
+ * @param logPath - Absolute path to the terminal log file
+ * @param tailLines - Number of trailing lines to return (default: all lines)
+ * @returns The log content, or null if the file does not exist
+ */
+export async function readTerminalLog(logPath: string, tailLines?: number): Promise<string | null> {
+	try {
+		await stat(logPath);
+	} catch {
+		return null;
+	}
+	const content = await readFile(logPath, "utf-8");
+	if (tailLines === undefined) {
+		return content;
+	}
+	// Split lines, accounting for optional trailing newline so the empty string
+	// after a trailing \n doesn't count as an extra line.
+	const hasTrailingNewline = content.endsWith("\n");
+	const lines = content.split("\n");
+	const effectiveLines = hasTrailingNewline ? lines.slice(0, -1) : lines;
+	if (effectiveLines.length <= tailLines) {
+		return content;
+	}
+	const tailed = effectiveLines.slice(-tailLines).join("\n");
+	return hasTrailingNewline ? `${tailed}\n` : tailed;
 }
 
 /**

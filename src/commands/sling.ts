@@ -35,7 +35,7 @@ import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
-import { createSession, sendKeys, waitForTuiReady } from "../worktree/tmux.ts";
+import { createSession, sendKeys, startPipePane, waitForTuiReady } from "../worktree/tmux.ts";
 
 /**
  * Calculate how many milliseconds to sleep before spawning a new agent,
@@ -615,6 +615,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// updateLastActivity() can find the entry and transition booting->working.
 		// Without this, a race exists: hooks fire before the session is persisted,
 		// leaving the agent stuck in "booting" (legio-036f).
+		const terminalLogPath = join(legioDir, "logs", name, "terminal.log");
 		const session: AgentSession = {
 			id: `session-${Date.now()}-${name}`,
 			agentName: name,
@@ -632,6 +633,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			lastActivity: new Date().toISOString(),
 			escalationLevel: 0,
 			stalledSince: null,
+			terminalLogPath,
 		};
 
 		store.upsert(session);
@@ -648,6 +650,13 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// Wait for Claude Code's TUI to render before sending input.
 		// Polls pane content until non-empty (replaces hardcoded 3s sleep).
 		await waitForTuiReady(tmuxSessionName);
+
+		// 13c. Start pipe-pane streaming to terminal log (non-fatal)
+		try {
+			await startPipePane(tmuxSessionName, terminalLogPath);
+		} catch {
+			// Non-fatal: pipe-pane unavailable or session not yet ready
+		}
 		const beacon = buildBeacon({
 			agentName: name,
 			capability,
@@ -657,7 +666,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		});
 		await sendKeys(tmuxSessionName, beacon);
 
-		// 13c. Send a follow-up Enter after a short delay to ensure submission.
+		// 13d. Send a follow-up Enter after a short delay to ensure submission.
 		// Claude Code's TUI may consume the first Enter during initialization,
 		// leaving the beacon text visible but unsubmitted (legio-yhv6).
 		// A redundant Enter on an empty input line is harmless.
