@@ -446,11 +446,11 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.agents.maxAgentsPerLead).toBe(5);
 	});
 
-	test("has qualityGates with npm defaults", () => {
+	test("has qualityGates with npm defaults (no typecheck — language-specific)", () => {
 		expect(DEFAULT_CONFIG.qualityGates).toBeDefined();
 		expect(DEFAULT_CONFIG.qualityGates?.test).toBe("npm test");
 		expect(DEFAULT_CONFIG.qualityGates?.lint).toBe("npm run lint");
-		expect(DEFAULT_CONFIG.qualityGates?.typecheck).toBe("npm run typecheck");
+		expect(DEFAULT_CONFIG.qualityGates?.typecheck).toBeUndefined();
 	});
 });
 
@@ -491,6 +491,6 @@ qualityGates:
 		const config = await loadConfig(tempDir);
 		expect(config.qualityGates?.test).toBe("bun test");
 		expect(config.qualityGates?.lint).toBe("npm run lint");
-		expect(config.qualityGates?.typecheck).toBe("npm run typecheck");
+		expect(config.qualityGates?.typecheck).toBeUndefined();
 	});
 });

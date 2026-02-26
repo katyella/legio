@@ -211,7 +211,7 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm run test:unit");
+		expect(output).toContain("npm test");
 		expect(output).toContain("npm run lint");
 		expect(output).toContain("Commit");
 	});
@@ -221,7 +221,7 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm run test:unit");
+		expect(output).toContain("npm test");
 		expect(output).toContain("npm run lint");
 	});
 
@@ -230,15 +230,16 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm run test:unit");
+		expect(output).toContain("npm test");
 	});
 
-	test("uses default npm commands when qualityGates not in config", async () => {
+	test("uses fallback npm commands when qualityGates not in config", async () => {
 		const config = makeConfig({ capability: "builder" });
 		const output = await generateOverlay(config);
-		expect(output).toContain("npm run test:unit");
+		expect(output).toContain("npm test");
 		expect(output).toContain("npm run lint");
-		expect(output).toContain("npm run typecheck");
+		// No typecheck in fallback — it's language-specific
+		expect(output).not.toContain("Typecheck");
 	});
 
 	test("uses custom qualityGates commands when provided in config", async () => {
@@ -263,8 +264,7 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm run test:unit");
-		expect(output).not.toContain("npm run lint");
+		expect(output).not.toContain("npm test");
 	});
 
 	test("reviewer capability gets read-only completion section instead of quality gates", async () => {
@@ -275,8 +275,7 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm run test:unit");
-		expect(output).not.toContain("npm run lint");
+		expect(output).not.toContain("npm test");
 	});
 
 	test("scout completion section includes bd close and mail send", async () => {

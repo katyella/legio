@@ -56,7 +56,6 @@ export const DEFAULT_CONFIG: LegioConfig = {
 	qualityGates: {
 		test: "npm test",
 		lint: "npm run lint",
-		typecheck: "npm run typecheck",
 	},
 };
 

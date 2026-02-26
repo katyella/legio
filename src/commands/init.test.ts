@@ -2,7 +2,7 @@ import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
-import { initCommand, LEGIO_GITIGNORE } from "./init.ts";
+import { detectQualityGates, initCommand, LEGIO_GITIGNORE } from "./init.ts";
 
 /**
  * Tests for `legio init` -- agent definition deployment.
@@ -207,5 +207,161 @@ describe("initCommand: .legio/.gitignore", () => {
 		// Verify the file was NOT overwritten (early return prevented it)
 		const afterSecondInit = await readFile(gitignorePath, "utf-8");
 		expect(afterSecondInit).toBe("# custom content\n");
+	});
+});
+
+describe("detectQualityGates", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = await createTempGitRepo();
+	});
+
+	afterEach(async () => {
+		await cleanupTempDir(tempDir);
+	});
+
+	test("detects Node.js with test and lint scripts", async () => {
+		await writeFile(
+			join(tempDir, "package.json"),
+			JSON.stringify({ scripts: { test: "vitest", lint: "biome check" } }),
+		);
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("npm test");
+		expect(gates.lint).toBe("npm run lint");
+		expect(gates.typecheck).toBeUndefined();
+	});
+
+	test("detects Node.js with typecheck when tsconfig.json exists", async () => {
+		await writeFile(
+			join(tempDir, "package.json"),
+			JSON.stringify({ scripts: { test: "vitest", lint: "biome", typecheck: "tsc --noEmit" } }),
+		);
+		await writeFile(join(tempDir, "tsconfig.json"), "{}");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("npm test");
+		expect(gates.lint).toBe("npm run lint");
+		expect(gates.typecheck).toBe("npm run typecheck");
+	});
+
+	test("Node.js without test/lint scripts uses echo fallback", async () => {
+		await writeFile(join(tempDir, "package.json"), JSON.stringify({ name: "empty" }));
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toContain("no test command configured");
+		expect(gates.lint).toContain("no lint command configured");
+	});
+
+	test("detects Rust via Cargo.toml", async () => {
+		await writeFile(join(tempDir, "Cargo.toml"), '[package]\nname = "my-crate"\n');
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("cargo test");
+		expect(gates.lint).toBe("cargo clippy");
+		expect(gates.typecheck).toBeUndefined();
+	});
+
+	test("detects Python via pyproject.toml", async () => {
+		await writeFile(join(tempDir, "pyproject.toml"), '[project]\nname = "my-pkg"\n');
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("pytest");
+		expect(gates.lint).toBe("ruff check");
+	});
+
+	test("detects Go via go.mod", async () => {
+		await writeFile(join(tempDir, "go.mod"), "module example.com/foo\n");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("go test ./...");
+		expect(gates.lint).toBe("golangci-lint run");
+	});
+
+	test("detects Elm via elm.json", async () => {
+		await writeFile(join(tempDir, "elm.json"), "{}");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("elm-test");
+		expect(gates.lint).toBe("elm-review");
+	});
+
+	test("detects Maven via pom.xml", async () => {
+		await writeFile(join(tempDir, "pom.xml"), "<project></project>");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("mvn test");
+		expect(gates.lint).toBe("mvn checkstyle:check");
+	});
+
+	test("detects Gradle via build.gradle", async () => {
+		await writeFile(join(tempDir, "build.gradle"), "apply plugin: 'java'\n");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("gradle test");
+		expect(gates.lint).toBe("gradle check");
+	});
+
+	test("detects Gradle Kotlin via build.gradle.kts", async () => {
+		await writeFile(join(tempDir, "build.gradle.kts"), "plugins { java }\n");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("gradle test");
+		expect(gates.lint).toBe("gradle check");
+	});
+
+	test("detects Ruby via Gemfile", async () => {
+		await writeFile(join(tempDir, "Gemfile"), 'source "https://rubygems.org"\n');
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("bundle exec rake test");
+		expect(gates.lint).toBe("rubocop");
+	});
+
+	test("detects Elixir via mix.exs", async () => {
+		await writeFile(join(tempDir, "mix.exs"), "defmodule MyApp.MixProject do\nend\n");
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toBe("mix test");
+		expect(gates.lint).toBe("mix credo");
+	});
+
+	test("returns echo fallback for unknown ecosystem", async () => {
+		// No marker files — bare git repo
+		const gates = await detectQualityGates(tempDir);
+		expect(gates.test).toContain("no test command configured");
+		expect(gates.lint).toContain("no lint command configured");
+		expect(gates.typecheck).toBeUndefined();
+	});
+});
+
+describe("initCommand: quality gates detection", () => {
+	let tempDir: string;
+	let originalCwd: string;
+	let originalWrite: typeof process.stdout.write;
+
+	beforeEach(async () => {
+		tempDir = await createTempGitRepo();
+		originalCwd = process.cwd();
+		process.chdir(tempDir);
+
+		originalWrite = process.stdout.write;
+		process.stdout.write = (() => true) as typeof process.stdout.write;
+	});
+
+	afterEach(async () => {
+		process.chdir(originalCwd);
+		process.stdout.write = originalWrite;
+		await cleanupTempDir(tempDir);
+	});
+
+	test("config.yaml contains detected quality gates for Rust project", async () => {
+		await writeFile(join(tempDir, "Cargo.toml"), '[package]\nname = "test"\n');
+		await initCommand([]);
+
+		const configContent = await readFile(join(tempDir, ".legio", "config.yaml"), "utf-8");
+		expect(configContent).toContain("cargo test");
+		expect(configContent).toContain("cargo clippy");
+	});
+
+	test("config.yaml contains detected quality gates for Node.js project", async () => {
+		await writeFile(
+			join(tempDir, "package.json"),
+			JSON.stringify({ scripts: { test: "jest", lint: "eslint ." } }),
+		);
+		await initCommand([]);
+
+		const configContent = await readFile(join(tempDir, ".legio", "config.yaml"), "utf-8");
+		expect(configContent).toContain("npm test");
+		expect(configContent).toContain("npm run lint");
 	});
 });

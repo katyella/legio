@@ -56,17 +56,13 @@ function formatMulchExpertise(expertise: string | undefined): string {
 /** Capabilities that are read-only and should not get quality gates for commits/tests/lint. */
 const READ_ONLY_CAPABILITIES = new Set(["scout", "reviewer"]);
 
-/** Shape of per-project quality gate commands. Added to OverlayConfig by legio-787k (parallel). */
+/** Shape of per-project quality gate commands. */
 type QualityGates = { test: string; lint: string; typecheck?: string };
 
-/** OverlayConfig extended with the optional qualityGates field (landing via legio-787k). */
-type OverlayConfigWithGates = OverlayConfig & { qualityGates?: QualityGates };
-
-/** Default quality gate commands used when config.qualityGates is not provided. */
-const DEFAULT_QUALITY_GATES: QualityGates = {
-	test: "npm run test:unit",
+/** Minimal fallback when config.qualityGates is not provided (e.g. old configs). */
+const FALLBACK_QUALITY_GATES: QualityGates = {
+	test: "npm test",
 	lint: "npm run lint",
-	typecheck: "npm run typecheck",
 };
 
 /**
@@ -91,7 +87,7 @@ function formatQualityGates(config: OverlayConfig): string {
 		].join("\n");
 	}
 
-	const gates = (config as OverlayConfigWithGates).qualityGates ?? DEFAULT_QUALITY_GATES;
+	const gates = config.qualityGates ?? FALLBACK_QUALITY_GATES;
 	const parent = config.parentAgent ?? "orchestrator";
 
 	const steps: string[] = [
@@ -105,7 +101,9 @@ function formatQualityGates(config: OverlayConfig): string {
 		nextStep++;
 	}
 
-	steps.push(`${nextStep}. **Commit:** all changes committed to your branch (${config.branchName})`);
+	steps.push(
+		`${nextStep}. **Commit:** all changes committed to your branch (${config.branchName})`,
+	);
 	nextStep++;
 	steps.push(
 		`${nextStep}. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
@@ -115,7 +113,9 @@ function formatQualityGates(config: OverlayConfig): string {
 		`${nextStep}. **Signal completion:** send \`worker_done\` mail to ${parent}: \`legio mail send --to ${parent} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
 	);
 	nextStep++;
-	steps.push(`${nextStep}. **Close issue:** \`bd close ${config.beadId} --reason "summary of changes"\``);
+	steps.push(
+		`${nextStep}. **Close issue:** \`bd close ${config.beadId} --reason "summary of changes"\``,
+	);
 
 	return [
 		"## Quality Gates",

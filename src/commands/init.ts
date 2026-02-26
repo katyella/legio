@@ -86,6 +86,87 @@ async function detectProjectName(root: string): Promise<string> {
 }
 
 /**
+ * Detect quality gate commands by checking for ecosystem marker files.
+ *
+ * Inspects the project root for common build tool config files (package.json,
+ * Cargo.toml, pyproject.toml, etc.) and returns the conventional test/lint/typecheck
+ * commands for that ecosystem. Falls back to echo placeholders when no ecosystem
+ * is detected.
+ */
+export async function detectQualityGates(
+	root: string,
+): Promise<{ test: string; lint: string; typecheck?: string }> {
+	// Node.js — also inspect package.json scripts to confirm commands exist
+	if (await fileExists(join(root, "package.json"))) {
+		let scripts: Record<string, unknown> = {};
+		try {
+			const raw = await readFile(join(root, "package.json"), "utf-8");
+			const pkg = JSON.parse(raw) as { scripts?: Record<string, unknown> };
+			scripts = pkg.scripts ?? {};
+		} catch {
+			// Malformed package.json — use npm defaults anyway
+		}
+		const gates: { test: string; lint: string; typecheck?: string } = {
+			test: scripts.test ? "npm test" : 'echo "no test command configured"',
+			lint: scripts.lint ? "npm run lint" : 'echo "no lint command configured"',
+		};
+		if (scripts.typecheck && (await fileExists(join(root, "tsconfig.json")))) {
+			gates.typecheck = "npm run typecheck";
+		}
+		return gates;
+	}
+
+	// Rust
+	if (await fileExists(join(root, "Cargo.toml"))) {
+		return { test: "cargo test", lint: "cargo clippy" };
+	}
+
+	// Python
+	if (await fileExists(join(root, "pyproject.toml"))) {
+		return { test: "pytest", lint: "ruff check" };
+	}
+
+	// Go
+	if (await fileExists(join(root, "go.mod"))) {
+		return { test: "go test ./...", lint: "golangci-lint run" };
+	}
+
+	// Elm
+	if (await fileExists(join(root, "elm.json"))) {
+		return { test: "elm-test", lint: "elm-review" };
+	}
+
+	// Maven
+	if (await fileExists(join(root, "pom.xml"))) {
+		return { test: "mvn test", lint: "mvn checkstyle:check" };
+	}
+
+	// Gradle
+	if (
+		(await fileExists(join(root, "build.gradle"))) ||
+		(await fileExists(join(root, "build.gradle.kts")))
+	) {
+		return { test: "gradle test", lint: "gradle check" };
+	}
+
+	// Ruby
+	if (await fileExists(join(root, "Gemfile"))) {
+		return { test: "bundle exec rake test", lint: "rubocop" };
+	}
+
+	// Elixir
+	if (await fileExists(join(root, "mix.exs"))) {
+		return { test: "mix test", lint: "mix credo" };
+	}
+
+	// Unknown ecosystem
+	return {
+		test: 'echo "no test command configured"',
+		lint: 'echo "no lint command configured"',
+	};
+}
+
+/**
  * Detect the canonical branch name from git.
  */
 async function detectCanonicalBranch(root: string): Promise<string> {
@@ -586,6 +667,10 @@ export async function initCommand(args: string[]): Promise<void> {
 	config.project.name = projectName;
 	config.project.root = projectRoot;
 	config.project.canonicalBranch = canonicalBranch;
+
+	// 4b. Auto-detect quality gates based on project marker files
+	const detectedGates = await detectQualityGates(projectRoot);
+	config.qualityGates = detectedGates;
 
 	const configYaml = serializeConfigToYaml(config);
 	const configPath = join(legioPath, "config.yaml");

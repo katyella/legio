@@ -555,6 +555,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			mulchExpertise,
 			canonicalRoot: config.project.root,
 			skipReview,
+			qualityGates: config.qualityGates as OverlayConfig["qualityGates"],
 		};
 
 		try {
