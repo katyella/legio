@@ -3,7 +3,7 @@
 
 import { IssueCard } from "../components/issue-card.js";
 import { fetchJson, postJson } from "../lib/api.js";
-import { h, html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
+import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import { appState } from "../lib/state.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ function escapeHtml(str) {
 
 function truncate(str, maxLen) {
 	if (!str) return "";
-	return str.length <= maxLen ? str : str.slice(0, maxLen - 3) + "...";
+	return str.length <= maxLen ? str : `${str.slice(0, maxLen - 3)}...`;
 }
 
 // Priority border colors (hex) for the inline-style approach used by shim
@@ -270,7 +270,7 @@ export function IssuesView() {
 			<div class="flex items-center gap-2 mb-4">
 				${filterButtons.map((p) => {
 					const active = priorityFilter === p;
-					const label = p == null ? "All" : "P" + p;
+					const label = p == null ? "All" : `P${p}`;
 					return html`
 						<button
 							key=${label}

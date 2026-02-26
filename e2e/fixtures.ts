@@ -54,6 +54,7 @@ type OvFixtures = {
 };
 
 export const test = base.extend<OvFixtures>({
+	// biome-ignore lint/correctness/noEmptyPattern: playwright fixture pattern requires destructuring
 	projectDir: async ({}, use) => {
 		const dir = await mkdtemp(join(tmpdir(), "ov-e2e-"));
 		const ovDir = join(dir, ".legio");

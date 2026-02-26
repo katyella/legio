@@ -10,7 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { cleanupTempDir } from "../test-helpers.ts";
-import { estimateCost, extractAssistantText, parseTranscriptTexts, parseTranscriptUsage } from "./transcript.ts";
+import {
+	estimateCost,
+	extractAssistantText,
+	parseTranscriptTexts,
+	parseTranscriptUsage,
+} from "./transcript.ts";
 
 let tempDir: string;
 

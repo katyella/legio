@@ -14,7 +14,6 @@ describe("isRunningAsRoot", () => {
 	test("returns false when process.getuid is not available (Windows)", () => {
 		// Simulate a platform without process.getuid by overriding it to undefined
 		const original = process.getuid;
-		// biome-ignore lint/suspicious/noExplicitAny: intentionally simulating non-POSIX platform
 		(process as unknown as Record<string, unknown>).getuid = undefined;
 		expect(isRunningAsRoot()).toBe(false);
 		process.getuid = original;

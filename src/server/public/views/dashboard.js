@@ -119,7 +119,8 @@ function MailFeed({ mail }) {
 		.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 		.slice(0, 50);
 
-	const filtered = activeFilters.size === 0 ? sorted : sorted.filter((m) => activeFilters.has(m.type));
+	const filtered =
+		activeFilters.size === 0 ? sorted : sorted.filter((m) => activeFilters.has(m.type));
 
 	const toggleExpand = useCallback((id) => {
 		setExpandedId((prev) => (prev === id ? null : id));
@@ -161,7 +162,7 @@ function MailFeed({ mail }) {
 						<button
 							key=${type}
 							onClick=${() => toggleFilter(type)}
-							class=${`px-1.5 py-0.5 rounded text-xs font-mono cursor-pointer border-none ${activeFilters.has(type) ? MAIL_TYPE_COLORS[type] ?? "bg-[#333] text-[#999]" : "bg-[#2a2a2a] text-[#666]"}`}
+							class=${`px-1.5 py-0.5 rounded text-xs font-mono cursor-pointer border-none ${activeFilters.has(type) ? (MAIL_TYPE_COLORS[type] ?? "bg-[#333] text-[#999]") : "bg-[#2a2a2a] text-[#666]"}`}
 						>
 							${type}
 						</button>
@@ -177,7 +178,8 @@ function MailFeed({ mail }) {
 								let parsedPayload = null;
 								if (m.payload) {
 									try {
-										parsedPayload = typeof m.payload === "string" ? JSON.parse(m.payload) : m.payload;
+										parsedPayload =
+											typeof m.payload === "string" ? JSON.parse(m.payload) : m.payload;
 									} catch {
 										parsedPayload = m.payload;
 									}
@@ -203,32 +205,48 @@ function MailFeed({ mail }) {
 										<span class="text-[#444] flex-shrink-0 ml-auto">${timeAgo(m.createdAt)}</span>
 										<span class="text-[#444] flex-shrink-0 ml-1">${isExpanded ? "\u25B2" : "\u25BC"}</span>
 									</div>
-									${isExpanded ? html`
+									${
+										isExpanded
+											? html`
 										<div class="px-2 pb-2 text-xs border-t border-[#2a2a2a] mt-0.5 pt-1.5 space-y-1">
-											${m.priority && m.priority !== "normal" ? html`
+											${
+												m.priority && m.priority !== "normal"
+													? html`
 												<div class="flex gap-1.5">
 													<span class="text-[#555] flex-shrink-0">priority:</span>
 													<span class="text-yellow-400 font-mono">${m.priority}</span>
 												</div>
-											` : null}
-											${m.body ? html`
+											`
+													: null
+											}
+											${
+												m.body
+													? html`
 												<div>
 													<div class="text-[#555] mb-0.5">body:</div>
 													<div class="text-[#aaa] whitespace-pre-wrap break-words font-mono bg-[#111] rounded px-2 py-1 max-h-[10rem] overflow-y-auto">
 														${m.body}
 													</div>
 												</div>
-											` : null}
-											${parsedPayload ? html`
+											`
+													: null
+											}
+											${
+												parsedPayload
+													? html`
 												<div>
 													<div class="text-[#555] mb-0.5">payload:</div>
 													<div class="text-[#aaa] whitespace-pre-wrap break-words font-mono bg-[#111] rounded px-2 py-1 max-h-[10rem] overflow-y-auto">
 														${JSON.stringify(parsedPayload, null, 2)}
 													</div>
 												</div>
-											` : null}
+											`
+													: null
+											}
 										</div>
-									` : null}
+									`
+											: null
+									}
 								</div>
 							`;
 							})
@@ -652,7 +670,7 @@ const NOISE_EVENT_TYPES = new Set(["tool_start", "tool_end"]);
 export function DashboardView() {
 	const [activityEvents, setActivityEvents] = useState([]);
 	const [mail, setMail] = useState([]);
-	const [coordRunning, setCoordRunning] = useState(false);
+	const [_coordRunning, setCoordRunning] = useState(false);
 	const [gwRunning, setGwRunning] = useState(false);
 
 	// Poll event store every 5s

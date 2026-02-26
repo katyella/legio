@@ -56,6 +56,7 @@ export function resolveJsonlConflict(content: string): string | null {
 	let lastIndex = 0;
 	let match: RegExpExecArray | null;
 
+	// biome-ignore lint/suspicious/noAssignInExpressions: standard regex exec loop pattern
 	while ((match = conflictPattern.exec(content)) !== null) {
 		// Collect non-conflict content before this match
 		const before = content.slice(lastIndex, match.index);
@@ -106,10 +107,10 @@ export function resolveJsonlConflict(content: string): string | null {
 
 		const record = parsed as Record<string, unknown>;
 
-		if (typeof record["id"] === "string" && typeof record["recorded_at"] === "string") {
-			const existing = idMap.get(record["id"]);
-			if (!existing || record["recorded_at"] > existing.recordedAt) {
-				idMap.set(record["id"], { recordedAt: record["recorded_at"], raw: line });
+		if (typeof record.id === "string" && typeof record.recorded_at === "string") {
+			const existing = idMap.get(record.id);
+			if (!existing || record.recorded_at > existing.recordedAt) {
+				idMap.set(record.id, { recordedAt: record.recorded_at, raw: line });
 			}
 		} else {
 			noIdLines.push(line);
@@ -121,7 +122,7 @@ export function resolveJsonlConflict(content: string): string | null {
 		.sort((a, b) => (a.recordedAt < b.recordedAt ? -1 : a.recordedAt > b.recordedAt ? 1 : 0))
 		.map((r) => r.raw);
 
-	return [...sorted, ...noIdLines].join("\n") + "\n";
+	return `${[...sorted, ...noIdLines].join("\n")}\n`;
 }
 
 /**

@@ -315,8 +315,7 @@ describe("deployHooks", () => {
 		// There should be at least one Bash hook that blocks git push
 		const pushGuards = preToolUse.filter(
 			(h: { matcher: string; hooks: Array<{ command: string }> }) =>
-				h.matcher === "Bash" &&
-				h.hooks[0]?.command?.includes("git push is blocked"),
+				h.matcher === "Bash" && h.hooks[0]?.command?.includes("git push is blocked"),
 		);
 		expect(pushGuards.length).toBeGreaterThanOrEqual(1);
 		expect(pushGuards[0].hooks[0].command).toContain('"decision":"block"');

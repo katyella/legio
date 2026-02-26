@@ -106,7 +106,7 @@ function Layout({ view, param }) {
 				</div>
 				<div class="flex items-center gap-3 pr-2">
 					<span
-						class=${"w-2 h-2 rounded-full " + (connected ? "bg-green-500" : "bg-[#444]")}
+						class=${`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-[#444]"}`}
 						title=${connected ? "WebSocket connected" : "WebSocket disconnected"}
 					></span>
 					${
@@ -154,7 +154,7 @@ function App() {
 		connectWS();
 		fetchJson("/api/setup/status")
 			.then((data) => {
-				if (data.projectName) document.title = "Legio \u2014 " + data.projectName;
+				if (data.projectName) document.title = `Legio \u2014 ${data.projectName}`;
 				setIsInitialized(data.initialized);
 				setSetupStatus(data);
 				setSetupChecked(true);

@@ -58,7 +58,7 @@ describe("HeadlessCoordinator — lifecycle", () => {
 	test("throws if start() called twice", () => {
 		coordinator = new HeadlessCoordinator({ command: "cat", cwd: process.cwd() });
 		coordinator.start();
-		expect(() => coordinator!.start()).toThrow("already running");
+		expect(() => coordinator?.start()).toThrow("already running");
 	});
 
 	test("stop() sets isRunning() to false", async () => {
@@ -86,8 +86,8 @@ describe("HeadlessCoordinator — output and events", () => {
 		coordinator = new HeadlessCoordinator({ command: "echo hello-legio", cwd: process.cwd() });
 
 		await new Promise<void>((resolve) => {
-			coordinator!.on("exit", () => resolve());
-			coordinator!.start();
+			coordinator?.on("exit", () => resolve());
+			coordinator?.start();
 		});
 
 		// Some output is received (either command output or script error in non-TTY env)
@@ -103,8 +103,8 @@ describe("HeadlessCoordinator — output and events", () => {
 		coordinator.on("output", (chunk: string) => chunks.push(chunk));
 
 		await new Promise<void>((resolve) => {
-			coordinator!.on("exit", () => resolve());
-			coordinator!.start();
+			coordinator?.on("exit", () => resolve());
+			coordinator?.start();
 		});
 
 		// Output events were emitted (some output from script, even if just error)
@@ -119,8 +119,8 @@ describe("HeadlessCoordinator — output and events", () => {
 		});
 
 		await new Promise<void>((resolve) => {
-			coordinator!.on("exit", () => resolve());
-			coordinator!.start();
+			coordinator?.on("exit", () => resolve());
+			coordinator?.start();
 		});
 
 		expect(exitFired).toBe(true);
@@ -137,8 +137,8 @@ describe("HeadlessCoordinator — ring buffer", () => {
 		});
 
 		await new Promise<void>((resolve) => {
-			coordinator!.on("exit", () => resolve());
-			coordinator!.start();
+			coordinator?.on("exit", () => resolve());
+			coordinator?.start();
 		});
 
 		// Ring buffer is split by \n so the count depends on split output
@@ -167,11 +167,11 @@ describe("HeadlessCoordinator — platform detection", () => {
 
 		let exited = false;
 		await new Promise<void>((resolve) => {
-			coordinator!.on("exit", () => {
+			coordinator?.on("exit", () => {
 				exited = true;
 				resolve();
 			});
-			coordinator!.start();
+			coordinator?.start();
 		});
 
 		// The process exited — this is sufficient to verify platform detection works

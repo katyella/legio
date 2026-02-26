@@ -7,6 +7,7 @@
 // No npm dependencies — uses CDN imports. Served as a static ES module.
 
 import { ActivityCard, MessageBubble } from "../components/message-bubble.js";
+import { fetchJson, postJson } from "../lib/api.js";
 import {
 	html,
 	useCallback,
@@ -16,7 +17,6 @@ import {
 	useRef,
 	useState,
 } from "../lib/preact-setup.js";
-import { fetchJson, postJson } from "../lib/api.js";
 import { agentColor, inferCapability, isActivityMessage, timeAgo } from "../lib/utils.js";
 
 // Issue status icon colors
@@ -193,7 +193,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		const fetchHistory = () => {
 			fetchJson(url)
 				.then((data) => {
-					setConversationHistory(Array.isArray(data) ? data : (data.messages || []));
+					setConversationHistory(Array.isArray(data) ? data : data.messages || []);
 				})
 				.catch(() => {
 					// Gracefully handle 404s since backend may not be deployed yet
@@ -612,7 +612,9 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 				<div
 					class=${
 						"px-3 py-2 cursor-pointer hover:bg-[#1a1a1a] flex items-center gap-2 text-sm" +
-						(!selectedTask && !selectedAgent && !selectedConversation ? " bg-[#1a1a1a] border-l-2 border-[#E64415]" : "")
+						(!selectedTask && !selectedAgent && !selectedConversation
+							? " bg-[#1a1a1a] border-l-2 border-[#E64415]"
+							: "")
 					}
 					onClick=${handleAllMessagesClick}
 				>

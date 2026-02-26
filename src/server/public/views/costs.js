@@ -102,7 +102,7 @@ function ModelBreakdown({ modelData }) {
 						<div class="flex-1 bg-white/5 rounded-sm h-5 overflow-hidden">
 							<div
 								class=${`${color} h-full rounded-sm`}
-								style=${"width: " + pct.toFixed(1) + "%"}
+								style=${`width: ${pct.toFixed(1)}%`}
 							></div>
 						</div>
 						<span class="font-mono text-xs text-gray-400 w-28 text-right shrink-0">
@@ -156,7 +156,7 @@ function DateChart({ dateData }) {
 							<span class="text-xs font-mono text-gray-500">${formatCostShort(cost)}</span>
 							<div
 								class="w-6 bg-blue-500 rounded-t-sm"
-								style=${"height: " + barH + "px"}
+								style=${`height: ${barH}px`}
 							></div>
 							<span class="text-xs text-gray-500 rotate-0">${formatDateShort(d.date)}</span>
 						</div>
@@ -205,7 +205,7 @@ function AgentBarChart({ metrics }) {
 						<div class="flex-1 bg-white/5 rounded-sm h-5 overflow-hidden">
 							<div
 								class="bg-blue-500 h-full rounded-sm"
-								style=${"width: " + pct.toFixed(1) + "%"}
+								style=${`width: ${pct.toFixed(1)}%`}
 							></div>
 						</div>
 						<span class="font-mono text-sm text-gray-300 w-20 text-right shrink-0">
@@ -246,7 +246,7 @@ function TokenDistribution({ totals }) {
 						<div
 							key=${s.label}
 							class=${s.color}
-							style=${"width: " + pct.toFixed(2) + "%"}
+							style=${`width: ${pct.toFixed(2)}%`}
 							title=${`${s.label}: ${formatNumber(s.value)} (${pct.toFixed(1)}%)`}
 						></div>
 					`;
@@ -302,7 +302,7 @@ function CapabilityChart({ metrics }) {
 						<div class="flex-1 bg-white/5 rounded-sm h-5 overflow-hidden">
 							<div
 								class="bg-blue-400 h-full rounded-sm"
-								style=${"width: " + pct.toFixed(1) + "%"}
+								style=${`width: ${pct.toFixed(1)}%`}
 							></div>
 						</div>
 						<span class="font-mono text-sm text-gray-300 w-20 text-right shrink-0">
@@ -554,9 +554,10 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 					<div class="text-gray-500 uppercase text-xs tracking-wider">Cost by Agent</div>
 					<span class="text-gray-500 text-sm">${agentExpanded ? "▾" : "▸"}</span>
 				</div>
-				${agentExpanded
-					? html`<div class="mt-4"><${AgentBarChart} metrics=${safeMetrics} /></div>`
-					: html`<div class="text-sm text-gray-500 mt-2">${agentCount} agent${agentCount === 1 ? "" : "s"} — ${totals.cost != null ? formatCostShort(totals.cost) : "—"} total</div>`
+				${
+					agentExpanded
+						? html`<div class="mt-4"><${AgentBarChart} metrics=${safeMetrics} /></div>`
+						: html`<div class="text-sm text-gray-500 mt-2">${agentCount} agent${agentCount === 1 ? "" : "s"} — ${totals.cost != null ? formatCostShort(totals.cost) : "—"} total</div>`
 				}
 			</div>
 
@@ -592,7 +593,7 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 
 			<!-- Detailed Costs Table -->
 			<div class="bg-surface border border-border rounded-sm p-4">
-				<div class=${"flex items-center gap-3 " + (detailExpanded ? "mb-4" : "")}>
+				<div class=${`flex items-center gap-3 ${detailExpanded ? "mb-4" : ""}`}>
 					<div
 						class="flex items-center gap-2 cursor-pointer"
 						onClick=${() => setDetailExpanded((v) => !v)}
@@ -600,8 +601,9 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 						<span class="text-gray-500 uppercase text-xs tracking-wider">Detailed Breakdown</span>
 						<span class="text-gray-500 text-sm">${detailExpanded ? "▾" : "▸"}</span>
 					</div>
-					${detailExpanded
-						? html`
+					${
+						detailExpanded
+							? html`
 							<button
 								class=${
 									"text-sm px-3 py-1.5 rounded-sm border border-border ml-auto " +
@@ -614,11 +616,13 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 								${groupByCapability ? "Ungroup" : "Group by Capability"}
 							</button>
 						`
-						: null}
+							: null
+					}
 				</div>
 
-				${detailExpanded
-					? html`
+				${
+					detailExpanded
+						? html`
 						<div class="overflow-x-auto">
 							<table class="w-full text-sm border-collapse">
 								<thead>
@@ -650,7 +654,8 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 							</table>
 						</div>
 					`
-					: null}
+						: null
+				}
 			</div>
 
 			<!-- Live Snapshots (only when data exists) -->

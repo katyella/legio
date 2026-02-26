@@ -1,7 +1,7 @@
 // views/inspect.js — Per-agent deep inspection view
 // Exports InspectView (Preact component)
 
-import { h, html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
+import { html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 
 // ── Utility functions ──────────────────────────────────────────────────────
 
@@ -10,22 +10,22 @@ function formatDuration(ms) {
 	const s = Math.floor(ms / 1000);
 	const m = Math.floor(s / 60);
 	const hh = Math.floor(m / 60);
-	if (hh > 0) return hh + "h " + (m % 60) + "m";
-	if (m > 0) return m + "m " + (s % 60) + "s";
-	return s + "s";
+	if (hh > 0) return `${hh}h ${m % 60}m`;
+	if (m > 0) return `${m}m ${s % 60}s`;
+	return `${s}s`;
 }
 
-function timeAgo(isoString) {
+function _timeAgo(isoString) {
 	if (!isoString) return "";
 	const diff = Date.now() - new Date(isoString).getTime();
 	if (diff < 0) return "just now";
 	const s = Math.floor(diff / 1000);
-	if (s < 60) return s + "s ago";
+	if (s < 60) return `${s}s ago`;
 	const m = Math.floor(s / 60);
-	if (m < 60) return m + "m ago";
+	if (m < 60) return `${m}m ago`;
 	const hh = Math.floor(m / 60);
-	if (hh < 24) return hh + "h ago";
-	return Math.floor(hh / 24) + "d ago";
+	if (hh < 24) return `${hh}h ago`;
+	return `${Math.floor(hh / 24)}d ago`;
 }
 
 function formatNumber(n) {
@@ -35,7 +35,7 @@ function formatNumber(n) {
 
 function truncate(str, maxLen) {
 	if (!str) return "";
-	return str.length <= maxLen ? str : str.slice(0, maxLen - 3) + "...";
+	return str.length <= maxLen ? str : `${str.slice(0, maxLen - 3)}...`;
 }
 
 function formatTimestamp(iso) {
@@ -52,6 +52,7 @@ function formatTimestamp(iso) {
 
 // Strip ANSI escape sequences from terminal output before display
 function stripAnsi(str) {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escape sequences requires matching control chars
 	return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, "");
 }
 
@@ -226,7 +227,7 @@ export function InspectView({ agentName }) {
 		{ label: "Cache Created", value: formatNumber(token.cacheCreationTokens) },
 		{
 			label: "Est. Cost",
-			value: token.estimatedCostUsd != null ? "$" + token.estimatedCostUsd.toFixed(4) : "\u2014",
+			value: token.estimatedCostUsd != null ? `$${token.estimatedCostUsd.toFixed(4)}` : "\u2014",
 		},
 		{ label: "Model", value: token.modelUsed || "\u2014" },
 	];
@@ -274,9 +275,9 @@ export function InspectView({ agentName }) {
 				<div class="flex items-center gap-3">
 					<div class="flex items-center gap-1.5">
 						<span
-							class=${"w-2 h-2 rounded-full " + (termConnected ? "bg-green-500" : "bg-[#555]")}
+							class=${`w-2 h-2 rounded-full ${termConnected ? "bg-green-500" : "bg-[#555]"}`}
 						></span>
-						<span class=${"text-xs font-mono " + (termConnected ? "text-green-400" : "text-[#555]")}>
+						<span class=${`text-xs font-mono ${termConnected ? "text-green-400" : "text-[#555]"}`}>
 							${termConnected ? "connected" : "disconnected"}
 						</span>
 					</div>
@@ -321,7 +322,7 @@ export function InspectView({ agentName }) {
 							onInput=${(e) => setTermInput(e.target.value)}
 							onKeyDown=${handleTermKeyDown}
 							disabled=${termSending}
-							class=${"flex-1 " + inputCls + " font-mono disabled:opacity-50"}
+							class=${`flex-1 ${inputCls} font-mono disabled:opacity-50`}
 						/>
 						<button
 							onClick=${handleTermSend}
@@ -390,7 +391,7 @@ export function InspectView({ agentName }) {
 							</span>
 						</div>
 					`,
-						)
+							)
 				}
 			</div>
 		</div>

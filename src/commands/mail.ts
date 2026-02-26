@@ -15,7 +15,7 @@ import { isGroupAddress, resolveGroupAddress } from "../mail/broadcast.ts";
 import { createMailClient } from "../mail/client.ts";
 import { createMailStore } from "../mail/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import type { MailAudience, MailMessage, MailMessageType } from "../types.ts";
+import type { MailAudience, MailMessage } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
 import { nudgeAgent } from "./nudge.ts";
 

@@ -247,6 +247,7 @@ describe("generateOverlay", () => {
 			...baseConfig,
 			qualityGates: { test: "bun test", lint: "bun run lint", typecheck: "bun run typecheck" },
 		};
+		// biome-ignore lint/suspicious/noExplicitAny: testing extended config with qualityGates field
 		const output = await generateOverlay(config as any);
 		expect(output).toContain("bun test");
 		expect(output).toContain("bun run lint");

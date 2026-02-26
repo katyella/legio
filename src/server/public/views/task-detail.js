@@ -10,18 +10,18 @@ function timeAgo(isoString) {
 	const diff = Date.now() - new Date(isoString).getTime();
 	if (diff < 0) return "just now";
 	const s = Math.floor(diff / 1000);
-	if (s < 60) return s + "s ago";
+	if (s < 60) return `${s}s ago`;
 	const m = Math.floor(s / 60);
-	if (m < 60) return m + "m ago";
+	if (m < 60) return `${m}m ago`;
 	const hh = Math.floor(m / 60);
-	if (hh < 24) return hh + "h ago";
-	return Math.floor(hh / 24) + "d ago";
+	if (hh < 24) return `${hh}h ago`;
+	return `${Math.floor(hh / 24)}d ago`;
 }
 
 function formatDate(isoString) {
 	if (!isoString) return "—";
 	const d = new Date(isoString);
-	return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function formatDuration(ms) {
@@ -30,9 +30,9 @@ function formatDuration(ms) {
 	const s = Math.floor(ms / 1000);
 	const m = Math.floor(s / 60);
 	const hh = Math.floor(m / 60);
-	if (hh > 0) return hh + "h " + (m % 60) + "m";
-	if (m > 0) return m + "m " + (s % 60) + "s";
-	return s + "s";
+	if (hh > 0) return `${hh}h ${m % 60}m`;
+	if (m > 0) return `${m}m ${s % 60}s`;
+	return `${s}s`;
 }
 
 // ── Badge helpers ──────────────────────────────────────────────────────────
@@ -50,7 +50,13 @@ function statusBadge(status) {
 
 function priorityBadge(priority) {
 	if (priority == null) return null;
-	const colors = ["text-red-400", "text-orange-400", "text-yellow-400", "text-blue-400", "text-[#888]"];
+	const colors = [
+		"text-red-400",
+		"text-orange-400",
+		"text-yellow-400",
+		"text-blue-400",
+		"text-[#888]",
+	];
 	const cls = colors[priority] ?? "text-[#888]";
 	return html`<span class=${`text-xs font-mono ${cls}`}>P${priority}</span>`;
 }
@@ -140,7 +146,7 @@ function OverviewTab({ issue }) {
 						(id) => html`
 						<a
 							key=${id}
-							href=${"#task/" + id}
+							href=${`#task/${id}`}
 							class="font-mono text-xs bg-red-900/20 text-red-400 border border-red-900/40 rounded px-2 py-1 hover:bg-red-900/30"
 						>${id}</a>
 					`,
@@ -156,10 +162,7 @@ function OverviewTab({ issue }) {
 function AgentsTab({ agents, taskId }) {
 	const filtered = agents.filter((a) => {
 		const session = a.session || a;
-		return (
-			(session.beadId && session.beadId === taskId) ||
-			(session.agentName && session.agentName.includes(taskId))
-		);
+		return (session.beadId && session.beadId === taskId) || session.agentName?.includes(taskId);
 	});
 
 	// Sort: active states first, then completed
@@ -193,13 +196,16 @@ function AgentsTab({ agents, taskId }) {
 				<tbody>
 					${sorted.map((a) => {
 						const session = a.session || a;
-						const dur = session.startedAt ? Date.now() - new Date(session.startedAt).getTime() : null;
-						const badgeCls = agentStateBadgeClasses[session.state] ?? "text-gray-500 bg-gray-500/10";
+						const dur = session.startedAt
+							? Date.now() - new Date(session.startedAt).getTime()
+							: null;
+						const badgeCls =
+							agentStateBadgeClasses[session.state] ?? "text-gray-500 bg-gray-500/10";
 						return html`
 							<tr key=${session.agentName} class="border-b border-[#2a2a2a] last:border-0">
 								<td class="px-3 py-2">
 									<a
-										href=${"#inspect/" + (session.agentName ?? "")}
+										href=${`#inspect/${session.agentName ?? ""}`}
 										class="font-mono text-[#E64415] hover:text-[#ff6633] text-xs"
 									>${session.agentName ?? "—"}</a>
 								</td>

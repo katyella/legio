@@ -5,12 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { WorktreeError } from "../errors.ts";
-import {
-	cleanupTempDir,
-	cloneFixtureRepo,
-	commitFile,
-	getDefaultBranch,
-} from "../test-helpers.ts";
+import { cleanupTempDir, cloneFixtureRepo, commitFile, getDefaultBranch } from "../test-helpers.ts";
 import { createWorktree, isBranchMerged, listWorktrees, removeWorktree } from "./manager.ts";
 
 /**

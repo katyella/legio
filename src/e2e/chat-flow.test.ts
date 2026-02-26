@@ -43,7 +43,6 @@ vi.stubGlobal("Bun", {
 	},
 });
 
-
 // Mock the beads client so tests can run without `bd` on PATH.
 vi.mock("../beads/client.ts", () => ({
 	createBeadsClient: () => ({
@@ -73,8 +72,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMailStore } from "../mail/store.ts";
-import { createSessionStore } from "../sessions/store.ts";
 import { handleApiRequest } from "../server/routes.ts";
+import { createSessionStore } from "../sessions/store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

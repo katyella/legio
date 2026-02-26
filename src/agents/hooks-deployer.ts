@@ -58,8 +58,7 @@ const INTERACTIVE_TOOLS: ReadonlyArray<{ name: string; reason: string }> = [
 	},
 	{
 		name: "EnterPlanMode",
-		reason:
-			"Legio agents run non-interactively — execute immediately per the propulsion principle",
+		reason: "Legio agents run non-interactively — execute immediately per the propulsion principle",
 	},
 	{
 		name: "EnterWorktree",
