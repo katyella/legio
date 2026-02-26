@@ -333,6 +333,96 @@ describe("createMergeQueue", () => {
 		});
 	});
 
+	describe("dequeueParallel", () => {
+		test("returns empty array on empty queue", () => {
+			const queue = createMergeQueue(queuePath);
+			const result = queue.dequeueParallel();
+			expect(result).toEqual([]);
+		});
+
+		test("returns single entry when only one pending", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+
+			const result = queue.dequeueParallel();
+
+			expect(result).toHaveLength(1);
+			expect(result[0]?.branchName).toBe("branch-a");
+		});
+
+		test("returns all entries when file scopes are disjoint", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: ["src/b.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-c", filesModified: ["src/c.ts"] }));
+
+			const result = queue.dequeueParallel();
+
+			expect(result).toHaveLength(3);
+			expect(result.map((e) => e.branchName)).toEqual(["branch-a", "branch-b", "branch-c"]);
+		});
+
+		test("excludes entries with overlapping file scopes", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: ["src/a.ts", "src/b.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-c", filesModified: ["src/c.ts"] }));
+
+			const result = queue.dequeueParallel();
+
+			expect(result).toHaveLength(2);
+			expect(result.map((e) => e.branchName)).toEqual(["branch-a", "branch-c"]);
+		});
+
+		test("preserves FIFO order in returned array", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: ["src/b.ts"] }));
+
+			const result = queue.dequeueParallel();
+
+			expect(result[0]?.branchName).toBe("branch-a");
+			expect(result[1]?.branchName).toBe("branch-b");
+		});
+
+		test("skips non-pending entries", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: ["src/b.ts"] }));
+			queue.updateStatus("branch-a", "merging");
+
+			const result = queue.dequeueParallel();
+
+			expect(result).toHaveLength(1);
+			expect(result[0]?.branchName).toBe("branch-b");
+		});
+
+		test("entries with empty filesModified never conflict", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: [] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: [] }));
+			queue.enqueue(makeInput({ branchName: "branch-c", filesModified: ["src/c.ts"] }));
+
+			const result = queue.dequeueParallel();
+
+			expect(result).toHaveLength(3);
+			expect(result.map((e) => e.branchName)).toEqual(["branch-a", "branch-b", "branch-c"]);
+		});
+
+		test("overlapping entries remain in queue for next dequeue", () => {
+			const queue = createMergeQueue(queuePath);
+			queue.enqueue(makeInput({ branchName: "branch-a", filesModified: ["src/a.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-b", filesModified: ["src/a.ts", "src/b.ts"] }));
+			queue.enqueue(makeInput({ branchName: "branch-c", filesModified: ["src/c.ts"] }));
+
+			queue.dequeueParallel(); // returns a and c, leaves b
+
+			const remaining = queue.list("pending");
+			expect(remaining).toHaveLength(1);
+			expect(remaining[0]?.branchName).toBe("branch-b");
+		});
+	});
+
 	describe("close", () => {
 		test("closes the database connection", () => {
 			const queue = createMergeQueue(queuePath);
