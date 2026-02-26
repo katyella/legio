@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -15,20 +16,34 @@ import {
 	killProcessTree,
 	killSession,
 	listSessions,
+	readTerminalLog,
 	sendKeys,
+	startPipePane,
+	stopPipePane,
 	waitForTuiReady,
 } from "./tmux.ts";
 
 /**
  * tmux tests use child_process mocks — legitimate exception to "never mock what you can use for real".
  * Real tmux operations would hijack the developer's session and are unavailable in CI.
+ * fs/promises is mocked because readTerminalLog reads actual files; using temp files would be
+ * slower and less isolated for unit tests of the tailing logic.
  */
 
 vi.mock("node:child_process", () => ({
 	spawn: vi.fn(),
 }));
 
+vi.mock("node:fs/promises", () => ({
+	mkdir: vi.fn(),
+	readFile: vi.fn(),
+	stat: vi.fn(),
+}));
+
 const mockSpawn = vi.mocked(spawn);
+const mockMkdir = vi.mocked(mkdir);
+const mockReadFile = vi.mocked(readFile);
+const mockStat = vi.mocked(stat);
 
 /**
  * Helper to create a mock ChildProcess return value.
@@ -659,6 +674,9 @@ describe("killSession", () => {
 				// getPanePid → session not found
 				return createMockProcess("", "can't find session", 1);
 			}
+			if (command === "tmux" && args[0] === "pipe-pane") {
+				return createMockProcess("", "", 0);
+			}
 			if (command === "tmux" && args[0] === "kill-session") {
 				return createMockProcess("", "", 0);
 			}
@@ -667,10 +685,11 @@ describe("killSession", () => {
 
 		await killSession("legio-auth");
 
-		// Should go straight to tmux kill-session (no pgrep calls)
-		expect(cmds).toHaveLength(2);
+		// Should call: tmux display-message, tmux pipe-pane (stopPipePane), tmux kill-session
+		expect(cmds).toHaveLength(3);
 		expect(cmds[0]?.[1]).toBe("display-message");
-		expect(cmds[1]?.[1]).toBe("kill-session");
+		expect(cmds[1]?.[1]).toBe("pipe-pane");
+		expect(cmds[2]?.[1]).toBe("kill-session");
 		// No process.kill calls since we had no PID
 		expect(killSpy).not.toHaveBeenCalled();
 	});
@@ -1009,6 +1028,135 @@ describe("hasTuiMarkers", () => {
 
 	test("returns false for generic non-TUI content", () => {
 		expect(hasTuiMarkers("> ready for input")).toBe(false);
+	});
+});
+
+describe("startPipePane", () => {
+	beforeEach(() => {
+		mockSpawn.mockReset();
+		mockMkdir.mockReset();
+		mockMkdir.mockResolvedValue(undefined);
+	});
+
+	test("creates log directory and calls tmux pipe-pane with correct args", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+
+		await startPipePane("legio-auth", "/tmp/legio/logs/auth/terminal.log");
+
+		expect(mockMkdir).toHaveBeenCalledWith("/tmp/legio/logs/auth", { recursive: true });
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect(command).toBe("tmux");
+		expect(args[0]).toBe("pipe-pane");
+		expect(args).toContain("-t");
+		expect(args).toContain("legio-auth");
+		const shellCmd = args[args.length - 1] as string;
+		expect(shellCmd).toContain("cat >>");
+		expect(shellCmd).toContain("/tmp/legio/logs/auth/terminal.log");
+	});
+
+	test("throws AgentError if tmux pipe-pane fails", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "can't find session: legio-auth", 1),
+		);
+
+		await expect(startPipePane("legio-auth", "/tmp/terminal.log")).rejects.toThrow(AgentError);
+	});
+
+	test("AgentError includes session name on failure", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "no server running", 1),
+		);
+
+		try {
+			await startPipePane("my-agent", "/tmp/terminal.log");
+			expect(true).toBe(false);
+		} catch (err: unknown) {
+			expect(err).toBeInstanceOf(AgentError);
+			const agentErr = err as AgentError;
+			expect(agentErr.agentName).toBe("my-agent");
+		}
+	});
+});
+
+describe("stopPipePane", () => {
+	beforeEach(() => {
+		mockSpawn.mockReset();
+	});
+
+	test("calls tmux pipe-pane with session name and no command arg", async () => {
+		mockSpawn.mockImplementation(() => createMockProcess("", "", 0));
+
+		await stopPipePane("legio-auth");
+
+		expect(mockSpawn).toHaveBeenCalledTimes(1);
+		const callArgs = mockSpawn.mock.calls[0] as unknown[];
+		const command = callArgs[0] as string;
+		const args = callArgs[1] as string[];
+		expect([command, ...args]).toEqual(["tmux", "pipe-pane", "-t", "legio-auth"]);
+	});
+
+	test("does not throw when tmux returns non-zero exit code", async () => {
+		mockSpawn.mockImplementation(() =>
+			createMockProcess("", "can't find session: gone", 1),
+		);
+
+		// Should not throw — stopPipePane is best-effort
+		await expect(stopPipePane("gone-session")).resolves.toBeUndefined();
+	});
+});
+
+describe("readTerminalLog", () => {
+	beforeEach(() => {
+		mockStat.mockReset();
+		mockReadFile.mockReset();
+	});
+
+	test("returns null when log file does not exist", async () => {
+		mockStat.mockRejectedValue(new Error("ENOENT: no such file"));
+
+		const result = await readTerminalLog("/tmp/missing.log");
+
+		expect(result).toBeNull();
+		expect(mockReadFile).not.toHaveBeenCalled();
+	});
+
+	test("returns full content when no tailLines specified", async () => {
+		mockStat.mockResolvedValue({} as Awaited<ReturnType<typeof stat>>);
+		mockReadFile.mockResolvedValue("line1\nline2\nline3\n" as never);
+
+		const result = await readTerminalLog("/tmp/terminal.log");
+
+		expect(result).toBe("line1\nline2\nline3\n");
+	});
+
+	test("returns last N lines when tailLines specified", async () => {
+		mockStat.mockResolvedValue({} as Awaited<ReturnType<typeof stat>>);
+		mockReadFile.mockResolvedValue("a\nb\nc\nd\ne\n" as never);
+
+		const result = await readTerminalLog("/tmp/terminal.log", 3);
+
+		expect(result).toBe("c\nd\ne\n");
+	});
+
+	test("returns full content when tailLines >= line count", async () => {
+		mockStat.mockResolvedValue({} as Awaited<ReturnType<typeof stat>>);
+		mockReadFile.mockResolvedValue("line1\nline2\n" as never);
+
+		const result = await readTerminalLog("/tmp/terminal.log", 100);
+
+		expect(result).toBe("line1\nline2\n");
+	});
+
+	test("passes log path to readFile with utf-8 encoding", async () => {
+		mockStat.mockResolvedValue({} as Awaited<ReturnType<typeof stat>>);
+		mockReadFile.mockResolvedValue("content" as never);
+
+		await readTerminalLog("/my/log/path.log");
+
+		expect(mockReadFile).toHaveBeenCalledWith("/my/log/path.log", "utf-8");
 	});
 });
 

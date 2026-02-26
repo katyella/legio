@@ -8,6 +8,7 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
+import { readTerminalLog } from "../worktree/tmux.ts";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
@@ -254,11 +255,18 @@ export async function gatherInspectData(
 			}
 		}
 
-		// tmux capture
+		// Terminal output: prefer terminal log file, fall back to capture-pane
 		let tmuxOutput: string | null = null;
-		if (!opts.noTmux && session.tmuxSession) {
+		if (!opts.noTmux) {
 			const lines = opts.tmuxLines ?? 30;
-			tmuxOutput = await captureTmux(session.tmuxSession, lines);
+			// Try terminal log file first (pipe-pane streaming)
+			if (session.terminalLogPath) {
+				tmuxOutput = await readTerminalLog(session.terminalLogPath, lines);
+			}
+			// Fall back to capture-pane if no log file exists
+			if (tmuxOutput === null && session.tmuxSession) {
+				tmuxOutput = await captureTmux(session.tmuxSession, lines);
+			}
 		}
 
 		return {
