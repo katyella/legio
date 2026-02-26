@@ -14,7 +14,7 @@ export interface SessionStore {
 	upsert(session: AgentSession): void;
 	/** Get a session by agent name, or null if not found. */
 	getByName(agentName: string): AgentSession | null;
-	/** Get all active sessions (state IN ('booting', 'working', 'stalled')). */
+	/** Get all active sessions (state IN ('booting', 'working')). */
 	getActive(): AgentSession[];
 	/** Get all sessions regardless of state. */
 	getAll(): AgentSession[];
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   bead_id TEXT NOT NULL,
   tmux_session TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'booting'
-    CHECK(state IN ('booting','working','completed','stalled','zombie')),
+    CHECK(state IN ('booting','working','completed','zombie')),
   pid INTEGER,
   parent_agent TEXT,
   depth INTEGER NOT NULL DEFAULT 0,
@@ -192,7 +192,7 @@ export function createSessionStore(dbPath: string): SessionStore {
 	`);
 
 	const getActiveStmt = db.prepare(`
-		SELECT * FROM sessions WHERE state IN ('booting', 'working', 'stalled')
+		SELECT * FROM sessions WHERE state IN ('booting', 'working')
 		ORDER BY started_at ASC
 	`);
 
