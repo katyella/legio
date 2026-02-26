@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-02-26
+
+### Changed
+- Rewrote README to be product-focused (~130 lines, down from ~557)
+- Moved CLI reference, REST API table, and architecture details to `docs/`
+- Added costs, tasks, and updated inspect screenshots
+- Simplified token cost warning
+- Moved Overstory credit to footer
+
+### Fixed
+- Corrected GitHub URL in generated `config.yaml` comment
+- Added Write/Edit scope and `worktree clean --all` constraints to lead agent definition
+
+### Removed
+- `STEELMAN.md` (risk analysis document)
+- `ARCHITECTURE.md` (superseded by `docs/architecture.md`)
+- `AGENTS.md` (superseded by `CLAUDE.md`)
+- `bun.lock` (project uses npm)
+- `templates/CLAUDE.md.tmpl` (dead template, not loaded by any code)
+- `specs/web-ui.md` (historical spec, served its purpose)
+- Gateway chat screenshot (removed from README)
+
 ## [0.1.0] - 2026-02-25
 
 Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/package/@katyella/legio).
@@ -100,5 +122,6 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/katyella/legio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/katyella/legio/releases/tag/v0.1.0
