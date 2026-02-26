@@ -1,7 +1,7 @@
-import { defineWorkspace } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
-export default defineWorkspace([
-	{
+export default [
+	defineConfig({
 		test: {
 			name: "unit",
 			include: ["src/**/*.test.ts"],
@@ -17,9 +17,11 @@ export default defineWorkspace([
 			testTimeout: 15_000,
 			hookTimeout: 30_000,
 			reporters: ["dot"],
+			pool: "threads",
+			isolate: false,
 		},
-	},
-	{
+	}),
+	defineConfig({
 		test: {
 			name: "integration",
 			include: [
@@ -34,6 +36,7 @@ export default defineWorkspace([
 			testTimeout: 15_000,
 			hookTimeout: 30_000,
 			reporters: ["dot"],
+			pool: "threads",
 		},
-	},
-]);
+	}),
+];
