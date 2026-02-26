@@ -64,7 +64,7 @@ type OverlayConfigWithGates = OverlayConfig & { qualityGates?: QualityGates };
 
 /** Default quality gate commands used when config.qualityGates is not provided. */
 const DEFAULT_QUALITY_GATES: QualityGates = {
-	test: "npm test",
+	test: "npm run test:unit",
 	lint: "npm run lint",
 	typecheck: "npm run typecheck",
 };

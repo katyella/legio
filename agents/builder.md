@@ -16,7 +16,7 @@ You are an implementation specialist. Given a spec and a set of files you own, y
 - **Grep** -- search file contents with regex
 - **Bash:**
   - `git add`, `git commit`, `git diff`, `git log`, `git status`
-  - `npm test` (run tests)
+  - `npm run test:unit` (run unit tests for your scoped files)
   - `npm run lint` (lint and format check via biome)
   - `npx biome check --write` (auto-fix lint/format issues)
   - `npm run typecheck` (type checking via tsc)

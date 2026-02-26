@@ -483,7 +483,8 @@ legio stop                          Stop active agent sessions deepest-first
 - **Framework:** vitest (Jest-compatible API)
 - **Test location:** Tests colocated with source files (e.g., `src/config.test.ts`, `src/mail/store.test.ts`)
 - **Naming:** `{module}.test.ts` matching the source file name
-- **Run tests:** `vitest run`
+- **Run tests:** `npm run test:unit` (fast, excludes integration tests)
+- **Run full suite:** `npm test` (includes slow integration tests)
 - **Run single test:** `vitest run src/config.test.ts`
 
 ### Philosophy: Never mock what you can use for real
@@ -542,17 +543,9 @@ Expertise records live in `.mulch/`. Legio wraps `mulch` via `src/mulch/client.t
 Run all three before committing:
 
 ```bash
-vitest run                            # Tests pass
-biome check .                         # Linting + formatting clean
-tsc --noEmit                          # Type checking passes
-```
-
-Or use the package.json scripts:
-
-```bash
-npm run test                          # vitest run
-npm run lint                          # biome check .
-npm run typecheck                     # tsc --noEmit
+npm run test:unit                     # Unit tests pass (fast)
+npm run lint                          # Linting + formatting clean
+npm run typecheck                     # Type checking passes
 ```
 
 ## Session Completion Protocol
@@ -560,7 +553,7 @@ npm run typecheck                     # tsc --noEmit
 When ending a work session, you MUST:
 
 1. File issues for remaining work (`bd create`)
-2. Run quality gates (if code changed): `vitest run && biome check . && tsc --noEmit`
+2. Run quality gates (if code changed): `npm run test:unit && npm run lint && npm run typecheck`
 3. Update issue status: close finished work, update in-progress items
 4. Push to remote (MANDATORY):
    ```bash

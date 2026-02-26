@@ -211,7 +211,7 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm test");
+		expect(output).toContain("npm run test:unit");
 		expect(output).toContain("npm run lint");
 		expect(output).toContain("Commit");
 	});
@@ -221,7 +221,7 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm test");
+		expect(output).toContain("npm run test:unit");
 		expect(output).toContain("npm run lint");
 	});
 
@@ -230,13 +230,13 @@ describe("generateOverlay", () => {
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("Quality Gates");
-		expect(output).toContain("npm test");
+		expect(output).toContain("npm run test:unit");
 	});
 
 	test("uses default npm commands when qualityGates not in config", async () => {
 		const config = makeConfig({ capability: "builder" });
 		const output = await generateOverlay(config);
-		expect(output).toContain("npm test");
+		expect(output).toContain("npm run test:unit");
 		expect(output).toContain("npm run lint");
 		expect(output).toContain("npm run typecheck");
 	});
@@ -251,7 +251,7 @@ describe("generateOverlay", () => {
 		expect(output).toContain("bun test");
 		expect(output).toContain("bun run lint");
 		expect(output).toContain("bun run typecheck");
-		expect(output).not.toContain("npm test");
+		expect(output).not.toContain("npm run test:unit");
 	});
 
 	test("scout capability gets read-only completion section instead of quality gates", async () => {
@@ -262,7 +262,7 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm test");
+		expect(output).not.toContain("npm run test:unit");
 		expect(output).not.toContain("npm run lint");
 	});
 
@@ -274,7 +274,7 @@ describe("generateOverlay", () => {
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
 		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm test");
+		expect(output).not.toContain("npm run test:unit");
 		expect(output).not.toContain("npm run lint");
 	});
 
