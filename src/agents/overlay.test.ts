@@ -233,6 +233,24 @@ describe("generateOverlay", () => {
 		expect(output).toContain("npm test");
 	});
 
+	test("uses default npm commands when qualityGates not in config", async () => {
+		const config = makeConfig({ capability: "builder" });
+		const output = await generateOverlay(config);
+		expect(output).toContain("npm test");
+		expect(output).toContain("npm run lint");
+		expect(output).toContain("npm run typecheck");
+	});
+
+	test("uses custom qualityGates commands when provided in config", async () => {
+		const baseConfig = makeConfig({ capability: "builder" });
+		const config = { ...baseConfig, qualityGates: { test: "bun test", lint: "bun run lint", typecheck: "bun run typecheck" } };
+		const output = await generateOverlay(config as any);
+		expect(output).toContain("bun test");
+		expect(output).toContain("bun run lint");
+		expect(output).toContain("bun run typecheck");
+		expect(output).not.toContain("npm test");
+	});
+
 	test("scout capability gets read-only completion section instead of quality gates", async () => {
 		const config = makeConfig({ capability: "scout", agentName: "my-scout" });
 		const output = await generateOverlay(config);
