@@ -7,15 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-02-27
+
 ### Added
 - Gateway first-run experience — beacon includes `FIRST_RUN` flag on first session, triggering self-introduction, `legio doctor` health check, and project onboarding
 - Language-agnostic quality gates detection in `legio init` — auto-detects test/lint/typecheck commands for Node.js, Rust, Python, Go, Elm, Maven, Gradle, Ruby, and Elixir
 - `quality-gates-configured` doctor check — warns when quality gates are missing or contain placeholder commands
+- Install hints in `legio doctor` for missing dependencies (beads, mulch)
 
 ### Changed
-- `buildGatewayBeacon()` accepts optional `isFirstRun` parameter
+- Agent definitions are fully language-agnostic — no hardcoded tool references (bun, npm, etc.)
 - Default quality gates no longer include `typecheck` (language-specific, detected per-project instead)
 - Gateway agent definition (`agents/gateway.md`) includes new "First Run" workflow section
+
+### Fixed
+- Removed project-specific tool references from agent definitions
+- Corrected beads URL to `steveyegge/beads` in doctor output
+- Fixed npm publish workflow — removed duplicate step from auto-tag, use OIDC in publish.yml
 
 ## [0.1.1] - 2026-02-26
 
@@ -132,6 +140,7 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/katyella/legio/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/katyella/legio/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/katyella/legio/releases/tag/v0.1.0

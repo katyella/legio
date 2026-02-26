@@ -45,7 +45,7 @@ import { worktreeCommand } from "./commands/worktree.ts";
 import { LegioError, WorktreeError } from "./errors.ts";
 import { setQuiet } from "./logging/color.ts";
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 
 const HELP = `legio v${VERSION} — Multi-agent orchestration for Claude Code
 
