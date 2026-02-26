@@ -85,7 +85,7 @@ describe("checkConfig", () => {
 		}
 	});
 
-	test("includes all four config checks", async () => {
+	test("includes all five config checks", async () => {
 		const legioDir = createTempLegioDir(validConfigYaml);
 		const checks = await checkConfig(mockConfig, legioDir);
 
@@ -94,6 +94,7 @@ describe("checkConfig", () => {
 		expect(checkNames).toContain("config-valid");
 		expect(checkNames).toContain("project-root-exists");
 		expect(checkNames).toContain("canonical-branch-exists");
+		expect(checkNames).toContain("quality-gates-configured");
 	});
 
 	test("config-parseable passes with valid config", async () => {
@@ -156,6 +157,72 @@ describe("checkConfig", () => {
 		expect(branchCheck).toBeDefined();
 		expect(branchCheck?.status).toBe("warn");
 		expect(branchCheck?.message).toContain("nonexistent-branch-xyz");
+	});
+
+	test("quality-gates-configured warns when no qualityGates in config", async () => {
+		const legioDir = createTempLegioDir(validConfigYaml);
+		// mockConfig has no qualityGates field
+		const checks = await checkConfig(mockConfig, legioDir);
+
+		const gatesCheck = checks.find((c) => c.name === "quality-gates-configured");
+		expect(gatesCheck).toBeDefined();
+		expect(gatesCheck?.status).toBe("warn");
+		expect(gatesCheck?.message).toContain("No quality gates configured");
+		expect(gatesCheck?.fixable).toBe(true);
+	});
+
+	test("quality-gates-configured warns when test command is a placeholder", async () => {
+		const legioDir = createTempLegioDir(validConfigYaml);
+		const configWithPlaceholder = {
+			...mockConfig,
+			qualityGates: {
+				test: 'echo "no test command configured"',
+				lint: "npm run lint",
+			},
+		};
+		const checks = await checkConfig(configWithPlaceholder, legioDir);
+
+		const gatesCheck = checks.find((c) => c.name === "quality-gates-configured");
+		expect(gatesCheck).toBeDefined();
+		expect(gatesCheck?.status).toBe("warn");
+		expect(gatesCheck?.message).toContain("test");
+		expect(gatesCheck?.fixable).toBe(true);
+	});
+
+	test("quality-gates-configured warns when both test and lint are placeholders", async () => {
+		const legioDir = createTempLegioDir(validConfigYaml);
+		const configWithPlaceholders = {
+			...mockConfig,
+			qualityGates: {
+				test: 'echo "no test command configured"',
+				lint: 'echo "no lint command configured"',
+			},
+		};
+		const checks = await checkConfig(configWithPlaceholders, legioDir);
+
+		const gatesCheck = checks.find((c) => c.name === "quality-gates-configured");
+		expect(gatesCheck).toBeDefined();
+		expect(gatesCheck?.status).toBe("warn");
+		expect(gatesCheck?.message).toContain("test");
+		expect(gatesCheck?.message).toContain("lint");
+	});
+
+	test("quality-gates-configured passes with real commands", async () => {
+		const legioDir = createTempLegioDir(validConfigYaml);
+		const configWithGates = {
+			...mockConfig,
+			qualityGates: {
+				test: "cargo test",
+				lint: "cargo clippy",
+			},
+		};
+		const checks = await checkConfig(configWithGates, legioDir);
+
+		const gatesCheck = checks.find((c) => c.name === "quality-gates-configured");
+		expect(gatesCheck).toBeDefined();
+		expect(gatesCheck?.status).toBe("pass");
+		expect(gatesCheck?.message).toContain("cargo test");
+		expect(gatesCheck?.message).toContain("cargo clippy");
 	});
 
 	test("all checks have required DoctorCheck fields", async () => {

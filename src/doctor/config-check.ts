@@ -28,6 +28,10 @@ export const checkConfig: DoctorCheckFn = async (config, legioDir): Promise<Doct
 	const branchCheck = await checkCanonicalBranchExists(config);
 	checks.push(branchCheck);
 
+	// Check 5: quality-gates-configured
+	const gatesCheck = checkQualityGates(config);
+	checks.push(gatesCheck);
+
 	return checks;
 };
 
@@ -137,6 +141,56 @@ function checkProjectRootExists(config: LegioConfig): DoctorCheck {
 		message: "Project root directory does not exist",
 		details: [projectRoot],
 		fixable: true,
+	};
+}
+
+/** Placeholder pattern used by detectQualityGates when no ecosystem is detected. */
+const PLACEHOLDER_PATTERN = /^echo\s+"no\s+\w+\s+command\s+configured"/;
+
+/**
+ * Check that quality gates have real commands, not echo placeholders.
+ */
+function checkQualityGates(config: LegioConfig): DoctorCheck {
+	const gates = config.qualityGates;
+
+	if (!gates) {
+		return {
+			name: "quality-gates-configured",
+			category: "config",
+			status: "warn",
+			message: "No quality gates configured",
+			details: ["Run 'legio init' to auto-detect test/lint commands for your project"],
+			fixable: true,
+		};
+	}
+
+	const placeholders: string[] = [];
+	if (PLACEHOLDER_PATTERN.test(gates.test ?? "")) {
+		placeholders.push("test");
+	}
+	if (PLACEHOLDER_PATTERN.test(gates.lint ?? "")) {
+		placeholders.push("lint");
+	}
+
+	if (placeholders.length > 0) {
+		return {
+			name: "quality-gates-configured",
+			category: "config",
+			status: "warn",
+			message: `Quality gates missing real commands: ${placeholders.join(", ")}`,
+			details: [
+				"Agents will not be able to run quality checks before completing work",
+				"Add qualityGates.test and qualityGates.lint to .legio/config.yaml",
+			],
+			fixable: true,
+		};
+	}
+
+	return {
+		name: "quality-gates-configured",
+		category: "config",
+		status: "pass",
+		message: `Quality gates configured (test: ${gates.test}, lint: ${gates.lint})`,
 	};
 }
 
