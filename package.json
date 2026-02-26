@@ -41,6 +41,8 @@
 	},
 	"scripts": {
 		"test": "vitest run",
+		"test:unit": "vitest run --project unit",
+		"test:integration": "vitest run --project integration",
 		"test:server": "vitest run src/server/",
 		"test:e2e": "playwright test",
 		"start": "tsx src/index.ts",
