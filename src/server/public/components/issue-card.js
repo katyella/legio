@@ -30,7 +30,7 @@ function truncate(str, maxLen) {
 	return str.length <= maxLen ? str : `${str.slice(0, maxLen - 3)}...`;
 }
 
-export function IssueCard({ issue }) {
+export function IssueCard({ issue, children }) {
 	const borderColor = priorityBorderColors[issue.priority] ?? "#6b7280";
 	const hasBlockedBy = Array.isArray(issue.blockedBy) && issue.blockedBy.length > 0;
 	const isClosed = issue.status === "closed";
@@ -88,6 +88,7 @@ export function IssueCard({ issue }) {
 			`
 					: null
 			}
+		${children}
 		</div>
 	`;
 }

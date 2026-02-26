@@ -92,12 +92,11 @@ function DispatchableCard({ issue }) {
 	);
 
 	return html`
-		<div>
-			<${IssueCard} issue=${issue} />
+		<${IssueCard} issue=${issue}>
 			${
 				isDispatchable
 					? html`
-				<div class="flex items-center gap-2 mt-1 px-1">
+				<div class="border-t border-[#2a2a2a] mt-2 pt-2 flex items-center gap-2">
 					<button
 						onClick=${handleDispatch}
 						disabled=${dispatching || dispatched}
@@ -116,7 +115,7 @@ function DispatchableCard({ issue }) {
 			`
 					: null
 			}
-		</div>
+		<//>
 	`;
 }
 
