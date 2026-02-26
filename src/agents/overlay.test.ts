@@ -243,7 +243,10 @@ describe("generateOverlay", () => {
 
 	test("uses custom qualityGates commands when provided in config", async () => {
 		const baseConfig = makeConfig({ capability: "builder" });
-		const config = { ...baseConfig, qualityGates: { test: "bun test", lint: "bun run lint", typecheck: "bun run typecheck" } };
+		const config = {
+			...baseConfig,
+			qualityGates: { test: "bun test", lint: "bun run lint", typecheck: "bun run typecheck" },
+		};
 		const output = await generateOverlay(config as any);
 		expect(output).toContain("bun test");
 		expect(output).toContain("bun run lint");

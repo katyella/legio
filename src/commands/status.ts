@@ -93,10 +93,7 @@ export async function gatherStatus(
 		// Reconcile agent states: if tmux session is dead but agent state
 		// indicates it should be alive, mark it as zombie
 		for (const session of sessions) {
-			if (
-				session.state === "booting" ||
-				session.state === "working"
-			) {
+			if (session.state === "booting" || session.state === "working") {
 				const tmuxAlive = tmuxSessions.some((s) => s.name === session.tmuxSession);
 				if (!tmuxAlive) {
 					try {
