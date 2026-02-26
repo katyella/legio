@@ -49,6 +49,14 @@ interface IdeasFile {
 }
 
 // ---------------------------------------------------------------------------
+// Module-level cache for /api/issues (default requests only)
+// ---------------------------------------------------------------------------
+
+let issuesCacheData: unknown = null;
+let issuesCacheAt = 0;
+const ISSUES_CACHE_TTL = 3000;
+
+// ---------------------------------------------------------------------------
 // File helpers
 // ---------------------------------------------------------------------------
 
@@ -1673,9 +1681,20 @@ export async function handleApiRequest(
 		const all = allParam !== "false"; // default true
 		const limitStr = url.searchParams.get("limit");
 		const limit = limitStr ? Number.parseInt(limitStr, 10) : undefined;
+
+		// Cache key: only use cache for default requests (no filters)
+		const isDefaultRequest = !statusParam && all && !limit;
+		if (isDefaultRequest && issuesCacheData && Date.now() - issuesCacheAt < ISSUES_CACHE_TTL) {
+			return jsonResponse(issuesCacheData);
+		}
+
 		try {
 			const client = createBeadsClient(projectRoot);
 			const issues = await client.list({ status: statusParam, limit, all });
+			if (isDefaultRequest) {
+				issuesCacheData = issues;
+				issuesCacheAt = Date.now();
+			}
 			return jsonResponse(issues);
 		} catch {
 			return jsonResponse([]);

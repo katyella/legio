@@ -119,6 +119,37 @@ function DispatchableCard({ issue }) {
 	`;
 }
 
+// ── Preact sub-component: SkeletonCard ─────────────────────────────────────
+
+function SkeletonCard() {
+	return html`
+		<div class="bg-[#1a1a1a] border border-[#2a2a2a] border-l-4 rounded-sm p-3" style="border-left-color: #2a2a2a">
+			<div class="flex items-start justify-between gap-2 mb-1">
+				<div class="bg-[#2a2a2a] rounded h-3 w-16" style="animation: shimmer 1.5s infinite" />
+				<div class="bg-[#2a2a2a] rounded h-3 w-6" style="animation: shimmer 1.5s infinite" />
+			</div>
+			<div class="bg-[#2a2a2a] rounded h-4 w-3/4 mb-1" style="animation: shimmer 1.5s infinite" />
+			<div class="bg-[#2a2a2a] rounded h-3 w-1/2" style="animation: shimmer 1.5s infinite" />
+		</div>
+	`;
+}
+
+// ── Preact sub-component: SkeletonColumn ───────────────────────────────────
+
+function SkeletonColumn({ title, borderClass, count }) {
+	return html`
+		<div class="flex-1 min-w-[240px] flex flex-col">
+			<div class=${`border-t-2 ${borderClass} bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm px-3 py-2 mb-2 flex items-center gap-2`}>
+				<span class="text-[#e5e5e5] text-sm font-medium">${title}</span>
+				<span class="bg-[#2a2a2a] text-[#999] text-xs rounded-full px-2">—</span>
+			</div>
+			<div class="flex flex-col gap-2">
+				${Array.from({ length: count }, (_, i) => html`<${SkeletonCard} key=${i} />`)}
+			</div>
+		</div>
+	`;
+}
+
 // ── Preact sub-component: Column ───────────────────────────────────────────
 
 function Column({ title, issues, borderClass }) {
@@ -190,6 +221,27 @@ export function IssuesView() {
 
 	// Prefer signal (non-empty) over fetched data
 	const issues = signalIssues && signalIssues.length > 0 ? signalIssues : (fetchedIssues ?? []);
+
+	// Show skeleton while waiting for first fetch
+	if (fetchedIssues === null && (!signalIssues || signalIssues.length === 0)) {
+		return html`
+			<div class="p-4">
+				<style>
+					@keyframes shimmer {
+						0% { opacity: 0.3; }
+						50% { opacity: 0.6; }
+						100% { opacity: 0.3; }
+					}
+				</style>
+				<div class="flex gap-4 overflow-x-auto pb-4">
+					<${SkeletonColumn} title="Open" borderClass="border-blue-500" count=${3} />
+					<${SkeletonColumn} title="In Progress" borderClass="border-yellow-500" count=${2} />
+					<${SkeletonColumn} title="Blocked" borderClass="border-red-500" count=${1} />
+					<${SkeletonColumn} title="Closed" borderClass="border-green-500" count=${2} />
+				</div>
+			</div>
+		`;
+	}
 
 	const afterSearch = searchText ? issues.filter((i) => matchSearch(i, searchText)) : issues;
 
