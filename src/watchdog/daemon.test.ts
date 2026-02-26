@@ -4,11 +4,9 @@
  * Uses real filesystem (temp directories via mkdtemp) and real SessionStore
  * (better-sqlite3) for session persistence, plus real health evaluation logic.
  *
- * Only tmux operations (isSessionAlive, killSession), triage, and nudge are
- * mocked via dependency injection (_tmux, _triage, _nudge params) because:
- * - Real tmux interferes with developer sessions and is fragile in CI.
- * - Real triage spawns Claude CLI which has cost and latency.
- * - Real nudge requires active tmux sessions.
+ * Only tmux operations (isSessionAlive, killSession) are mocked via dependency
+ * injection (_tmux params) because real tmux interferes with developer sessions
+ * and is fragile in CI.
  *
  * Does NOT use mock.module() — it leaks across test files. See mulch record
  * mx-56558b for background.
@@ -26,7 +24,6 @@ import { runDaemonTick } from "./daemon.ts";
 // === Test constants ===
 
 const THRESHOLDS = {
-	staleThresholdMs: 30_000,
 	zombieThresholdMs: 120_000,
 };
 
@@ -122,37 +119,6 @@ function tmuxWithLiveness(aliveMap: Record<string, boolean>): {
 	};
 }
 
-/** Create a fake _triage that always returns the given verdict. */
-function triageAlways(
-	verdict: "retry" | "terminate" | "extend",
-): (options: {
-	agentName: string;
-	root: string;
-	lastActivity: string;
-}) => Promise<"retry" | "terminate" | "extend"> {
-	return async () => verdict;
-}
-
-/** Create a fake _nudge that tracks calls and always succeeds. */
-function nudgeTracker(): {
-	nudge: (
-		projectRoot: string,
-		agentName: string,
-		message: string,
-		force: boolean,
-	) => Promise<{ delivered: boolean; reason?: string }>;
-	calls: Array<{ agentName: string; message: string }>;
-} {
-	const calls: Array<{ agentName: string; message: string }> = [];
-	return {
-		nudge: async (_projectRoot: string, agentName: string, message: string, _force: boolean) => {
-			calls.push({ agentName, message });
-			return { delivered: true };
-		},
-		calls,
-	};
-}
-
 // === Tests ===
 
 let tempRoot: string;
@@ -177,7 +143,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		// No health checks should have been produced (no sessions to check)
@@ -201,7 +166,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		expect(checks).toHaveLength(1);
@@ -236,7 +200,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
 		});
 
 		// Health check should detect zombie with terminate action
@@ -274,7 +237,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
 		});
 
 		expect(checks).toHaveLength(1);
@@ -288,282 +250,7 @@ describe("daemon tick", () => {
 		expect(reloaded[0]?.state).toBe("zombie");
 	});
 
-	// --- Test 4: progressive nudging for stalled agents ---
-
-	test("first tick with stalled agent sets stalledSince and stays at level 0 (warn)", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "working",
-			lastActivity: staleActivity,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-stalled-agent": true });
-		const checks: HealthCheck[] = [];
-		const nudgeMock = nudgeTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			onHealthCheck: (c) => checks.push(c),
-			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeMock.nudge,
-		});
-
-		expect(checks).toHaveLength(1);
-		expect(checks[0]?.action).toBe("escalate");
-
-		// No kill at level 0
-		expect(tmuxMock.killed).toHaveLength(0);
-
-		// No nudge at level 0 (warn only)
-		expect(nudgeMock.calls).toHaveLength(0);
-
-		// Session should be stalled with stalledSince set and escalationLevel 0
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("stalled");
-		expect(reloaded[0]?.escalationLevel).toBe(0);
-		expect(reloaded[0]?.stalledSince).not.toBeNull();
-	});
-
-	test("stalled agent at level 1 sends nudge", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		// Pre-set stalledSince to > nudgeIntervalMs ago so level advances to 1
-		const stalledSince = new Date(Date.now() - 70_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 0,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-stalled-agent": true });
-		const nudgeMock = nudgeTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeMock.nudge,
-		});
-
-		// Level should advance to 1 and nudge should be sent
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.escalationLevel).toBe(1);
-		expect(nudgeMock.calls).toHaveLength(1);
-		expect(nudgeMock.calls[0]?.agentName).toBe("stalled-agent");
-		expect(nudgeMock.calls[0]?.message).toContain("WATCHDOG");
-
-		// No kill
-		expect(tmuxMock.killed).toHaveLength(0);
-	});
-
-	test("stalled agent at level 2 calls triage when tier1Enabled", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		// Pre-set stalledSince to > 2*nudgeIntervalMs ago so level advances to 2
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-stalled-agent": true });
-		let triageCalled = false;
-
-		const triageMock = async (opts: {
-			agentName: string;
-			root: string;
-			lastActivity: string;
-		}): Promise<"retry" | "terminate" | "extend"> => {
-			triageCalled = true;
-			expect(opts.agentName).toBe("stalled-agent");
-			return "terminate";
-		};
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: true,
-			_tmux: tmuxMock,
-			_triage: triageMock,
-			_nudge: nudgeTracker().nudge,
-		});
-
-		expect(triageCalled).toBe(true);
-
-		// Triage returned terminate — session should be zombie
-		expect(tmuxMock.killed).toContain("legio-stalled-agent");
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("zombie");
-	});
-
-	test("stalled agent at level 2 skips triage when tier1Enabled is false", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-stalled-agent": true });
-		let triageCalled = false;
-
-		const triageMock = async (): Promise<"retry" | "terminate" | "extend"> => {
-			triageCalled = true;
-			return "terminate";
-		};
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: false, // Triage disabled
-			_tmux: tmuxMock,
-			_triage: triageMock,
-			_nudge: nudgeTracker().nudge,
-		});
-
-		// Triage should NOT have been called
-		expect(triageCalled).toBe(false);
-
-		// No kill — level 2 with tier1 disabled just skips
-		expect(tmuxMock.killed).toHaveLength(0);
-
-		// Session stays stalled at level 2
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("stalled");
-		expect(reloaded[0]?.escalationLevel).toBe(2);
-	});
-
-	test("stalled agent at level 3 is terminated", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		// Pre-set stalledSince to > 3*nudgeIntervalMs ago so level advances to 3
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-doomed-agent": true });
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-		});
-
-		// Level 3 = terminate
-		expect(tmuxMock.killed).toContain("legio-doomed-agent");
-
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("zombie");
-		// Escalation is reset after termination
-		expect(reloaded[0]?.escalationLevel).toBe(0);
-		expect(reloaded[0]?.stalledSince).toBeNull();
-	});
-
-	test("triage retry sends nudge with recovery message", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "retry-agent",
-			tmuxSession: "legio-retry-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-retry-agent": true });
-		const nudgeMock = nudgeTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: true,
-			_tmux: tmuxMock,
-			_triage: triageAlways("retry"),
-			_nudge: nudgeMock.nudge,
-		});
-
-		// Triage returned "retry" — nudge should be sent with recovery message
-		expect(nudgeMock.calls).toHaveLength(1);
-		expect(nudgeMock.calls[0]?.message).toContain("recovery");
-
-		// No kill
-		expect(tmuxMock.killed).toHaveLength(0);
-
-		// Session stays stalled
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("stalled");
-	});
-
-	test("agent recovery resets escalation tracking", async () => {
-		// Agent was stalled but now has recent activity
-		const session = makeSession({
-			agentName: "recovered-agent",
-			tmuxSession: "legio-recovered-agent",
-			state: "working",
-			lastActivity: new Date().toISOString(), // Recent activity
-			escalationLevel: 2,
-			stalledSince: new Date(Date.now() - 130_000).toISOString(),
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-		});
-
-		// Health check should return action: "none" for recovered agent
-		// Escalation tracking should be reset
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("working");
-		expect(reloaded[0]?.escalationLevel).toBe(0);
-		expect(reloaded[0]?.stalledSince).toBeNull();
-	});
-
-	// --- Test 5: session persistence round-trip ---
+	// --- Test 4: session persistence round-trip ---
 
 	test("session persistence round-trip: load, modify, save, reload", async () => {
 		const sessions: AgentSession[] = [
@@ -606,7 +293,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
 		});
 
 		// Completed sessions are skipped — only 2 health checks
@@ -646,7 +332,6 @@ describe("daemon tick", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		// Session state should remain unchanged since nothing triggered a transition
@@ -669,7 +354,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllDead(), // Would be zombie if not skipped
-			_triage: triageAlways("extend"),
 		});
 
 		// No health checks emitted for completed sessions
@@ -728,8 +412,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
 		});
 
 		// 3 non-completed sessions processed
@@ -744,7 +426,8 @@ describe("daemon tick", () => {
 
 		expect(healthy?.state).toBe("working");
 		expect(dying?.state).toBe("zombie");
-		expect(stale?.state).toBe("stalled");
+		// 60s old activity is below zombieMs (120s) — session stays working
+		expect(stale?.state).toBe("working");
 		expect(done?.state).toBe("completed");
 	});
 
@@ -758,7 +441,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		expect(checks).toHaveLength(0);
@@ -779,7 +461,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		expect(checks).toHaveLength(1);
@@ -815,7 +496,6 @@ describe("daemon tick", () => {
 			...THRESHOLDS,
 			onHealthCheck: (c) => checks.push(c),
 			_tmux: tmuxAllAlive(),
-			_triage: triageAlways("extend"),
 		});
 
 		// Should process without errors
@@ -839,193 +519,17 @@ describe("daemon event recording", () => {
 		}
 	}
 
-	test("escalation level 0 (warn) records event with type=escalation", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "working",
-			lastActivity: staleActivity,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		// Create EventStore and inject it
-		const eventsDbPath = join(tempRoot, ".legio", "events.db");
-		const eventStore = createEventStore(eventsDbPath);
-
-		try {
-			await runDaemonTick({
-				root: tempRoot,
-				...THRESHOLDS,
-				nudgeIntervalMs: 60_000,
-				_tmux: tmuxWithLiveness({ "legio-stalled-agent": true }),
-				_triage: triageAlways("extend"),
-				_nudge: nudgeTracker().nudge,
-				_eventStore: eventStore,
-			});
-		} finally {
-			eventStore.close();
-		}
-
-		const events = readEvents(tempRoot);
-		expect(events.length).toBeGreaterThanOrEqual(1);
-
-		const warnEvent = events.find((e) => {
-			if (!e.data) return false;
-			const data = JSON.parse(e.data) as Record<string, unknown>;
-			return data.type === "escalation" && data.escalationLevel === 0;
-		});
-		expect(warnEvent).toBeDefined();
-		expect(warnEvent?.eventType).toBe("custom");
-		expect(warnEvent?.level).toBe("warn");
-		expect(warnEvent?.agentName).toBe("stalled-agent");
-	});
-
-	test("escalation level 1 (nudge) records event with delivered status", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 70_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 0,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const eventsDbPath = join(tempRoot, ".legio", "events.db");
-		const eventStore = createEventStore(eventsDbPath);
-		const nudgeMock = nudgeTracker();
-
-		try {
-			await runDaemonTick({
-				root: tempRoot,
-				...THRESHOLDS,
-				nudgeIntervalMs: 60_000,
-				_tmux: tmuxWithLiveness({ "legio-stalled-agent": true }),
-				_triage: triageAlways("extend"),
-				_nudge: nudgeMock.nudge,
-				_eventStore: eventStore,
-			});
-		} finally {
-			eventStore.close();
-		}
-
-		const events = readEvents(tempRoot);
-		const nudgeEvent = events.find((e) => {
-			if (!e.data) return false;
-			const data = JSON.parse(e.data) as Record<string, unknown>;
-			return data.type === "nudge" && data.escalationLevel === 1;
-		});
-		expect(nudgeEvent).toBeDefined();
-		expect(nudgeEvent?.eventType).toBe("custom");
-		expect(nudgeEvent?.level).toBe("warn");
-
-		const nudgeData = JSON.parse(nudgeEvent?.data ?? "{}") as Record<string, unknown>;
-		expect(nudgeData.delivered).toBe(true);
-	});
-
-	test("escalation level 2 (triage) records event with verdict", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const eventsDbPath = join(tempRoot, ".legio", "events.db");
-		const eventStore = createEventStore(eventsDbPath);
-
-		try {
-			await runDaemonTick({
-				root: tempRoot,
-				...THRESHOLDS,
-				nudgeIntervalMs: 60_000,
-				tier1Enabled: true,
-				_tmux: tmuxWithLiveness({ "legio-stalled-agent": true }),
-				_triage: triageAlways("extend"),
-				_nudge: nudgeTracker().nudge,
-				_eventStore: eventStore,
-			});
-		} finally {
-			eventStore.close();
-		}
-
-		const events = readEvents(tempRoot);
-		const triageEvent = events.find((e) => {
-			if (!e.data) return false;
-			const data = JSON.parse(e.data) as Record<string, unknown>;
-			return data.type === "triage" && data.escalationLevel === 2;
-		});
-		expect(triageEvent).toBeDefined();
-		expect(triageEvent?.eventType).toBe("custom");
-		expect(triageEvent?.level).toBe("warn");
-
-		const triageData = JSON.parse(triageEvent?.data ?? "{}") as Record<string, unknown>;
-		expect(triageData.verdict).toBe("extend");
-	});
-
-	test("escalation level 3 (terminate) records event with level=error", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const eventsDbPath = join(tempRoot, ".legio", "events.db");
-		const eventStore = createEventStore(eventsDbPath);
-
-		try {
-			await runDaemonTick({
-				root: tempRoot,
-				...THRESHOLDS,
-				nudgeIntervalMs: 60_000,
-				_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
-				_triage: triageAlways("extend"),
-				_nudge: nudgeTracker().nudge,
-				_eventStore: eventStore,
-			});
-		} finally {
-			eventStore.close();
-		}
-
-		const events = readEvents(tempRoot);
-		const terminateEvent = events.find((e) => {
-			if (!e.data) return false;
-			const data = JSON.parse(e.data) as Record<string, unknown>;
-			return data.type === "escalation" && data.escalationLevel === 3;
-		});
-		expect(terminateEvent).toBeDefined();
-		expect(terminateEvent?.eventType).toBe("custom");
-		expect(terminateEvent?.level).toBe("error");
-
-		const terminateData = JSON.parse(terminateEvent?.data ?? "{}") as Record<string, unknown>;
-		expect(terminateData.action).toBe("terminate");
-	});
-
 	test("run_id is included in events when current-run.txt exists", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
+		// Use zombie-old activity to trigger terminate + recovery attempt events
+		const oldActivity = new Date(Date.now() - 200_000).toISOString();
 		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
+			agentName: "zombie-agent",
+			tmuxSession: "legio-zombie-agent",
 			state: "working",
-			lastActivity: staleActivity,
+			lastActivity: oldActivity,
+			parentAgent: "my-lead",
+			beadId: "task-abc",
+			capability: "builder",
 		});
 
 		writeSessionsToStore(tempRoot, [session]);
@@ -1034,6 +538,18 @@ describe("daemon event recording", () => {
 		const runId = "run-2026-02-13T10-00-00-000Z";
 		await writeFile(join(tempRoot, ".legio", "current-run.txt"), runId, "utf-8");
 
+		const checkpoint: SessionCheckpoint = {
+			agentName: "zombie-agent",
+			beadId: "task-abc",
+			sessionId: "test-session",
+			timestamp: new Date().toISOString(),
+			progressSummary: "Test progress",
+			filesModified: [],
+			currentBranch: "legio/zombie-agent/task-abc",
+			pendingWork: "Finish implementation",
+			mulchDomains: [],
+		};
+
 		const eventsDbPath = join(tempRoot, ".legio", "events.db");
 		const eventStore = createEventStore(eventsDbPath);
 
@@ -1041,10 +557,11 @@ describe("daemon event recording", () => {
 			await runDaemonTick({
 				root: tempRoot,
 				...THRESHOLDS,
-				nudgeIntervalMs: 60_000,
-				_tmux: tmuxWithLiveness({ "legio-stalled-agent": true }),
-				_triage: triageAlways("extend"),
-				_nudge: nudgeTracker().nudge,
+				_tmux: tmuxWithLiveness({ "legio-zombie-agent": true }),
+				_loadCheckpoint: async () => checkpoint,
+				_sling: async () => ({ exitCode: 0, stderr: "" }),
+				_sendRecoveryMail: async () => {},
+				_recordFailure: async () => {},
 				_eventStore: eventStore,
 			});
 		} finally {
@@ -1053,17 +570,21 @@ describe("daemon event recording", () => {
 
 		const events = readEvents(tempRoot);
 		expect(events.length).toBeGreaterThanOrEqual(1);
-		const event = events[0];
-		expect(event?.runId).toBe(runId);
+		const attemptEvent = events.find((e) => {
+			if (!e.data) return false;
+			const d = JSON.parse(e.data) as Record<string, unknown>;
+			return d.type === "recovery_attempt";
+		});
+		expect(attemptEvent).toBeDefined();
+		expect(attemptEvent?.runId).toBe(runId);
 	});
 
 	test("daemon continues normally when _eventStore is null", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
 		const session = makeSession({
-			agentName: "stalled-agent",
-			tmuxSession: "legio-stalled-agent",
+			agentName: "working-agent",
+			tmuxSession: "legio-working-agent",
 			state: "working",
-			lastActivity: staleActivity,
+			lastActivity: new Date().toISOString(),
 		});
 
 		writeSessionsToStore(tempRoot, [session]);
@@ -1074,17 +595,14 @@ describe("daemon event recording", () => {
 		await runDaemonTick({
 			root: tempRoot,
 			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
 			onHealthCheck: (c) => checks.push(c),
-			_tmux: tmuxWithLiveness({ "legio-stalled-agent": true }),
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
+			_tmux: tmuxWithLiveness({ "legio-working-agent": true }),
 			_eventStore: null,
 		});
 
 		// Daemon should still produce health checks even without EventStore
 		expect(checks).toHaveLength(1);
-		expect(checks[0]?.action).toBe("escalate");
+		expect(checks[0]?.action).toBe("none");
 	});
 });
 
@@ -1148,8 +666,6 @@ describe("daemon mulch failure recording", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
 			_recordFailure: failureMock.recordFailure,
 		});
 
@@ -1161,110 +677,6 @@ describe("daemon mulch failure recording", () => {
 		expect(failureMock.calls[0]?.session.beadId).toBe("task-123");
 		// Reason should be either the reconciliationNote or default "Process terminated"
 		expect(failureMock.calls[0]?.reason).toBeDefined();
-	});
-
-	test("Tier 1: recordFailure called when triage returns terminate", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "triaged-agent",
-			capability: "scout",
-			beadId: "task-456",
-			tmuxSession: "legio-triaged-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-triaged-agent": true });
-		const failureMock = failureTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: true,
-			_tmux: tmuxMock,
-			_triage: triageAlways("terminate"),
-			_nudge: nudgeTracker().nudge,
-			_recordFailure: failureMock.recordFailure,
-		});
-
-		// recordFailure should be called with Tier 1 and triage verdict
-		expect(failureMock.calls).toHaveLength(1);
-		expect(failureMock.calls[0]?.tier).toBe(1);
-		expect(failureMock.calls[0]?.session.agentName).toBe("triaged-agent");
-		expect(failureMock.calls[0]?.session.capability).toBe("scout");
-		expect(failureMock.calls[0]?.session.beadId).toBe("task-456");
-		expect(failureMock.calls[0]?.triageSuggestion).toBe("terminate");
-		expect(failureMock.calls[0]?.reason).toContain("AI triage");
-	});
-
-	test("recordFailure not called when triage returns retry", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "retry-agent",
-			tmuxSession: "legio-retry-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-retry-agent": true });
-		const failureMock = failureTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: true,
-			_tmux: tmuxMock,
-			_triage: triageAlways("retry"),
-			_nudge: nudgeTracker().nudge,
-			_recordFailure: failureMock.recordFailure,
-		});
-
-		// recordFailure should NOT be called for retry verdict
-		expect(failureMock.calls).toHaveLength(0);
-	});
-
-	test("recordFailure not called when triage returns extend", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 130_000).toISOString();
-		const session = makeSession({
-			agentName: "extend-agent",
-			tmuxSession: "legio-extend-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 1,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-extend-agent": true });
-		const failureMock = failureTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			tier1Enabled: true,
-			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-			_recordFailure: failureMock.recordFailure,
-		});
-
-		// recordFailure should NOT be called for extend verdict
-		expect(failureMock.calls).toHaveLength(0);
 	});
 
 	test("recordFailure includes evidenceBead when beadId is present", async () => {
@@ -1286,49 +698,11 @@ describe("daemon mulch failure recording", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
 			_recordFailure: failureMock.recordFailure,
 		});
 
 		expect(failureMock.calls).toHaveLength(1);
 		expect(failureMock.calls[0]?.session.beadId).toBe("task-789");
-	});
-
-	test("Tier 0: recordFailure called at escalation level 3+ (progressive termination)", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			capability: "builder",
-			beadId: "task-999",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const tmuxMock = tmuxWithLiveness({ "legio-doomed-agent": true });
-		const failureMock = failureTracker();
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxMock,
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-			_recordFailure: failureMock.recordFailure,
-		});
-
-		// recordFailure should be called with Tier 0 for progressive escalation
-		expect(failureMock.calls).toHaveLength(1);
-		expect(failureMock.calls[0]?.tier).toBe(0);
-		expect(failureMock.calls[0]?.session.agentName).toBe("doomed-agent");
-		expect(failureMock.calls[0]?.reason).toContain("Progressive escalation");
 	});
 });
 
@@ -1444,7 +818,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => null,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: mailMock.sendRecoveryMail,
@@ -1486,7 +859,6 @@ describe("daemon recovery", () => {
 				root: tempRoot,
 				...THRESHOLDS,
 				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-				_triage: triageAlways("extend"),
 				_loadCheckpoint: async () => checkpoint,
 				_sling: slingMock.sling,
 				_sendRecoveryMail: mailMock.sendRecoveryMail,
@@ -1552,7 +924,6 @@ describe("daemon recovery", () => {
 				root: tempRoot,
 				...THRESHOLDS,
 				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-				_triage: triageAlways("extend"),
 				_loadCheckpoint: async () => checkpoint,
 				_sling: slingMock.sling,
 				_sendRecoveryMail: async () => {},
@@ -1604,7 +975,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: async () => {},
@@ -1648,7 +1018,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: async () => {},
@@ -1676,7 +1045,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingTracker(0).sling,
 			_sendRecoveryMail: async () => {},
@@ -1709,7 +1077,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: mailMock.sendRecoveryMail,
@@ -1750,7 +1117,6 @@ describe("daemon recovery", () => {
 			...THRESHOLDS,
 			maxRecoveryAttempts: 2,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: async () => {},
@@ -1783,7 +1149,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => checkpoint,
 			_sling: slingMock.sling,
 			_sendRecoveryMail: mailMock.sendRecoveryMail,
@@ -1794,120 +1159,6 @@ describe("daemon recovery", () => {
 		expect(slingMock.calls).toHaveLength(1);
 		// No mail (no parent)
 		expect(mailMock.calls).toHaveLength(0);
-	});
-
-	// --- Escalation level 3 path ---
-
-	test("escalation level 3, checkpoint exists, sling succeeds → NOT marked zombie", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-			parentAgent: "my-lead",
-			capability: "builder",
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const checkpoint = makeCheckpoint("doomed-agent", "task-xyz");
-		const slingMock = slingTracker(0);
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-			_loadCheckpoint: async () => checkpoint,
-			_sling: slingMock.sling,
-			_sendRecoveryMail: async () => {},
-			_recordFailure: async () => {},
-		});
-
-		// Sling was attempted
-		expect(slingMock.calls).toHaveLength(1);
-		// Session stays stalled (not promoted to zombie) because recovery succeeded
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("stalled");
-	});
-
-	test("escalation level 3, no checkpoint → agent marked zombie (existing behavior)", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const slingMock = slingTracker(0);
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-			_loadCheckpoint: async () => null, // No checkpoint
-			_sling: slingMock.sling,
-			_sendRecoveryMail: async () => {},
-			_recordFailure: async () => {},
-		});
-
-		// No sling (no checkpoint)
-		expect(slingMock.calls).toHaveLength(0);
-		// Agent marked zombie (normal terminate flow)
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("zombie");
-	});
-
-	test("escalation level 3, sling fails → agent marked zombie", async () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const stalledSince = new Date(Date.now() - 200_000).toISOString();
-		const session = makeSession({
-			agentName: "doomed-agent",
-			tmuxSession: "legio-doomed-agent",
-			state: "stalled",
-			lastActivity: staleActivity,
-			escalationLevel: 2,
-			stalledSince,
-		});
-
-		writeSessionsToStore(tempRoot, [session]);
-
-		const checkpoint = makeCheckpoint("doomed-agent", "task-xyz");
-		const slingMock = slingTracker(1); // Fails
-
-		await runDaemonTick({
-			root: tempRoot,
-			...THRESHOLDS,
-			nudgeIntervalMs: 60_000,
-			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
-			_triage: triageAlways("extend"),
-			_nudge: nudgeTracker().nudge,
-			_loadCheckpoint: async () => checkpoint,
-			_sling: slingMock.sling,
-			_sendRecoveryMail: async () => {},
-			_recordFailure: async () => {},
-		});
-
-		// Sling was attempted but failed
-		expect(slingMock.calls).toHaveLength(1);
-		// Agent marked zombie (sling failed = no recovery)
-		const reloaded = readSessionsFromStore(tempRoot);
-		expect(reloaded[0]?.state).toBe("zombie");
 	});
 
 	test("recovery_attempt event includes attempt number and maxAttempts", async () => {
@@ -1931,7 +1182,6 @@ describe("daemon recovery", () => {
 				...THRESHOLDS,
 				maxRecoveryAttempts: 3,
 				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-				_triage: triageAlways("extend"),
 				_loadCheckpoint: async () => checkpoint,
 				_sling: slingTracker(0).sling,
 				_sendRecoveryMail: async () => {},
@@ -1971,7 +1221,6 @@ describe("daemon recovery", () => {
 			root: tempRoot,
 			...THRESHOLDS,
 			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
-			_triage: triageAlways("extend"),
 			_loadCheckpoint: async () => null,
 			_sling: async () => ({ exitCode: 0, stderr: "" }),
 			_sendRecoveryMail: async () => {},

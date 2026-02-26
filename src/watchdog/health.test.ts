@@ -16,7 +16,7 @@ import { evaluateHealth, isProcessRunning, transitionState } from "./health.ts";
  * session.pid to known-alive (current process) or known-dead PIDs.
  */
 
-const THRESHOLDS = { staleMs: 30_000, zombieMs: 120_000 };
+const THRESHOLDS = { zombieMs: 120_000 };
 
 /** PID that is guaranteed to be alive during tests: our own process. */
 const ALIVE_PID = process.pid;
@@ -92,16 +92,6 @@ describe("evaluateHealth", () => {
 		expect(check.reconciliationNote).toContain('"booting"');
 	});
 
-	test("ZFC: tmux dead + sessions.json says stalled → zombie (no reconciliation note for already-degraded)", () => {
-		const session = makeSession({ state: "stalled" });
-		const check = evaluateHealth(session, false, THRESHOLDS);
-
-		expect(check.state).toBe("zombie");
-		expect(check.action).toBe("terminate");
-		// No reconciliation note for stalled → zombie (expected progression)
-		expect(check.reconciliationNote).toBeNull();
-	});
-
 	// --- ZFC Rule 2: tmux alive + sessions.json says zombie → investigate ---
 
 	test("ZFC: tmux alive + sessions.json says zombie → investigate (don't auto-kill)", () => {
@@ -155,16 +145,6 @@ describe("evaluateHealth", () => {
 		expect(check.reconciliationNote).toBeNull();
 	});
 
-	test("activity older than staleMs → stalled", () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const session = makeSession({ state: "working", lastActivity: staleActivity });
-		const check = evaluateHealth(session, true, THRESHOLDS);
-
-		expect(check.state).toBe("stalled");
-		expect(check.action).toBe("escalate");
-		expect(check.reconciliationNote).toBeNull();
-	});
-
 	// --- Normal state transitions ---
 
 	test("booting with recent activity → transitions to working", () => {
@@ -184,15 +164,6 @@ describe("evaluateHealth", () => {
 
 		expect(check.state).toBe("working");
 		expect(check.action).toBe("none");
-	});
-
-	test("booting with stale activity → stalled", () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const session = makeSession({ state: "booting", lastActivity: staleActivity });
-		const check = evaluateHealth(session, true, THRESHOLDS);
-
-		expect(check.state).toBe("stalled");
-		expect(check.action).toBe("escalate");
 	});
 
 	// --- Persistent capabilities (coordinator, monitor) ---
@@ -258,20 +229,6 @@ describe("evaluateHealth", () => {
 
 		expect(check.state).toBe("working");
 		expect(check.action).toBe("none");
-	});
-
-	test("persistent capability: coordinator previously stalled → resets to working", () => {
-		const staleActivity = new Date(Date.now() - 60_000).toISOString();
-		const session = makeSession({
-			capability: "coordinator",
-			state: "stalled",
-			lastActivity: staleActivity,
-		});
-		const check = evaluateHealth(session, true, THRESHOLDS);
-
-		expect(check.state).toBe("working");
-		expect(check.action).toBe("none");
-		expect(check.reconciliationNote).toContain("Persistent capability");
 	});
 
 	test("persistent capability: coordinator with tmux dead → still zombie (ZFC Rule 1 applies)", () => {
@@ -344,36 +301,6 @@ describe("transitionState", () => {
 			reconciliationNote: null,
 		};
 		expect(transitionState("booting", check)).toBe("working");
-	});
-
-	test("advances from working to stalled", () => {
-		const check = {
-			state: "stalled" as const,
-			agentName: "a",
-			timestamp: "",
-			tmuxAlive: true,
-			pidAlive: true as boolean | null,
-			lastActivity: "",
-			processAlive: true,
-			action: "escalate" as const,
-			reconciliationNote: null,
-		};
-		expect(transitionState("working", check)).toBe("stalled");
-	});
-
-	test("never regresses from stalled to working", () => {
-		const check = {
-			state: "working" as const,
-			agentName: "a",
-			timestamp: "",
-			tmuxAlive: true,
-			pidAlive: true as boolean | null,
-			lastActivity: "",
-			processAlive: true,
-			action: "none" as const,
-			reconciliationNote: null,
-		};
-		expect(transitionState("stalled", check)).toBe("stalled");
 	});
 
 	test("never regresses from zombie to booting", () => {
