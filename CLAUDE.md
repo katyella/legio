@@ -49,7 +49,7 @@ Purpose-built messaging via `` in `.legio/mail.db`. WAL mode for concurrent acce
 ```
 legio/                        # This repo (the legio tool itself)
   src/
-    index.ts                      # CLI entry point (command router, 29 commands)
+    index.ts                      # CLI entry point (command router, 34 commands)
     types.ts                      # ALL shared types and interfaces
     config.ts                     # Config loader + defaults + validation
     errors.ts                     # Custom error types (extend LegioError)
@@ -62,6 +62,7 @@ legio/                        # This repo (the legio tool itself)
       dashboard.ts                # legio dashboard (live TUI)
       inspect.ts                  # legio inspect (deep agent view)
       coordinator.ts              # legio coordinator start/stop/status
+      gateway.ts                  # legio gateway start/stop/status
       supervisor.ts               # legio supervisor start/stop/status
       hooks.ts                    # legio hooks install/uninstall/status
       mail.ts                     # legio mail send/check/list/read/reply/purge
@@ -84,6 +85,10 @@ legio/                        # This repo (the legio tool itself)
       costs.ts                    # legio costs (token/cost analysis)
       metrics.ts                  # legio metrics
       completions.ts              # legio --completions (shell completions)
+      server.ts                   # legio server start/stop/status
+      up.ts                       # legio up (start full stack)
+      down.ts                     # legio down (stop full stack)
+      stop.ts                     # legio stop (stop active agents)
     agents/                       # Agent lifecycle management
       manifest.ts                 # Agent registry (load + query capabilities)
       overlay.ts                  # Dynamic CLAUDE.md overlay generator
@@ -137,6 +142,8 @@ legio/                        # This repo (the legio tool itself)
     lead.md                       # Team lead (can spawn sub-workers, depth 1)
     supervisor.md                 # Per-project supervisor (can spawn, depth 1)
     coordinator.md                # Top-level orchestrator (spawns leads only, depth 0)
+    gateway.md                    # Planning companion (read-only, no worktree, depth 0)
+    cto.md                        # Strategic analyst (read-only, outputs strategy.json)
     monitor.md                    # Tier 2 continuous fleet patrol (no worktree)
   templates/
     CLAUDE.md.tmpl                # Template for orchestrator CLAUDE.md
@@ -269,6 +276,13 @@ legio coordinator <sub>            Persistent coordinator agent
     --monitor                            Auto-start Tier 2 monitor agent
   stop                                   Stop coordinator (kills tmux session)
   status                                 Show coordinator state
+  --json                                 JSON output
+
+legio gateway <sub>                Gateway planning agent
+  start                                  Start gateway (spawns Claude Code at root)
+    --attach / --no-attach               Control tmux attach (default: attach on TTY)
+  stop                                   Stop gateway (kills tmux session)
+  status                                 Show gateway state
   --json                                 JSON output
 
 legio supervisor <sub>             Per-project supervisor agent
@@ -442,6 +456,25 @@ legio clean                         Wipe runtime state (nuclear cleanup)
   --mail  --sessions  --metrics          Individual DB cleanup
   --logs  --worktrees  --branches        Individual resource cleanup
   --agents  --specs                      Individual state cleanup
+  --json                                 JSON output
+
+legio server <sub>                 Local web UI server
+  start                                  Start the server
+    --port <n>                           Port to listen on (default: 4173)
+    --host <addr>                        Bind address (default: 127.0.0.1)
+    --open                               Auto-open browser
+    --daemon                             Run as background daemon
+  stop                                   Stop the daemon server
+  status                                 Show server status
+    --json                               JSON output
+
+legio up                            Start everything (init + server + coordinator)
+  --no-open                              Skip auto-opening browser
+
+legio down                          Stop everything (coordinator + gateway + server)
+
+legio stop                          Stop active agent sessions deepest-first
+  --agent <name>                         Stop only the named agent
   --json                                 JSON output
 ```
 
