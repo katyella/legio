@@ -20,13 +20,15 @@
  * truth. See health.ts for the full ZFC documentation.
  */
 
-import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { loadCheckpoint } from "../agents/checkpoint.ts";
 import { nudgeAgent } from "../commands/nudge.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import type { AgentSession, EventStore, HealthCheck } from "../types.ts";
+import type { AgentSession, EventStore, HealthCheck, SessionCheckpoint } from "../types.ts";
 import { isSessionAlive, killSession } from "../worktree/tmux.ts";
 import { evaluateHealth, transitionState } from "./health.ts";
 import { triageAgent } from "./triage.ts";
@@ -120,6 +122,226 @@ function recordEvent(
 	}
 }
 
+/**
+ * Read the recovery attempt count for an agent from disk.
+ * Returns 0 if the file doesn't exist.
+ */
+async function readRecoveryCount(agentsDir: string, agentName: string): Promise<number> {
+	try {
+		const text = await readFile(join(agentsDir, agentName, "recovery-count"), "utf-8");
+		return parseInt(text.trim(), 10) || 0;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * Write the recovery attempt count for an agent to disk.
+ * Creates the directory if it doesn't exist.
+ */
+async function writeRecoveryCount(
+	agentsDir: string,
+	agentName: string,
+	count: number,
+): Promise<void> {
+	const dir = join(agentsDir, agentName);
+	await mkdir(dir, { recursive: true });
+	await writeFile(join(dir, "recovery-count"), String(count), "utf-8");
+}
+
+/**
+ * Default sling implementation: spawn `legio sling` as a subprocess.
+ */
+async function reSling(
+	args: string[],
+	root: string,
+): Promise<{ exitCode: number; stderr: string }> {
+	return new Promise((resolve) => {
+		const proc = spawn("legio", ["sling", ...args], {
+			cwd: root,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stderr = "";
+		proc.stderr?.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString();
+		});
+		proc.on("close", (code) => resolve({ exitCode: code ?? 1, stderr }));
+	});
+}
+
+/**
+ * Default recovery mail implementation: spawn `legio mail send` as a subprocess.
+ */
+async function sendMailSubprocess(args: string[], root: string): Promise<void> {
+	return new Promise((resolve) => {
+		const proc = spawn("legio", ["mail", "send", ...args], {
+			cwd: root,
+			stdio: ["ignore", "ignore", "ignore"],
+		});
+		proc.on("close", () => resolve());
+	});
+}
+
+/**
+ * Attempt to auto-recover a dead agent from its checkpoint by re-slinging it.
+ *
+ * @returns `{ recovered: true }` if sling succeeded, `{ recovered: false }` otherwise.
+ */
+async function attemptRecovery(options: {
+	session: AgentSession;
+	legioDir: string;
+	root: string;
+	maxRecoveryAttempts: number;
+	eventStore: EventStore | null;
+	runId: string | null;
+	sling: (args: string[]) => Promise<{ exitCode: number; stderr: string }>;
+	loadCheckpointFn: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
+	sendRecoveryMail: (args: string[]) => Promise<void>;
+}): Promise<{ recovered: boolean }> {
+	const {
+		session,
+		legioDir,
+		maxRecoveryAttempts,
+		eventStore,
+		runId,
+		sling,
+		loadCheckpointFn,
+		sendRecoveryMail,
+	} = options;
+	const agentsDir = join(legioDir, "agents");
+
+	// Load checkpoint — if none exists, recovery is not possible
+	let checkpoint: SessionCheckpoint | null = null;
+	try {
+		checkpoint = await loadCheckpointFn(agentsDir, session.agentName);
+	} catch {
+		return { recovered: false };
+	}
+
+	if (!checkpoint) {
+		return { recovered: false };
+	}
+
+	// Check retry count — if exhausted, send escalation mail and bail
+	const recoveryCount = await readRecoveryCount(agentsDir, session.agentName);
+	if (recoveryCount >= maxRecoveryAttempts) {
+		if (session.parentAgent) {
+			try {
+				await sendRecoveryMail([
+					"--to",
+					session.parentAgent,
+					"--subject",
+					`Recovery failed: ${session.agentName}`,
+					"--body",
+					`Auto-recovery exhausted for ${session.agentName} after ${recoveryCount} attempts. Agent marked zombie.`,
+					"--type",
+					"error",
+					"--priority",
+					"high",
+					"--from",
+					"watchdog",
+				]);
+			} catch {
+				// Fire-and-forget: mail failure must not break the watchdog
+			}
+		}
+		return { recovered: false };
+	}
+
+	// Increment recovery count before attempting
+	try {
+		await writeRecoveryCount(agentsDir, session.agentName, recoveryCount + 1);
+	} catch {
+		// Non-fatal: proceed with recovery even if count write fails
+	}
+
+	const attempt = recoveryCount + 1;
+
+	// Record recovery_attempt event
+	recordEvent(eventStore, {
+		runId,
+		agentName: session.agentName,
+		eventType: "custom",
+		level: "info",
+		data: { type: "recovery_attempt", attempt, maxAttempts: maxRecoveryAttempts },
+	});
+
+	// Send mail to parent notifying of recovery attempt
+	if (session.parentAgent) {
+		try {
+			await sendRecoveryMail([
+				"--to",
+				session.parentAgent,
+				"--subject",
+				`Recovery: ${session.agentName}`,
+				"--body",
+				`Watchdog attempting auto-recovery from checkpoint for ${session.agentName} (attempt ${attempt}/${maxRecoveryAttempts}).`,
+				"--type",
+				"health_check",
+				"--from",
+				"watchdog",
+			]);
+		} catch {
+			// Fire-and-forget: mail failure must not break the watchdog
+		}
+	}
+
+	// Build sling args from checkpoint + session
+	const specPath = join(legioDir, "specs", `${checkpoint.beadId}.md`);
+	const slingArgs: string[] = [
+		checkpoint.beadId,
+		"--capability",
+		session.capability,
+		"--name",
+		session.agentName,
+		"--spec",
+		specPath,
+	];
+
+	if (checkpoint.filesModified.length > 0) {
+		slingArgs.push("--files", checkpoint.filesModified.join(","));
+	}
+
+	if (session.parentAgent) {
+		slingArgs.push("--parent", session.parentAgent);
+	}
+
+	slingArgs.push("--depth", String(session.depth));
+
+	// Attempt sling subprocess
+	try {
+		const result = await sling(slingArgs);
+		if (result.exitCode === 0) {
+			recordEvent(eventStore, {
+				runId,
+				agentName: session.agentName,
+				eventType: "custom",
+				level: "info",
+				data: { type: "recovery_success", attempt },
+			});
+			return { recovered: true };
+		}
+
+		recordEvent(eventStore, {
+			runId,
+			agentName: session.agentName,
+			eventType: "custom",
+			level: "error",
+			data: { type: "recovery_failed", attempt, stderr: result.stderr },
+		});
+		return { recovered: false };
+	} catch {
+		recordEvent(eventStore, {
+			runId,
+			agentName: session.agentName,
+			eventType: "custom",
+			level: "error",
+			data: { type: "recovery_failed", attempt },
+		});
+		return { recovered: false };
+	}
+}
+
 /** Options shared between startDaemon and runDaemonTick. */
 export interface DaemonOptions {
 	root: string;
@@ -156,6 +378,14 @@ export interface DaemonOptions {
 		tier: 0 | 1,
 		triageSuggestion?: string,
 	) => Promise<void>;
+	/** Max recovery attempts per agent before escalating (default: 1). */
+	maxRecoveryAttempts?: number;
+	/** DI for testing. Overrides sling subprocess spawn. */
+	_sling?: (args: string[]) => Promise<{ exitCode: number; stderr: string }>;
+	/** DI for testing. Overrides checkpoint loading. */
+	_loadCheckpoint?: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
+	/** DI for testing. Overrides mail sending for recovery notifications. */
+	_sendRecoveryMail?: (args: string[]) => Promise<void>;
 }
 
 /**
@@ -219,6 +449,11 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 	const triage = options._triage ?? triageAgent;
 	const nudge = options._nudge ?? nudgeAgent;
 	const recordFailureFn = options._recordFailure ?? recordFailure;
+	const maxRecoveryAttempts = options.maxRecoveryAttempts ?? 1;
+	const slingFn = options._sling ?? ((args: string[]) => reSling(args, root));
+	const loadCheckpointFn = options._loadCheckpoint ?? loadCheckpoint;
+	const sendRecoveryMailFn =
+		options._sendRecoveryMail ?? ((args: string[]) => sendMailSubprocess(args, root));
 
 	const legioDir = join(root, ".legio");
 	const { store } = openSessionStore(legioDir);
@@ -287,12 +522,35 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 						// Session may have died between check and kill — not an error
 					}
 				}
-				store.updateState(session.agentName, "zombie");
-				// Reset escalation tracking on terminal state
-				store.updateEscalation(session.agentName, 0, null);
-				session.state = "zombie";
-				session.escalationLevel = 0;
-				session.stalledSince = null;
+
+				// Attempt auto-recovery from checkpoint before marking zombie
+				const { recovered } = await attemptRecovery({
+					session,
+					legioDir,
+					root,
+					maxRecoveryAttempts,
+					eventStore,
+					runId,
+					sling: slingFn,
+					loadCheckpointFn,
+					sendRecoveryMail: sendRecoveryMailFn,
+				});
+
+				if (!recovered) {
+					store.updateState(session.agentName, "zombie");
+					// Reset escalation tracking on terminal state
+					store.updateEscalation(session.agentName, 0, null);
+					session.state = "zombie";
+					session.escalationLevel = 0;
+					session.stalledSince = null;
+				} else {
+					// Recovery succeeded — clear zombie state set by transitionState above
+					store.updateState(session.agentName, "completed");
+					store.updateEscalation(session.agentName, 0, null);
+					session.state = "completed";
+					session.escalationLevel = 0;
+					session.stalledSince = null;
+				}
 			} else if (check.action === "investigate") {
 				// ZFC: tmux alive but SessionStore says zombie.
 				// Log the conflict but do NOT auto-kill.
@@ -325,6 +583,7 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 				const actionResult = await executeEscalationAction({
 					session,
 					root,
+					legioDir,
 					tmuxAlive,
 					tier1Enabled,
 					tmux,
@@ -333,6 +592,10 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 					eventStore,
 					runId,
 					recordFailure: recordFailureFn,
+					maxRecoveryAttempts,
+					sling: slingFn,
+					loadCheckpointFn,
+					sendRecoveryMailFn,
 				});
 
 				if (actionResult.terminated) {
@@ -375,6 +638,7 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 async function executeEscalationAction(ctx: {
 	session: AgentSession;
 	root: string;
+	legioDir: string;
 	tmuxAlive: boolean;
 	tier1Enabled: boolean;
 	tmux: {
@@ -401,10 +665,15 @@ async function executeEscalationAction(ctx: {
 		tier: 0 | 1,
 		triageSuggestion?: string,
 	) => Promise<void>;
+	maxRecoveryAttempts: number;
+	sling: (args: string[]) => Promise<{ exitCode: number; stderr: string }>;
+	loadCheckpointFn: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
+	sendRecoveryMailFn: (args: string[]) => Promise<void>;
 }): Promise<{ terminated: boolean; stateChanged: boolean }> {
 	const {
 		session,
 		root,
+		legioDir,
 		tmuxAlive,
 		tier1Enabled,
 		tmux,
@@ -413,6 +682,10 @@ async function executeEscalationAction(ctx: {
 		eventStore,
 		runId,
 		recordFailure,
+		maxRecoveryAttempts,
+		sling,
+		loadCheckpointFn,
+		sendRecoveryMailFn,
 	} = ctx;
 
 	switch (session.escalationLevel) {
@@ -526,7 +799,21 @@ async function executeEscalationAction(ctx: {
 					// Session may have died — not an error
 				}
 			}
-			return { terminated: true, stateChanged: true };
+
+			// Attempt auto-recovery from checkpoint before marking zombie
+			const { recovered } = await attemptRecovery({
+				session,
+				legioDir,
+				root,
+				maxRecoveryAttempts,
+				eventStore,
+				runId,
+				sling,
+				loadCheckpointFn,
+				sendRecoveryMail: sendRecoveryMailFn,
+			});
+
+			return { terminated: !recovered, stateChanged: true };
 		}
 	}
 }

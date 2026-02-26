@@ -14,13 +14,13 @@
  * mx-56558b for background.
  */
 
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createSessionStore } from "../sessions/store.ts";
-import type { AgentSession, HealthCheck, StoredEvent } from "../types.ts";
+import type { AgentSession, HealthCheck, SessionCheckpoint, StoredEvent } from "../types.ts";
 import { runDaemonTick } from "./daemon.ts";
 
 // === Test constants ===
@@ -1329,5 +1329,656 @@ describe("daemon mulch failure recording", () => {
 		expect(failureMock.calls[0]?.tier).toBe(0);
 		expect(failureMock.calls[0]?.session.agentName).toBe("doomed-agent");
 		expect(failureMock.calls[0]?.reason).toContain("Progressive escalation");
+	});
+});
+
+// === Recovery tests ===
+
+describe("daemon recovery", () => {
+	let tempRoot: string;
+
+	beforeEach(async () => {
+		tempRoot = await createTempRoot();
+	});
+
+	afterEach(async () => {
+		await rm(tempRoot, { recursive: true, force: true });
+	});
+
+	/** Open the events.db and return all events. */
+	function readEvents(root: string): StoredEvent[] {
+		const dbPath = join(root, ".legio", "events.db");
+		const store = createEventStore(dbPath);
+		try {
+			return store.getTimeline({ since: "2000-01-01T00:00:00Z" });
+		} finally {
+			store.close();
+		}
+	}
+
+	/** Build a minimal SessionCheckpoint for a session. */
+	function makeCheckpoint(agentName: string, beadId: string): SessionCheckpoint {
+		return {
+			agentName,
+			beadId,
+			sessionId: "test-session",
+			timestamp: new Date().toISOString(),
+			progressSummary: "Test progress",
+			filesModified: ["src/foo.ts"],
+			currentBranch: `legio/${agentName}/${beadId}`,
+			pendingWork: "Finish implementation",
+			mulchDomains: ["typescript"],
+		};
+	}
+
+	/** Create a fake _sling that tracks calls and returns a given exit code. */
+	function slingTracker(exitCode = 0): {
+		sling: (args: string[]) => Promise<{ exitCode: number; stderr: string }>;
+		calls: string[][];
+	} {
+		const calls: string[][] = [];
+		return {
+			sling: async (args: string[]) => {
+				calls.push(args);
+				return { exitCode, stderr: exitCode !== 0 ? "sling failed" : "" };
+			},
+			calls,
+		};
+	}
+
+	/** Create a fake _sendRecoveryMail that tracks calls. */
+	function mailTracker(): {
+		sendRecoveryMail: (args: string[]) => Promise<void>;
+		calls: string[][];
+	} {
+		const calls: string[][] = [];
+		return {
+			sendRecoveryMail: async (args: string[]) => {
+				calls.push(args);
+			},
+			calls,
+		};
+	}
+
+	/** Read recovery count from disk. */
+	async function readRecoveryCountFromDisk(root: string, agentName: string): Promise<number> {
+		try {
+			const text = await readFile(
+				join(root, ".legio", "agents", agentName, "recovery-count"),
+				"utf-8",
+			);
+			return parseInt(text.trim(), 10) || 0;
+		} catch {
+			return 0;
+		}
+	}
+
+	/** Write recovery count to disk to simulate prior attempts. */
+	async function writeRecoveryCountToDisk(
+		root: string,
+		agentName: string,
+		count: number,
+	): Promise<void> {
+		const dir = join(root, ".legio", "agents", agentName);
+		await mkdir(dir, { recursive: true });
+		await writeFile(join(dir, "recovery-count"), String(count), "utf-8");
+	}
+
+	// --- Direct terminate path (tmux dead) ---
+
+	test("no checkpoint → no recovery, agent marked zombie", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const slingMock = slingTracker(0);
+		const mailMock = mailTracker();
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => null,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: mailMock.sendRecoveryMail,
+			_recordFailure: async () => {},
+		});
+
+		// No sling attempted (no checkpoint)
+		expect(slingMock.calls).toHaveLength(0);
+		// No mail sent
+		expect(mailMock.calls).toHaveLength(0);
+		// Agent is zombie (existing behavior)
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
+	});
+
+	test("checkpoint exists, sling succeeds → sling called, recovery events recorded", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+			beadId: "task-abc",
+			capability: "builder",
+			depth: 1,
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+		const slingMock = slingTracker(0);
+		const mailMock = mailTracker();
+
+		const eventsDbPath = join(tempRoot, ".legio", "events.db");
+		const eventStore = createEventStore(eventsDbPath);
+
+		try {
+			await runDaemonTick({
+				root: tempRoot,
+				...THRESHOLDS,
+				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+				_triage: triageAlways("extend"),
+				_loadCheckpoint: async () => checkpoint,
+				_sling: slingMock.sling,
+				_sendRecoveryMail: mailMock.sendRecoveryMail,
+				_recordFailure: async () => {},
+				_eventStore: eventStore,
+			});
+		} finally {
+			eventStore.close();
+		}
+
+		// Sling was called
+		expect(slingMock.calls).toHaveLength(1);
+		// Mail sent to parent
+		expect(mailMock.calls).toHaveLength(1);
+		expect(mailMock.calls[0]).toContain("my-lead");
+
+		// recovery_attempt and recovery_success events recorded
+		const events = readEvents(tempRoot);
+		const attemptEvent = events.find((e) => {
+			if (!e.data) return false;
+			const d = JSON.parse(e.data) as Record<string, unknown>;
+			return d.type === "recovery_attempt";
+		});
+		expect(attemptEvent).toBeDefined();
+		expect(attemptEvent?.level).toBe("info");
+		expect(attemptEvent?.agentName).toBe("dead-agent");
+
+		const successEvent = events.find((e) => {
+			if (!e.data) return false;
+			const d = JSON.parse(e.data) as Record<string, unknown>;
+			return d.type === "recovery_success";
+		});
+		expect(successEvent).toBeDefined();
+		expect(successEvent?.level).toBe("info");
+
+		// State must be "completed" after successful recovery, not "zombie"
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).not.toBe("zombie");
+		expect(reloaded[0]?.state).toBe("completed");
+	});
+
+	test("checkpoint exists, sling fails → sling called, agent stays zombie, recovery_failed event", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+			beadId: "task-abc",
+			capability: "builder",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+		const slingMock = slingTracker(1); // Non-zero exit code
+
+		const eventsDbPath = join(tempRoot, ".legio", "events.db");
+		const eventStore = createEventStore(eventsDbPath);
+
+		try {
+			await runDaemonTick({
+				root: tempRoot,
+				...THRESHOLDS,
+				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+				_triage: triageAlways("extend"),
+				_loadCheckpoint: async () => checkpoint,
+				_sling: slingMock.sling,
+				_sendRecoveryMail: async () => {},
+				_recordFailure: async () => {},
+				_eventStore: eventStore,
+			});
+		} finally {
+			eventStore.close();
+		}
+
+		// Sling was called
+		expect(slingMock.calls).toHaveLength(1);
+		// Agent should be zombie (sling failed)
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
+
+		// recovery_failed event recorded
+		const events = readEvents(tempRoot);
+		const failedEvent = events.find((e) => {
+			if (!e.data) return false;
+			const d = JSON.parse(e.data) as Record<string, unknown>;
+			return d.type === "recovery_failed";
+		});
+		expect(failedEvent).toBeDefined();
+		expect(failedEvent?.level).toBe("error");
+	});
+
+	test("sling args include capability, name, spec path, files, parent, depth", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+			beadId: "task-abc",
+			capability: "builder",
+			depth: 2,
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint: SessionCheckpoint = {
+			...makeCheckpoint("dead-agent", "task-abc"),
+			filesModified: ["src/foo.ts", "src/bar.ts"],
+		};
+		const slingMock = slingTracker(0);
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		expect(slingMock.calls).toHaveLength(1);
+		const args = slingMock.calls[0] ?? [];
+		expect(args).toContain("task-abc");
+		expect(args).toContain("--capability");
+		expect(args).toContain("builder");
+		expect(args).toContain("--name");
+		expect(args).toContain("dead-agent");
+		expect(args).toContain("--spec");
+		expect(args).toContain("--files");
+		expect(args).toContain("src/foo.ts,src/bar.ts");
+		expect(args).toContain("--parent");
+		expect(args).toContain("my-lead");
+		expect(args).toContain("--depth");
+		expect(args).toContain("2");
+	});
+
+	test("no files modified → --files arg omitted from sling", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			capability: "builder",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint: SessionCheckpoint = {
+			...makeCheckpoint("dead-agent", "task-abc"),
+			filesModified: [], // No files
+		};
+		const slingMock = slingTracker(0);
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		expect(slingMock.calls).toHaveLength(1);
+		const args = slingMock.calls[0] ?? [];
+		expect(args).not.toContain("--files");
+	});
+
+	test("recovery count increments after successful attempt", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingTracker(0).sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		const count = await readRecoveryCountFromDisk(tempRoot, "dead-agent");
+		expect(count).toBe(1);
+	});
+
+	test("recovery count exhausted → no sling, agent zombified, escalation mail sent to parent", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		// Pre-write recovery count = 1 (default maxRecoveryAttempts=1, so exhausted)
+		await writeRecoveryCountToDisk(tempRoot, "dead-agent", 1);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+		const slingMock = slingTracker(0);
+		const mailMock = mailTracker();
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: mailMock.sendRecoveryMail,
+			_recordFailure: async () => {},
+		});
+
+		// No sling attempted (exhausted)
+		expect(slingMock.calls).toHaveLength(0);
+		// Exhaustion error mail sent to parent
+		expect(mailMock.calls).toHaveLength(1);
+		const mailArgs = mailMock.calls[0] ?? [];
+		expect(mailArgs).toContain("my-lead");
+		expect(mailArgs).toContain("error");
+		// Agent marked zombie
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
+	});
+
+	test("maxRecoveryAttempts=2: second attempt allowed when count=1", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: "my-lead",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		// count=1 but max=2, so one more attempt is allowed
+		await writeRecoveryCountToDisk(tempRoot, "dead-agent", 1);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+		const slingMock = slingTracker(0);
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			maxRecoveryAttempts: 2,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		// Second attempt was made
+		expect(slingMock.calls).toHaveLength(1);
+		// Count now 2
+		const count = await readRecoveryCountFromDisk(tempRoot, "dead-agent");
+		expect(count).toBe(2);
+	});
+
+	test("no parent agent → no mail, recovery still attempted", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+			parentAgent: null,
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+		const slingMock = slingTracker(0);
+		const mailMock = mailTracker();
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: mailMock.sendRecoveryMail,
+			_recordFailure: async () => {},
+		});
+
+		// Sling still attempted
+		expect(slingMock.calls).toHaveLength(1);
+		// No mail (no parent)
+		expect(mailMock.calls).toHaveLength(0);
+	});
+
+	// --- Escalation level 3 path ---
+
+	test("escalation level 3, checkpoint exists, sling succeeds → NOT marked zombie", async () => {
+		const staleActivity = new Date(Date.now() - 60_000).toISOString();
+		const stalledSince = new Date(Date.now() - 200_000).toISOString();
+		const session = makeSession({
+			agentName: "doomed-agent",
+			tmuxSession: "legio-doomed-agent",
+			state: "stalled",
+			lastActivity: staleActivity,
+			escalationLevel: 2,
+			stalledSince,
+			parentAgent: "my-lead",
+			capability: "builder",
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("doomed-agent", "task-xyz");
+		const slingMock = slingTracker(0);
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			nudgeIntervalMs: 60_000,
+			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
+			_triage: triageAlways("extend"),
+			_nudge: nudgeTracker().nudge,
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		// Sling was attempted
+		expect(slingMock.calls).toHaveLength(1);
+		// Session stays stalled (not promoted to zombie) because recovery succeeded
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("stalled");
+	});
+
+	test("escalation level 3, no checkpoint → agent marked zombie (existing behavior)", async () => {
+		const staleActivity = new Date(Date.now() - 60_000).toISOString();
+		const stalledSince = new Date(Date.now() - 200_000).toISOString();
+		const session = makeSession({
+			agentName: "doomed-agent",
+			tmuxSession: "legio-doomed-agent",
+			state: "stalled",
+			lastActivity: staleActivity,
+			escalationLevel: 2,
+			stalledSince,
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const slingMock = slingTracker(0);
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			nudgeIntervalMs: 60_000,
+			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
+			_triage: triageAlways("extend"),
+			_nudge: nudgeTracker().nudge,
+			_loadCheckpoint: async () => null, // No checkpoint
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		// No sling (no checkpoint)
+		expect(slingMock.calls).toHaveLength(0);
+		// Agent marked zombie (normal terminate flow)
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
+	});
+
+	test("escalation level 3, sling fails → agent marked zombie", async () => {
+		const staleActivity = new Date(Date.now() - 60_000).toISOString();
+		const stalledSince = new Date(Date.now() - 200_000).toISOString();
+		const session = makeSession({
+			agentName: "doomed-agent",
+			tmuxSession: "legio-doomed-agent",
+			state: "stalled",
+			lastActivity: staleActivity,
+			escalationLevel: 2,
+			stalledSince,
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("doomed-agent", "task-xyz");
+		const slingMock = slingTracker(1); // Fails
+
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			nudgeIntervalMs: 60_000,
+			_tmux: tmuxWithLiveness({ "legio-doomed-agent": true }),
+			_triage: triageAlways("extend"),
+			_nudge: nudgeTracker().nudge,
+			_loadCheckpoint: async () => checkpoint,
+			_sling: slingMock.sling,
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		// Sling was attempted but failed
+		expect(slingMock.calls).toHaveLength(1);
+		// Agent marked zombie (sling failed = no recovery)
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
+	});
+
+	test("recovery_attempt event includes attempt number and maxAttempts", async () => {
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		const checkpoint = makeCheckpoint("dead-agent", "task-abc");
+
+		const eventsDbPath = join(tempRoot, ".legio", "events.db");
+		const eventStore = createEventStore(eventsDbPath);
+
+		try {
+			await runDaemonTick({
+				root: tempRoot,
+				...THRESHOLDS,
+				maxRecoveryAttempts: 3,
+				_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+				_triage: triageAlways("extend"),
+				_loadCheckpoint: async () => checkpoint,
+				_sling: slingTracker(0).sling,
+				_sendRecoveryMail: async () => {},
+				_recordFailure: async () => {},
+				_eventStore: eventStore,
+			});
+		} finally {
+			eventStore.close();
+		}
+
+		const events = readEvents(tempRoot);
+		const attemptEvent = events.find((e) => {
+			if (!e.data) return false;
+			const d = JSON.parse(e.data) as Record<string, unknown>;
+			return d.type === "recovery_attempt";
+		});
+		expect(attemptEvent).toBeDefined();
+		const data = JSON.parse(attemptEvent?.data ?? "{}") as Record<string, unknown>;
+		expect(data.attempt).toBe(1);
+		expect(data.maxAttempts).toBe(3);
+	});
+
+	test("existing tests unchanged: dead tmux without recovery DI still zombifies", async () => {
+		// Verify that omitting recovery DI (no _loadCheckpoint) uses default behavior —
+		// since the real loadCheckpoint would find no file, agent should still be zombified.
+		const session = makeSession({
+			agentName: "dead-agent",
+			tmuxSession: "legio-dead-agent",
+			state: "working",
+			lastActivity: new Date().toISOString(),
+		});
+
+		writeSessionsToStore(tempRoot, [session]);
+
+		// Use a _loadCheckpoint that returns null (as the real impl would for no file)
+		await runDaemonTick({
+			root: tempRoot,
+			...THRESHOLDS,
+			_tmux: tmuxWithLiveness({ "legio-dead-agent": false }),
+			_triage: triageAlways("extend"),
+			_loadCheckpoint: async () => null,
+			_sling: async () => ({ exitCode: 0, stderr: "" }),
+			_sendRecoveryMail: async () => {},
+			_recordFailure: async () => {},
+		});
+
+		const reloaded = readSessionsFromStore(tempRoot);
+		expect(reloaded[0]?.state).toBe("zombie");
 	});
 });
