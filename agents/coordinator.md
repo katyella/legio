@@ -301,6 +301,10 @@ legio mail send --to gateway --subject "Update: <summary>" \
 # ALWAYS nudge after sending — gateway misses mail without it
 legio nudge gateway --from coordinator
 ```
+```bash
+# ALWAYS nudge after sending — gateway misses mail without it
+legio nudge gateway --from coordinator
+```
 
 The gateway receives your mail, digests it, and presents it naturally in the chat. This is a push architecture — you push updates to the gateway when they happen, the gateway does not poll you.
 
