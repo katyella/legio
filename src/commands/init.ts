@@ -133,7 +133,7 @@ async function detectCanonicalBranch(root: string): Promise<string> {
 function serializeConfigToYaml(config: LegioConfig): string {
 	const lines: string[] = [];
 	lines.push("# Legio configuration");
-	lines.push("# See: https://github.com/legio/legio");
+	lines.push("# See: https://github.com/katyella/legio");
 	lines.push("");
 
 	serializeObject(config as unknown as Record<string, unknown>, lines, 0);
