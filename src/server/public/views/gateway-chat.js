@@ -28,6 +28,8 @@ export function GatewayChat({ gwRunning }) {
 	const [sendError, setSendError] = useState("");
 	const [pendingMessages, setPendingMessages] = useState([]);
 	const [historyMessages, setHistoryMessages] = useState([]);
+	const [coordinatorMessages, setCoordinatorMessages] = useState([]);
+	const [showCoordinator, setShowCoordinator] = useState(false);
 	const [thinking, setThinking] = useState(false);
 	const [dropdown, setDropdown] = useState({
 		visible: false,
@@ -75,6 +77,37 @@ export function GatewayChat({ gwRunning }) {
 		};
 	}, [thinking]);
 
+	// Fetch coordinator messages when toggle is enabled
+	useEffect(() => {
+		if (!showCoordinator) {
+			setCoordinatorMessages([]);
+			return;
+		}
+		let cancelled = false;
+
+		async function fetchCoordinatorHistory() {
+			try {
+				const data = await fetchJson("/api/coordinator/chat/history?limit=200");
+				if (!cancelled) {
+					const next = Array.isArray(data) ? data : [];
+					setCoordinatorMessages((prev) => {
+						if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+						return next;
+					});
+				}
+			} catch (_err) {
+				// non-fatal
+			}
+		}
+
+		fetchCoordinatorHistory();
+		const interval = setInterval(fetchCoordinatorHistory, thinking ? 2000 : 5000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [showCoordinator, thinking]);
+
 	// Subscribe to WebSocket mail_new events via appState.mail signal for instant updates
 	useEffect(() => {
 		const mailMessages = appState.mail.value ?? [];
@@ -84,16 +117,35 @@ export function GatewayChat({ gwRunning }) {
 					(m.from === "gateway" && m.to === "human")) &&
 				(m.audience === "human" || m.audience === "both"),
 		);
-		if (gatewayMessages.length === 0) return;
-		setHistoryMessages((prev) => {
-			const existingIds = new Set(prev.map((m) => m.id));
-			const newMsgs = gatewayMessages.filter((m) => !existingIds.has(m.id));
-			if (newMsgs.length === 0) return prev;
-			return [...prev, ...newMsgs].sort(
-				(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-			);
-		});
-	}, [appState.mail.value]); // eslint-disable-line react-hooks/exhaustive-deps
+		const coordMessages = showCoordinator
+			? mailMessages.filter(
+					(m) =>
+						(m.from === "coordinator" && m.to === "human") ||
+						(m.from === "human" && m.to === "coordinator"),
+				)
+			: [];
+		if (gatewayMessages.length === 0 && coordMessages.length === 0) return;
+		if (gatewayMessages.length > 0) {
+			setHistoryMessages((prev) => {
+				const existingIds = new Set(prev.map((m) => m.id));
+				const newMsgs = gatewayMessages.filter((m) => !existingIds.has(m.id));
+				if (newMsgs.length === 0) return prev;
+				return [...prev, ...newMsgs].sort(
+					(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+				);
+			});
+		}
+		if (coordMessages.length > 0) {
+			setCoordinatorMessages((prev) => {
+				const existingIds = new Set(prev.map((m) => m.id));
+				const newMsgs = coordMessages.filter((m) => !existingIds.has(m.id));
+				if (newMsgs.length === 0) return prev;
+				return [...prev, ...newMsgs].sort(
+					(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+				);
+			});
+		}
+	}, [appState.mail.value, showCoordinator]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Poll POST /api/chat/transcript-sync to sync gateway transcript responses into mail.db
 	useEffect(() => {
@@ -139,9 +191,8 @@ export function GatewayChat({ gwRunning }) {
 							(hm) =>
 								hm.from === "human" &&
 								hm.body === pm.body &&
-								Math.abs(
-									new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
-								) < 60000,
+								Math.abs(new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime()) <
+									60000,
 						),
 				),
 			);
@@ -159,9 +210,7 @@ export function GatewayChat({ gwRunning }) {
 						(hm) =>
 							hm.from === "human" &&
 							hm.body === pm.body &&
-							Math.abs(
-								new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime(),
-							) < 60000,
+							Math.abs(new Date(hm.createdAt).getTime() - new Date(pm.createdAt).getTime()) < 60000,
 					),
 			),
 		);
@@ -183,10 +232,13 @@ export function GatewayChat({ gwRunning }) {
 		};
 	}, [thinking]);
 
-	// Merge history + pending, deduplicate by id, sort oldest first
+	// Merge history + pending (+ coordinator when toggle on), deduplicate by id, sort oldest first
 	const seenIds = new Set();
 	const allMessages = [];
-	for (const msg of [...historyMessages, ...pendingMessages]) {
+	const mergeSource = showCoordinator
+		? [...historyMessages, ...coordinatorMessages, ...pendingMessages]
+		: [...historyMessages, ...pendingMessages];
+	for (const msg of mergeSource) {
 		if (!seenIds.has(msg.id)) {
 			seenIds.add(msg.id);
 			allMessages.push(msg);
@@ -378,6 +430,17 @@ export function GatewayChat({ gwRunning }) {
 			<div class="px-3 py-2 border-b border-[#2a2a2a] shrink-0 flex items-center gap-2">
 				<span class="text-sm font-medium text-[#e5e5e5]">Chat</span>
 				<span class="ml-1 text-xs text-[#555]">All agents</span>
+				<button
+					onClick=${() => setShowCoordinator((v) => !v)}
+					class=${
+						"ml-auto text-xs px-2 py-0.5 rounded border cursor-pointer " +
+						(showCoordinator
+							? "border-purple-600 text-purple-400 bg-purple-900/20"
+							: "border-[#2a2a2a] text-[#666] hover:border-[#444] bg-transparent")
+					}
+				>
+					${showCoordinator ? "Hide Coordinator" : "Show Coordinator"}
+				</button>
 			</div>
 
 			<!-- Message feed — unified timeline of all human-audience messages -->
@@ -397,6 +460,25 @@ export function GatewayChat({ gwRunning }) {
 								const isFromUser = msg.from === "human";
 								const isSending = msg.status === "sending";
 								const isCommand = isFromUser && (msg.body ?? "").startsWith("/");
+								const isCoordinator = msg.from === "coordinator" || msg.to === "coordinator";
+
+								// Determine bubble styling
+								let bubbleClass = "max-w-[85%] rounded px-3 py-2 text-sm ";
+								if (isFromUser && isCoordinator) {
+									// Human -> coordinator
+									bubbleClass +=
+										"bg-purple-600/20 text-[#e5e5e5] border border-purple-600/30" +
+										(isSending ? " opacity-70" : "");
+								} else if (isFromUser) {
+									bubbleClass +=
+										"bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30" +
+										(isSending ? " opacity-70" : "");
+								} else if (isCoordinator) {
+									// Coordinator -> human
+									bubbleClass += "bg-purple-900/20 text-[#e5e5e5] border border-purple-800/40";
+								} else {
+									bubbleClass += "bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]";
+								}
 
 								// Conversational messages: user on right, agents on left with name label
 								return html`
@@ -404,19 +486,16 @@ export function GatewayChat({ gwRunning }) {
 									key=${msg.id}
 									class=${`flex ${isFromUser ? "justify-end" : "justify-start"}`}
 								>
-									<div
-										class=${
-											"max-w-[85%] rounded px-3 py-2 text-sm " +
-											(isFromUser
-												? "bg-[#E64415]/20 text-[#e5e5e5] border border-[#E64415]/30" +
-													(isSending ? " opacity-70" : "")
-												: "bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]")
-										}
-									>
+									<div class=${bubbleClass}>
 										<div class="flex items-center gap-1 mb-1">
-											<span class="text-xs text-[#999]">
+											<span class=${`text-xs ${isCoordinator ? "text-purple-400" : "text-[#999]"}`}>
 												${isFromUser ? "You" : msg.from || "unknown"}
 											</span>
+											${
+												isCoordinator && !isFromUser
+													? html`<span class="text-xs px-1 py-0.5 rounded bg-purple-900/40 text-purple-400 font-mono">coordinator</span>`
+													: null
+											}
 											<span class="text-xs text-[#555]">
 												${isSending ? "\u00b7 sending\u2026" : `\u00b7 ${timeAgo(msg.createdAt)}`}
 											</span>
@@ -519,9 +598,7 @@ export function GatewayChat({ gwRunning }) {
 							ref=${inputRef}
 							type="text"
 							placeholder=${
-								gwRunning
-									? "Send command to gateway\u2026"
-									: "Start gateway to chat\u2026"
+								gwRunning ? "Send command to gateway\u2026" : "Start gateway to chat\u2026"
 							}
 							value=${input}
 							onInput=${handleInput}
