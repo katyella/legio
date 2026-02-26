@@ -262,6 +262,7 @@ Options:
   --parent <agent-name>      Parent agent for hierarchy tracking
   --depth <n>                Current hierarchy depth (default: 0)
   --force-hierarchy            Bypass hierarchy validation (debugging only)
+  --skip-review                Skip reviewer spawn (lead self-verifies)
   --json                     Output result as JSON
   --help, -h                 Show this help`;
 
@@ -295,6 +296,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 	const depthStr = getFlag(args, "--depth");
 	const depth = depthStr !== undefined ? Number.parseInt(depthStr, 10) : 0;
 	const forceHierarchy = args.includes("--force-hierarchy");
+	const skipReview = args.includes("--skip-review");
 
 	if (!name || name.trim().length === 0) {
 		throw new ValidationError("--name is required for sling", { field: "name" });
@@ -434,12 +436,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 
 		// 5d. Enforce per-lead agent budget ceiling
 		if (parentAgent !== null) {
-			checkParentAgentLimit(
-				activeSessions,
-				parentAgent,
-				config.agents.maxAgentsPerLead ?? 5,
-				name,
-			);
+			checkParentAgentLimit(activeSessions, parentAgent, config.agents.maxAgentsPerLead ?? 5, name);
 		}
 
 		// 5e. Prevent duplicate leads on the same task
@@ -523,6 +520,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			baseDefinition,
 			mulchExpertise,
 			canonicalRoot: config.project.root,
+			skipReview,
 		};
 
 		try {

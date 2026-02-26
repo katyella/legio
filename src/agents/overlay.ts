@@ -207,6 +207,22 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 		}
 	}
 
+	// Append Dispatch Overrides section when skip-review is enabled
+	if (config.skipReview) {
+		// Insert before the Expertise section so lead agents see it prominently
+		const expertiseIdx = result.indexOf("## Expertise");
+		if (expertiseIdx !== -1) {
+			const overrides = [
+				"",
+				"## Dispatch Overrides",
+				"",
+				"- **Skip Review**: true — Do NOT spawn a reviewer agent. Self-verify quality gates instead.",
+				"",
+			].join("\n");
+			result = result.slice(0, expertiseIdx) + overrides + result.slice(expertiseIdx);
+		}
+	}
+
 	return result;
 }
 

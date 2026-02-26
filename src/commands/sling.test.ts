@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { generateOverlay } from "../agents/overlay.ts";
 import { AgentError, HierarchyError } from "../errors.ts";
+import type { OverlayConfig } from "../types.ts";
 import {
 	type BeaconOptions,
 	buildAutoDispatch,
@@ -741,5 +743,68 @@ describe("slingCommand root guard", () => {
 		} finally {
 			process.getuid = original;
 		}
+	});
+});
+
+/**
+ * Tests for --skip-review flag in sling and overlay generation.
+ *
+ * --skip-review is parsed in slingCommand and passed through to OverlayConfig.
+ * When set, generateOverlay inserts a "## Dispatch Overrides" section before
+ * "## Expertise" instructing lead agents to skip reviewer spawning.
+ */
+
+function makeOverlayConfig(overrides?: Partial<OverlayConfig>): OverlayConfig {
+	return {
+		agentName: "test-lead",
+		beadId: "legio-test",
+		specPath: null,
+		branchName: "legio/test-lead/legio-test",
+		worktreePath: "/tmp/test-worktree",
+		fileScope: [],
+		mulchDomains: [],
+		parentAgent: null,
+		depth: 0,
+		canSpawn: true,
+		capability: "lead",
+		baseDefinition: "# Lead Agent\n\nYou are a lead agent.",
+		...overrides,
+	};
+}
+
+describe("generateOverlay with --skip-review", () => {
+	test("includes Dispatch Overrides section when skipReview is true", async () => {
+		const config = makeOverlayConfig({ skipReview: true });
+		const result = await generateOverlay(config);
+
+		expect(result).toContain("## Dispatch Overrides");
+		expect(result).toContain("Skip Review");
+		expect(result).toContain("Do NOT spawn a reviewer agent");
+	});
+
+	test("does NOT include Dispatch Overrides when skipReview is false", async () => {
+		const config = makeOverlayConfig({ skipReview: false });
+		const result = await generateOverlay(config);
+
+		expect(result).not.toContain("## Dispatch Overrides");
+	});
+
+	test("does NOT include Dispatch Overrides when skipReview is absent", async () => {
+		const config = makeOverlayConfig();
+		const result = await generateOverlay(config);
+
+		expect(result).not.toContain("## Dispatch Overrides");
+	});
+
+	test("Dispatch Overrides section appears before Expertise section", async () => {
+		const config = makeOverlayConfig({ skipReview: true });
+		const result = await generateOverlay(config);
+
+		const overridesIdx = result.indexOf("## Dispatch Overrides");
+		const expertiseIdx = result.indexOf("## Expertise");
+
+		expect(overridesIdx).toBeGreaterThan(-1);
+		expect(expertiseIdx).toBeGreaterThan(-1);
+		expect(overridesIdx).toBeLessThan(expertiseIdx);
 	});
 });

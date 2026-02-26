@@ -297,6 +297,8 @@ export interface OverlayConfig {
 	mulchExpertise?: string;
 	/** Absolute path to the canonical project root (for agents that need to write outside their worktree). */
 	canonicalRoot?: string;
+	/** When true, lead agents should skip reviewer spawning and self-verify quality gates instead. */
+	skipReview?: boolean;
 }
 
 // === Merge Queue ===
@@ -693,4 +695,3 @@ export interface InsightAnalysis {
 	toolProfile: ToolProfile;
 	fileProfile: FileProfile;
 }
-
