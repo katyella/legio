@@ -65,7 +65,15 @@ describe("logCommand", () => {
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
 		process.chdir(originalCwd);
-		await rm(tempDir, { recursive: true, force: true });
+		// Retry cleanup: SQLite WAL checkpoint may still be flushing on Linux CI
+		for (let i = 0; i < 3; i++) {
+			try {
+				await rm(tempDir, { recursive: true, force: true });
+				break;
+			} catch {
+				if (i < 2) await new Promise((r) => setTimeout(r, 50));
+			}
+		}
 	});
 
 	function output(): string {
@@ -1254,7 +1262,14 @@ describe("logCommand --stdin integration", () => {
 	});
 
 	afterEach(async () => {
-		await rm(tempDir, { recursive: true, force: true });
+		for (let i = 0; i < 3; i++) {
+			try {
+				await rm(tempDir, { recursive: true, force: true });
+				break;
+			} catch {
+				if (i < 2) await new Promise((r) => setTimeout(r, 50));
+			}
+		}
 	});
 
 	/**
