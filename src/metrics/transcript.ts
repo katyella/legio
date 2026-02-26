@@ -21,7 +21,7 @@ import { readFile } from "node:fs/promises";
  * }
  */
 
-export interface TranscriptUsage {
+interface TranscriptUsage {
 	inputTokens: number;
 	outputTokens: number;
 	cacheReadTokens: number;
@@ -30,7 +30,7 @@ export interface TranscriptUsage {
 }
 
 /** A single extracted text message from a transcript entry. */
-export interface TranscriptMessage {
+interface TranscriptMessage {
 	role: "user" | "assistant";
 	text: string;
 }

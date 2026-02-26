@@ -213,7 +213,7 @@ export interface WorkerDonePayload {
 }
 
 /** Supervisor signals branch is verified and ready for merge. */
-export interface MergeReadyPayload {
+interface MergeReadyPayload {
 	branch: string;
 	beadId: string;
 	agentName: string;
@@ -221,14 +221,14 @@ export interface MergeReadyPayload {
 }
 
 /** Merger signals branch was merged successfully. */
-export interface MergedPayload {
+interface MergedPayload {
 	branch: string;
 	beadId: string;
 	tier: ResolutionTier;
 }
 
 /** Merger signals merge failed, needs rework. */
-export interface MergeFailedPayload {
+interface MergeFailedPayload {
 	branch: string;
 	beadId: string;
 	conflictFiles: string[];
@@ -236,20 +236,20 @@ export interface MergeFailedPayload {
 }
 
 /** Any agent escalates an issue to a higher-level decision-maker. */
-export interface EscalationPayload {
+interface EscalationPayload {
 	severity: "warning" | "error" | "critical";
 	beadId: string | null;
 	context: string;
 }
 
 /** Watchdog probes agent liveness. */
-export interface HealthCheckPayload {
+interface HealthCheckPayload {
 	agentName: string;
 	checkType: "liveness" | "readiness";
 }
 
 /** Coordinator dispatches work to a supervisor. */
-export interface DispatchPayload {
+interface DispatchPayload {
 	beadId: string;
 	specPath: string;
 	capability: Capability;
@@ -257,7 +257,7 @@ export interface DispatchPayload {
 }
 
 /** Supervisor assigns work to a specific worker. */
-export interface AssignPayload {
+interface AssignPayload {
 	beadId: string;
 	specPath: string;
 	workerName: string;
@@ -658,28 +658,6 @@ export interface SessionHandoff {
 	handoffAt: string; // ISO timestamp
 }
 
-/**
- * Three-layer model for agent persistence.
- * Session = ephemeral Claude runtime
- * Sandbox = git worktree (persists across sessions)
- * Identity = permanent agent record (persists across assignments)
- */
-export interface AgentLayers {
-	identity: AgentIdentity;
-	sandbox: {
-		worktreePath: string;
-		branchName: string;
-		beadId: string;
-	};
-	session: {
-		id: string;
-		pid: number | null;
-		tmuxSession: string;
-		startedAt: string;
-		checkpoint: SessionCheckpoint | null;
-	} | null; // null when sandbox exists but no active session
-}
-
 // === Session Insight Analysis ===
 
 /** A single structured insight extracted from a completed session. */
@@ -713,29 +691,5 @@ export interface InsightAnalysis {
 	insights: SessionInsight[];
 	toolProfile: ToolProfile;
 	fileProfile: FileProfile;
-}
-
-// ---------------------------------------------------------------------------
-// Strategy Recommendations (CTO output)
-// ---------------------------------------------------------------------------
-
-export type StrategyPriority = "critical" | "high" | "medium" | "low";
-export type StrategyEffort = "XS" | "S" | "M" | "L" | "XL";
-export type StrategyStatus = "pending" | "approved" | "dismissed";
-
-export interface StrategyRecommendation {
-	id: string;
-	title: string;
-	priority: StrategyPriority;
-	effort: StrategyEffort;
-	rationale: string;
-	suggestedFiles: string[];
-	category: string;
-	status: StrategyStatus;
-	createdAt: string;
-}
-
-export interface StrategyFile {
-	recommendations: StrategyRecommendation[];
 }
 
