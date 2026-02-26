@@ -726,38 +726,6 @@ export async function handleApiRequest(
 	}
 
 	// -------------------------------------------------------------------------
-	// Agents spawn — POST route (before the GET-only guard)
-	// -------------------------------------------------------------------------
-
-	if (request.method === "POST" && path === "/api/agents/spawn") {
-		const parsed = await parseJsonBody(request);
-		if (parsed instanceof Response) return parsed;
-
-		const taskId = typeof parsed.taskId === "string" ? parsed.taskId : null;
-		const name = typeof parsed.name === "string" ? parsed.name : null;
-		const capability = typeof parsed.capability === "string" ? parsed.capability : null;
-
-		if (!taskId) return errorResponse("Missing required field: taskId", 400);
-		if (!name) return errorResponse("Missing required field: name", 400);
-		if (!capability) return errorResponse("Missing required field: capability", 400);
-
-		const args = ["sling", taskId, "--name", name, "--capability", capability, "--json"];
-		if (typeof parsed.spec === "string") args.push("--spec", parsed.spec);
-		if (Array.isArray(parsed.files) && parsed.files.length > 0) {
-			args.push("--files", (parsed.files as string[]).join(","));
-		}
-		if (typeof parsed.parent === "string") args.push("--parent", parsed.parent);
-		if (parsed.depth !== undefined) args.push("--depth", String(parsed.depth));
-
-		const result = await runLegio(args, projectRoot);
-		if (result.ok) {
-			wsManager?.broadcastEvent({ type: "agent_spawn", data: result.data });
-			return jsonResponse(result.data, 201);
-		}
-		return errorResponse(result.error);
-	}
-
-	// -------------------------------------------------------------------------
 	// Merge — POST route (before the GET-only guard)
 	// -------------------------------------------------------------------------
 
@@ -1052,24 +1020,43 @@ export async function handleApiRequest(
 
 			const { parseTranscriptTexts } = await import("../metrics/transcript.ts");
 			const offsetPath = join(logsBase, agentName, ".chat-transcript-offset");
-			let fromLine = 0;
+			const mailStore = createMailStore(join(legioDir, "mail.db"));
 			try {
-				const savedOffset = await readFile(offsetPath, "utf-8");
-				const parsedOffset = Number.parseInt(savedOffset.trim(), 10);
-				if (!Number.isNaN(parsedOffset) && parsedOffset >= 0) {
-					fromLine = parsedOffset;
-				}
-			} catch {
-				// No offset file yet — start from beginning
-			}
-
-			const { messages, nextLine } = await parseTranscriptTexts(transcriptPath, fromLine);
-			const assistantMessages = messages.filter((m) => m.role === "assistant");
-
-			if (assistantMessages.length > 0) {
-				const mailStore = createMailStore(join(legioDir, "mail.db"));
+				let fromLine = 0;
 				try {
+					const savedOffset = await readFile(offsetPath, "utf-8");
+					const parsedOffset = Number.parseInt(savedOffset.trim(), 10);
+					if (!Number.isNaN(parsedOffset) && parsedOffset >= 0) {
+						fromLine = parsedOffset;
+					}
+				} catch {
+					// No offset file yet — start from beginning.
+					// If messages already exist for this agent, we're in a restart scenario.
+					// Skip to the end to avoid replaying old messages.
+					const existingMessages = mailStore.getAll({ from: agentName, to: "human" });
+					if (existingMessages.length > 0) {
+						const { nextLine: endLine } = await parseTranscriptTexts(transcriptPath, 0);
+						await writeFile(offsetPath, String(endLine));
+						return jsonResponse({ synced: 0, skipped: true, reason: "offset_recovered" });
+					}
+				}
+
+				const { messages, nextLine } = await parseTranscriptTexts(transcriptPath, fromLine);
+				const assistantMessages = messages.filter((m) => m.role === "assistant");
+
+				let synced = 0;
+				if (assistantMessages.length > 0) {
+					// Dedup: build a set of recent message bodies to skip replays.
+					const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+					const recentBodies = new Set(
+						mailStore
+							.getAll({ from: agentName, to: "human" })
+							.filter((m) => m.createdAt > oneDayAgo)
+							.map((m) => m.body),
+					);
+
 					for (const msg of assistantMessages) {
+						if (recentBodies.has(msg.text)) continue;
 						const savedMsg = mailStore.insert({
 							id: "",
 							from: agentName,
@@ -1082,19 +1069,20 @@ export async function handleApiRequest(
 							audience: "human",
 						});
 						wsManager?.broadcastEvent({ type: "mail_new", data: savedMsg });
+						synced++;
 					}
-				} finally {
-					mailStore.close();
 				}
+
+				await writeFile(offsetPath, String(nextLine));
+
+				return jsonResponse({
+					synced,
+					nextLine,
+					agent: agentName,
+				});
+			} finally {
+				mailStore.close();
 			}
-
-			await writeFile(offsetPath, String(nextLine));
-
-			return jsonResponse({
-				synced: assistantMessages.length,
-				nextLine,
-				agent: agentName,
-			});
 		} finally {
 			sessionStore.close();
 		}
@@ -1112,9 +1100,7 @@ export async function handleApiRequest(
 			try {
 				const client = createBeadsClient(projectRoot);
 				const issue = await client.show(id);
-				const body = issue.description
-					? `${issue.title}\n\n${issue.description}`
-					: issue.title;
+				const body = issue.description ? `${issue.title}\n\n${issue.description}` : issue.title;
 				const store = createMailStore(join(legioDir, "mail.db"));
 				const messageId = `issue-dispatch-${randomUUID().slice(0, 8)}`;
 				store.insert({
