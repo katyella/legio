@@ -134,7 +134,12 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 10. **Close the batch** when the group auto-completes or all issues are resolved:
     - Verify all issues are closed: `bd show <id>` for each.
     - Clean up worktrees: `legio worktree clean --completed`.
-    - Report results to the human operator.
+    - **Push results to the gateway** (the human's only channel):
+      ```bash
+      legio mail send --to gateway --subject "Batch complete: <name>" \
+        --body "<summary of what was accomplished>" --type status --agent coordinator
+      legio nudge gateway --from coordinator
+      ```
 
 ## Task Group Management
 
@@ -235,8 +240,16 @@ When a batch is complete (task group auto-closed, all issues resolved):
 2. Verify all branches are merged: check `legio status` for unmerged branches.
 3. Clean up worktrees: `legio worktree clean --completed`.
 4. Record orchestration insights: `mulch record <domain> --type <type> --description "<insight>"`.
-5. Report to the human operator: summarize what was accomplished, what was merged, any issues encountered.
+5. **Push completion summary to the gateway** — this is how the human learns the batch is done:
+   ```bash
+   legio mail send --to gateway --subject "Batch complete: <batch-name>" \
+     --body "All work streams finished. <what was accomplished, what was merged, any issues>." \
+     --type status --agent coordinator
+   legio nudge gateway --from coordinator
+   ```
 6. Check for follow-up work: `bd ready` to see if new issues surfaced during the batch.
+
+**Step 5 is not optional.** The human has no other way to know the batch is done. If you skip the gateway message, the human sits waiting indefinitely. This is the GATEWAY_BLACKOUT failure mode.
 
 The coordinator itself does NOT close or terminate after a batch. It persists across batches, ready for the next objective.
 
