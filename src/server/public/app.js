@@ -4,7 +4,6 @@
 import { html } from "htm/preact";
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { SpawnDialog } from "./components/spawn-dialog.js";
 import { fetchJson } from "./lib/api.js";
 import { appState, setLastUpdated } from "./lib/state.js";
 import { timeAgo } from "./lib/utils.js";
@@ -122,7 +121,6 @@ function Layout({ view, param }) {
 			<main class="flex-1 overflow-auto min-h-0">
 				<${Router} key=${view} view=${view} param=${param} />
 			</main>
-			<${SpawnDialog} />
 		</div>
 	`;
 }

@@ -16,7 +16,6 @@ import { GatewayChat } from "./gateway-chat.js";
 const TYPE_COLORS = {
 	session_start: "bg-green-900/50 text-green-400",
 	session_end: "bg-[#333] text-[#999]",
-	spawn: "bg-blue-900/50 text-blue-400",
 	mail_sent: "bg-purple-900/50 text-purple-400",
 	mail_received: "bg-purple-900/50 text-purple-400",
 	mail: "bg-purple-900/50 text-purple-400",
@@ -50,8 +49,6 @@ function buildEventSummary(e) {
 			return `${e.agentName} session started`;
 		case "session_end":
 			return `${e.agentName} session ended`;
-		case "spawn":
-			return `Spawned ${e.agentName}`;
 		case "mail_sent":
 			return `Mail sent by ${e.agentName}`;
 		case "mail_received":
@@ -572,10 +569,6 @@ function CoordinatorBar() {
 		}
 	}, [poll]);
 
-	const handleSpawn = useCallback(() => {
-		if (appState.showSpawnDialog) appState.showSpawnDialog.value = true;
-	}, []);
-
 	const isRunning = coordStatus === true;
 	const isStopped = coordStatus === false;
 	const isUnknown = coordStatus === null;
@@ -636,12 +629,6 @@ function CoordinatorBar() {
 					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
 				>
 					${gwLoading && gwIsRunning ? "\u2026" : "Stop"}
-				</button>
-				<button
-					onClick=${handleSpawn}
-					class="bg-[#E64415] hover:bg-[#cc3d12] text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
-				>
-					Spawn Agent
 				</button>
 			</div>
 			${error ? html`<span class="text-xs text-red-400">${error}</span>` : null}

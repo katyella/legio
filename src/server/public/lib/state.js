@@ -24,7 +24,6 @@ export const appState = {
 	selectedPair: signal(null),
 	collapsedThreads: signal(new Set()),
 	coordinator: signal(null),
-	showSpawnDialog: signal(false),
 	pendingChatContext: signal(null),
 };
 
