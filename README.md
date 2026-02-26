@@ -47,6 +47,18 @@ Legio changes that. It spawns specialized agents in isolated git worktrees, coor
   <em>Inspect: deep dive into any agent's activity, tool calls, and terminal output</em>
 </p>
 
+<p align="center">
+  <img src="assets/costs.png" alt="Costs — token usage and cost breakdown" width="800">
+  <br>
+  <em>Costs: token usage by model, per-agent breakdown, and daily cost trends</em>
+</p>
+
+<p align="center">
+  <img src="assets/tasks.png" alt="Tasks — issue tracking kanban board" width="800">
+  <br>
+  <em>Tasks: kanban board with issue tracking, priority filters, and dispatch controls</em>
+</p>
+
 ## Quick Start
 
 ```bash
