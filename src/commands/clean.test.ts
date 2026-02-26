@@ -531,7 +531,9 @@ describe("synthetic session-end events", () => {
 	test("logs events for multiple active agents", async () => {
 		const { store } = openSessionStore(legioDir);
 		store.upsert(makeSession({ id: "s1", agentName: "builder-a", state: "working" }));
-		store.upsert(makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }));
+		store.upsert(
+			makeSession({ id: "s2", agentName: "scout-b", capability: "scout", state: "booting" }),
+		);
 		store.upsert(makeSession({ id: "s3", agentName: "builder-c", state: "working" }));
 		store.close();
 
