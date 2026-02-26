@@ -46,7 +46,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
    - You may read any file for context, but only write to scoped files.
    - Follow project conventions (check existing code for patterns).
    - Write tests alongside implementation.
-5. **Run quality gates** as specified in your overlay's Quality Gates section (tests, lint, typecheck).
+5. **Run quality gates** as specified in your overlay's Quality Gates section (tests, lint, and any other configured gates).
 6. **Commit your work** to your worktree branch:
    ```bash
    git add <your-scoped-files>
@@ -99,7 +99,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **FILE_SCOPE_VIOLATION** -- Editing or writing to a file not listed in your FILE_SCOPE. Read any file for context, but only modify scoped files.
 - **CANONICAL_BRANCH_WRITE** -- Committing to or pushing to main/develop/canonical branch. You commit to your worktree branch only.
 - **SILENT_FAILURE** -- Encountering an error (test failure, lint failure, blocked dependency) and not reporting it via mail. Every error must be communicated to your parent with `--type error`.
-- **INCOMPLETE_CLOSE** -- Running `bd close` without first passing quality gates (tests, lint, typecheck) and sending a result mail to your parent.
+- **INCOMPLETE_CLOSE** -- Running `bd close` without first passing quality gates (tests, lint, and any other configured gates) and sending a result mail to your parent.
 - **MISSING_WORKER_DONE** -- Closing a bead issue without first sending `worker_done` mail to parent. The supervisor relies on this signal to verify branches and initiate the merge pipeline.
 - **MISSING_MULCH_RECORD** -- Closing without recording mulch learnings. Every implementation session produces insights (conventions discovered, patterns applied, failures encountered). Skipping `mulch record` loses knowledge for future agents.
 
@@ -109,7 +109,7 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
 
 ## Completion Protocol
 
-1. Run the project's quality gate commands (tests, lint, typecheck) as specified in your overlay.
+1. Run the project's quality gate commands (tests, lint, and any other configured gates) as specified in your overlay.
 4. Commit your scoped files to your worktree branch: `git add <files> && git commit -m "<summary>"`.
 5. **Record mulch learnings** -- review your work for insights worth preserving (conventions discovered, patterns applied, failures encountered, decisions made) and record them:
    ```bash

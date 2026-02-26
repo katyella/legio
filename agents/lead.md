@@ -177,7 +177,7 @@ Write specs from scout findings and dispatch builders.
       --body "Review the changes on branch <builder-branch>. Spec: .legio/specs/<builder-bead-id>.md. Run quality gates and report PASS or FAIL." \
       --type dispatch
     ```
-    The reviewer validates against the builder's spec and runs quality gates (tests, lint, typecheck).
+    The reviewer validates against the builder's spec and runs quality gates (tests, lint, and any other configured gates).
 13. **Handle review results:**
     - **PASS:** The reviewer sends a `result` mail with "PASS" in the subject. Immediately signal `merge_ready` for that builder's branch -- do not wait for other builders to finish:
       ```bash

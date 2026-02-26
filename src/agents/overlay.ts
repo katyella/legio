@@ -57,7 +57,7 @@ function formatMulchExpertise(expertise: string | undefined): string {
 const READ_ONLY_CAPABILITIES = new Set(["scout", "reviewer"]);
 
 /** Shape of per-project quality gate commands. Added to OverlayConfig by legio-787k (parallel). */
-type QualityGates = { test: string; lint: string; typecheck: string };
+type QualityGates = { test: string; lint: string; typecheck?: string };
 
 /** OverlayConfig extended with the optional qualityGates field (landing via legio-787k). */
 type OverlayConfigWithGates = OverlayConfig & { qualityGates?: QualityGates };
@@ -92,19 +92,37 @@ function formatQualityGates(config: OverlayConfig): string {
 	}
 
 	const gates = (config as OverlayConfigWithGates).qualityGates ?? DEFAULT_QUALITY_GATES;
+	const parent = config.parentAgent ?? "orchestrator";
+
+	const steps: string[] = [
+		`1. **Tests:** \`${gates.test}\` — all tests must pass`,
+		`2. **Lint:** \`${gates.lint}\` — zero errors`,
+	];
+
+	let nextStep = 3;
+	if (gates.typecheck) {
+		steps.push(`${nextStep}. **Typecheck:** \`${gates.typecheck}\` — no type errors`);
+		nextStep++;
+	}
+
+	steps.push(`${nextStep}. **Commit:** all changes committed to your branch (${config.branchName})`);
+	nextStep++;
+	steps.push(
+		`${nextStep}. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
+	);
+	nextStep++;
+	steps.push(
+		`${nextStep}. **Signal completion:** send \`worker_done\` mail to ${parent}: \`legio mail send --to ${parent} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
+	);
+	nextStep++;
+	steps.push(`${nextStep}. **Close issue:** \`bd close ${config.beadId} --reason "summary of changes"\``);
 
 	return [
 		"## Quality Gates",
 		"",
 		"Before reporting completion, you MUST pass all quality gates:",
 		"",
-		`1. **Tests:** \`${gates.test}\` — all tests must pass`,
-		`2. **Lint:** \`${gates.lint}\` — zero errors`,
-		`3. **Typecheck:** \`${gates.typecheck}\` — no type errors`,
-		`4. **Commit:** all changes committed to your branch (${config.branchName})`,
-		`5. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
-		`6. **Signal completion:** send \`worker_done\` mail to ${config.parentAgent ?? "orchestrator"}: \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "Worker done: ${config.beadId}" --body "Quality gates passed." --type worker_done --agent ${config.agentName}\``,
-		`7. **Close issue:** \`bd close ${config.beadId} --reason "summary of changes"\``,
+		...steps,
 		"",
 		"Do NOT push to the canonical branch. Your work will be merged by the",
 		"orchestrator via `legio merge`.",

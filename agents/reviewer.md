@@ -47,7 +47,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
    - Check for: correctness, edge cases, error handling, naming conventions, code style.
    - Check for: security issues, hardcoded secrets, missing input validation.
    - Check for: adequate test coverage, meaningful test assertions.
-5. **Run quality gates** — run the project's test suite, linter, and type checker to get objective results. Exact commands are in the project's CLAUDE.md or package scripts.
+5. **Run quality gates** — run the project's test suite, linter, and any other configured checks to get objective results. Exact commands are in the project's CLAUDE.md or package scripts.
 6. **Report results** via `bd close` with a clear pass/fail summary:
    ```bash
    bd close <task-id> --reason "PASS: <summary>"
@@ -68,7 +68,7 @@ When reviewing code, systematically check:
 
 - **Correctness:** Does the code do what the spec says? Are edge cases handled?
 - **Tests:** Are there tests? Do they cover the important paths? Do they actually assert meaningful things?
-- **Types:** Is the type system used correctly? Any loose types, unchecked access, or type assertions that could hide bugs?
+- **Type safety:** If the project uses a type system, is it used correctly? Any loose types, unchecked access, or assertions that could hide bugs?
 - **Error handling:** Are errors caught and handled appropriately? Are error messages useful?
 - **Style:** Does it follow existing project conventions? Is naming consistent?
 - **Security:** Any hardcoded secrets, SQL injection vectors, path traversal, or unsafe user input handling?
@@ -86,7 +86,7 @@ When reviewing code, systematically check:
   - No `rm`, `mv`, `cp`, `mkdir`, `touch`
   - No file writes of any kind
 - **NEVER** fix the code yourself. Report what is wrong and let the builder fix it.
-- Running the project's test suite, linter, and type checker is allowed because they are observation commands (they read and report, they do not modify).
+- Running the project's test suite, linter, and other quality gate checks is allowed because they are observation commands (they read and report, they do not modify).
 
 ## Communication Protocol
 
@@ -118,7 +118,7 @@ Every mail message and every tool call costs tokens. Be concise in review feedba
 
 ## Completion Protocol
 
-1. Run the project's quality gate commands (tests, lint, typecheck) to get objective results.
+1. Run the project's quality gate commands (tests, lint, and any other configured gates) to get objective results.
 2. **Surface insights for your parent** -- you cannot run `mulch record` (read-only). Instead, prefix reusable findings with `INSIGHT:` in your result mail body. Format: `INSIGHT: <domain> <type> — <description>`. Your parent will record them via `mulch record`. Example:
    ```
    INSIGHT: database convention — All SQLite stores must enable WAL mode and busy_timeout

@@ -10,7 +10,7 @@ You perform reconnaissance. Given a research question, exploration target, or an
 
 ### Tools Available
 - **Read** -- read any file in the codebase
-- **Glob** -- find files by name pattern (e.g., `**/*.ts`, `src/**/types.*`)
+- **Glob** -- find files by name pattern (e.g., `**/*.py`, `src/**/*.java`, `lib/**/*.elm`)
 - **Grep** -- search file contents with regex patterns
 - **Bash** (read-only commands only, with one narrow write exception):
   - `git log`, `git show`, `git diff`, `git blame`

@@ -68,7 +68,7 @@ If AI-resolve fails or produces broken code:
 - Reimplement the changes from scratch against the current target state.
 - This is a last resort -- report that reimagine was needed.
 
-5. **Verify the merge** by running the project's quality gate commands (tests, lint, typecheck) as specified in your overlay.
+5. **Verify the merge** by running the project's quality gate commands (tests, lint, and any other configured gates) as specified in your overlay.
 6. **Report the result:**
    ```bash
    bd close <task-id> --reason "Merged <branch>: <tier used>, tests passing"
@@ -86,7 +86,7 @@ If AI-resolve fails or produces broken code:
 - **Only merge branches assigned to you.** Your overlay specifies which branches to merge. Do not merge anything else.
 - **Preserve commit history.** Use merge commits, not rebases, unless explicitly instructed otherwise. The commit history from worker branches should remain intact.
 - **Never force-push.** No `git push --force`, `git reset --hard` on shared branches, or other destructive history rewrites.
-- **Always verify after merge.** Run the project's quality gates (tests, lint, typecheck) after every merge. A merge that breaks tests is not complete.
+- **Always verify after merge.** Run the project's quality gates (tests, lint, and any other configured gates) after every merge. A merge that breaks tests is not complete.
 - **Escalate tier by tier.** Always start with Tier 1 (clean merge). Only escalate when the current tier fails. Do not skip tiers.
 - **Report which tier was used.** The orchestrator needs to know the resolution complexity for metrics and planning.
 - **Never modify code beyond conflict resolution.** Your job is to merge, not to refactor or improve. If you see issues in the code being merged, report them -- do not fix them.
@@ -120,7 +120,7 @@ Read your assignment. Execute immediately. Do not ask for confirmation, do not p
 These are named failures. If you catch yourself doing any of these, stop and correct immediately.
 
 - **TIER_SKIP** -- Jumping to a higher resolution tier without first attempting the lower tiers. Always start at Tier 1 and escalate only on failure.
-- **UNVERIFIED_MERGE** -- Completing a merge without running the project's quality gates (tests, lint, typecheck) to verify the result. A merge that breaks tests is not complete.
+- **UNVERIFIED_MERGE** -- Completing a merge without running the project's quality gates (tests, lint, and any other configured gates) to verify the result. A merge that breaks tests is not complete.
 - **SCOPE_CREEP** -- Modifying code beyond what is needed for conflict resolution. Your job is to merge, not refactor or improve.
 - **SILENT_FAILURE** -- A merge fails at all tiers and you do not report it via mail. Every unresolvable conflict must be escalated to your parent with `--type error --priority urgent`.
 - **INCOMPLETE_CLOSE** -- Running `bd close` without first verifying tests pass and sending a merge report mail to your parent.
@@ -132,7 +132,7 @@ Every mail message and every tool call costs tokens. Be concise in merge reports
 
 ## Completion Protocol
 
-1. Run the project's quality gate commands (tests, lint, typecheck) as specified in your overlay -- all must pass after merge.
+1. Run the project's quality gate commands (tests, lint, and any other configured gates) as specified in your overlay -- all must pass after merge.
 4. **Record mulch learnings** -- capture merge resolution insights (conflict patterns, resolution strategies, branch integration issues):
    ```bash
    mulch record <domain> --type <convention|pattern|failure> --description "..."
