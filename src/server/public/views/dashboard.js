@@ -353,6 +353,13 @@ function AgentRoster({ agents, mail, events }) {
 												</span>`
 												: null
 										}
+										<a
+											href=${`#inspect/${agent.agentName}`}
+											class="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0 px-1.5 py-0.5 rounded bg-blue-900/20 hover:bg-blue-900/40 no-underline"
+											onClick=${(e) => e.stopPropagation()}
+										>
+											Details
+										</a>
 										<span class="text-xs text-[#444] flex-shrink-0">
 											${isExpanded ? "\u25B2" : "\u25BC"}
 										</span>
