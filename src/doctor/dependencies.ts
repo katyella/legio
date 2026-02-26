@@ -14,14 +14,24 @@ export const checkDependencies: DoctorCheckFn = async (
 		{ name: "git", versionFlag: "--version", required: true },
 		{ name: "node", versionFlag: "--version", required: true },
 		{ name: "tmux", versionFlag: "-V", required: true },
-		{ name: "bd", versionFlag: "--version", required: true },
-		{ name: "mulch", versionFlag: "--version", required: true },
+		{
+			name: "bd",
+			versionFlag: "--version",
+			required: true,
+			installHint: "https://github.com/steveyegge/beads",
+		},
+		{
+			name: "mulch",
+			versionFlag: "--version",
+			required: true,
+			installHint: "npm install -g @os-eco/mulch-cli — https://github.com/jayminwest/mulch",
+		},
 	];
 
 	const checks: DoctorCheck[] = [];
 
 	for (const tool of requiredTools) {
-		const check = await checkTool(tool.name, tool.versionFlag, tool.required);
+		const check = await checkTool(tool.name, tool.versionFlag, tool.required, tool.installHint);
 		checks.push(check);
 	}
 
@@ -121,6 +131,7 @@ async function checkTool(
 	name: string,
 	versionFlag: string,
 	required: boolean,
+	installHint?: string,
 ): Promise<DoctorCheck> {
 	try {
 		const { exitCode, stdout, stderr } = await new Promise<{
@@ -170,7 +181,9 @@ async function checkTool(
 			status: required ? "fail" : "warn",
 			message: `${name} is not installed or not in PATH`,
 			details: [
-				`Install ${name} or ensure it is in your PATH`,
+				installHint
+					? `Install ${name}: ${installHint}`
+					: `Install ${name} or ensure it is in your PATH`,
 				error instanceof Error ? error.message : String(error),
 			],
 			fixable: true,
