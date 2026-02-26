@@ -269,7 +269,7 @@ describe("parentHasScouts", () => {
  * Tests for hierarchy validation in sling.
  *
  * validateHierarchy enforces that the coordinator (no --parent flag) can only
- * spawn lead agents. All other capabilities must be spawned by a lead or
+ * spawn lead and scout agents. All other capabilities must be spawned by a lead or
  * supervisor that passes --parent. This prevents the flat delegation anti-pattern
  * where the coordinator short-circuits the hierarchy.
  */
@@ -281,8 +281,8 @@ describe("validateHierarchy", () => {
 		);
 	});
 
-	test("rejects scout when parentAgent is null", () => {
-		expect(() => validateHierarchy(null, "scout", "test-scout", 0, false)).toThrow(HierarchyError);
+	test("allows scout when parentAgent is null", () => {
+		expect(() => validateHierarchy(null, "scout", "test-scout", 0, false)).not.toThrow();
 	});
 
 	test("rejects reviewer when parentAgent is null", () => {
