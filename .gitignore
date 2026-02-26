@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-bun.lockb
 
 # Build output
 dist/
@@ -27,6 +26,12 @@ Thumbs.db
 .legio/metrics.db-shm
 .legio/sessions.json
 .legio/merge-queue.json
+
+# npm pack artifacts
+*.tgz
+
+# Backup files
+*.bak
 
 # Test artifacts
 coverage/

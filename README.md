@@ -10,8 +10,6 @@
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522-green)](https://nodejs.org)
 [![GitHub release](https://img.shields.io/github/v/release/katyella/legio)](https://github.com/katyella/legio/releases)
 
-Built on [Overstory](https://github.com/jayminwest/overstory).
-
 **Turn one Claude Code session into a multi-agent fleet.**
 
 Claude Code is powerful — but it works one task at a time. One agent, one context window, one thread of execution.
@@ -132,4 +130,5 @@ MIT
 
 ---
 
-Inspired by: https://github.com/steveyegge/gastown/
+Adopted from [Overstory](https://github.com/jayminwest/overstory).
+
