@@ -116,9 +116,12 @@ export async function createServer(
 ): Promise<ServerInstance> {
 	const { port, host, root } = options;
 	const legioDir = join(root, ".legio");
+	process.stdout.write(`[legio] Server legioDir: ${legioDir}\n`);
 	const publicDir = join(__dirname, "public");
 
 	const wsManager = createWebSocketManager(legioDir);
+
+	let firstRequest = true;
 
 	// Headless coordinator state — shared across all requests
 	let headlessCoordinator: HeadlessCoordinator | null = null;
@@ -146,6 +149,10 @@ export async function createServer(
 
 			// API routes
 			if (pathname.startsWith("/api/")) {
+				if (firstRequest) {
+					firstRequest = false;
+					process.stdout.write(`[legio] First API request — legioDir: ${legioDir}\n`);
+				}
 				try {
 					const body = await collectBody(req);
 					const headers = new Headers();
