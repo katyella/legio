@@ -30,7 +30,7 @@ import type {
 	RunStatus,
 } from "../types.ts";
 import { MAIL_MESSAGE_TYPES } from "../types.ts";
-import { isSessionAlive, sendKeys } from "../worktree/tmux.ts";
+import { isSessionAlive, readTerminalLog, sendKeys } from "../worktree/tmux.ts";
 import { createAuditStore } from "./audit-store.ts";
 import { HeadlessCoordinator } from "./headless.ts";
 
@@ -1749,14 +1749,29 @@ export async function handleApiRequest(
 			});
 		}
 
-		const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
-		if (!tmuxSession) {
-			return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+		// Try terminal log file first (pipe-pane streaming)
+		let output: string | null = null;
+		const { store: captureStore } = openSessionStore(legioDir);
+		try {
+			const agentSession = captureStore.getByName(agentName);
+			if (agentSession?.terminalLogPath) {
+				output = await readTerminalLog(agentSession.terminalLogPath, lines);
+			}
+		} finally {
+			captureStore.close();
 		}
 
-		const output = await captureTmuxPane(tmuxSession, lines);
+		// Fall back to capture-pane if no terminal log available
 		if (output === null) {
-			return errorResponse(`Failed to capture tmux pane for session "${tmuxSession}"`);
+			const tmuxSession = await resolveTerminalSession(legioDir, projectRoot, agentName);
+			if (!tmuxSession) {
+				return errorResponse(`Cannot resolve tmux session for agent "${agentName}"`, 404);
+			}
+
+			output = await captureTmuxPane(tmuxSession, lines);
+			if (output === null) {
+				return errorResponse(`Failed to capture tmux pane for session "${tmuxSession}"`);
+			}
 		}
 
 		return jsonResponse({

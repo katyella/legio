@@ -15,6 +15,7 @@ import { color } from "../logging/color.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession, StoredEvent, ToolStats } from "../types.ts";
+import { readTerminalLog } from "../worktree/tmux.ts";
 
 /**
  * Parse a named flag value from args.
@@ -254,11 +255,18 @@ export async function gatherInspectData(
 			}
 		}
 
-		// tmux capture
+		// Terminal output: prefer terminal log file, fall back to capture-pane
 		let tmuxOutput: string | null = null;
-		if (!opts.noTmux && session.tmuxSession) {
+		if (!opts.noTmux) {
 			const lines = opts.tmuxLines ?? 30;
-			tmuxOutput = await captureTmux(session.tmuxSession, lines);
+			// Try terminal log file first (pipe-pane streaming)
+			if (session.terminalLogPath) {
+				tmuxOutput = await readTerminalLog(session.terminalLogPath, lines);
+			}
+			// Fall back to capture-pane if no log file exists
+			if (tmuxOutput === null && session.tmuxSession) {
+				tmuxOutput = await captureTmux(session.tmuxSession, lines);
+			}
 		}
 
 		return {

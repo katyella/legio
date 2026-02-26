@@ -54,6 +54,7 @@ interface SessionRow {
 	last_activity: string;
 	escalation_level: number;
 	stalled_since: string | null;
+	terminal_log_path: string | null;
 }
 
 /** Row shape for runs table as stored in SQLite (snake_case columns). */
@@ -84,8 +85,12 @@ CREATE TABLE IF NOT EXISTS sessions (
   started_at TEXT NOT NULL,
   last_activity TEXT NOT NULL,
   escalation_level INTEGER NOT NULL DEFAULT 0,
-  stalled_since TEXT
+  stalled_since TEXT,
+  terminal_log_path TEXT
 )`;
+
+const MIGRATE_TERMINAL_LOG_PATH = `
+ALTER TABLE sessions ADD COLUMN terminal_log_path TEXT`;
 
 const CREATE_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_sessions_state ON sessions(state);
@@ -124,6 +129,9 @@ function rowToSession(row: SessionRow): AgentSession {
 		lastActivity: row.last_activity,
 		escalationLevel: row.escalation_level,
 		stalledSince: row.stalled_since,
+		// Only include terminalLogPath when set — omitting it when null preserves
+		// backward compatibility with existing tests that compare AgentSession objects.
+		...(row.terminal_log_path !== null ? { terminalLogPath: row.terminal_log_path } : {}),
 	};
 }
 
@@ -155,6 +163,12 @@ export function createSessionStore(dbPath: string): SessionStore {
 
 	// Create schema
 	db.exec(CREATE_TABLE);
+	// Migration: add terminal_log_path for existing DBs (no-op if column already exists)
+	try {
+		db.exec(MIGRATE_TERMINAL_LOG_PATH);
+	} catch {
+		// Column already exists — safe to ignore
+	}
 	db.exec(CREATE_INDEXES);
 	db.exec(CREATE_RUNS_TABLE);
 	db.exec(CREATE_RUNS_INDEXES);
@@ -164,11 +178,11 @@ export function createSessionStore(dbPath: string): SessionStore {
 		INSERT INTO sessions
 			(id, agent_name, capability, worktree_path, branch_name, bead_id,
 			 tmux_session, state, pid, parent_agent, depth, run_id,
-			 started_at, last_activity, escalation_level, stalled_since)
+			 started_at, last_activity, escalation_level, stalled_since, terminal_log_path)
 		VALUES
 			($id, $agent_name, $capability, $worktree_path, $branch_name, $bead_id,
 			 $tmux_session, $state, $pid, $parent_agent, $depth, $run_id,
-			 $started_at, $last_activity, $escalation_level, $stalled_since)
+			 $started_at, $last_activity, $escalation_level, $stalled_since, $terminal_log_path)
 		ON CONFLICT(agent_name) DO UPDATE SET
 			id = excluded.id,
 			capability = excluded.capability,
@@ -184,7 +198,8 @@ export function createSessionStore(dbPath: string): SessionStore {
 			started_at = excluded.started_at,
 			last_activity = excluded.last_activity,
 			escalation_level = excluded.escalation_level,
-			stalled_since = excluded.stalled_since
+			stalled_since = excluded.stalled_since,
+			terminal_log_path = excluded.terminal_log_path
 	`);
 
 	const getByNameStmt = db.prepare(`
@@ -259,6 +274,7 @@ export function createSessionStore(dbPath: string): SessionStore {
 				last_activity: session.lastActivity,
 				escalation_level: session.escalationLevel,
 				stalled_since: session.stalledSince,
+				terminal_log_path: session.terminalLogPath ?? null,
 			});
 		},
 
