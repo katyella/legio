@@ -154,6 +154,7 @@ function App() {
 		connectWS();
 		fetchJson("/api/setup/status")
 			.then((data) => {
+				if (data.projectName) document.title = "Legio \u2014 " + data.projectName;
 				setIsInitialized(data.initialized);
 				setSetupStatus(data);
 				setSetupChecked(true);
