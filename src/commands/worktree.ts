@@ -96,9 +96,14 @@ async function handleClean(args: string[], root: string, json: boolean): Promise
 		for (const wt of legioWts) {
 			const session = sessions.find((s) => s.worktreePath === wt.path);
 
-			// If --completed (default), only clean worktrees whose agent is done/zombie
-			if (completedOnly && session && session.state !== "completed" && session.state !== "zombie") {
-				continue;
+			// If --completed (default), only clean worktrees whose agent is done/zombie.
+			// When session is undefined (no record in SessionStore), the agent is likely
+			// still in the spawn sequence (sling creates the worktree before registering
+			// the session). Treat unknown worktrees as active — skip them.
+			if (completedOnly) {
+				if (!session || (session.state !== "completed" && session.state !== "zombie")) {
+					continue;
+				}
 			}
 
 			// If --all, clean everything

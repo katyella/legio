@@ -35,7 +35,13 @@ import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
-import { createSession, sendKeys, startPipePane, waitForTuiReady } from "../worktree/tmux.ts";
+import {
+	capturePaneContent,
+	createSession,
+	sendKeys,
+	startPipePane,
+	waitForTuiReady,
+} from "../worktree/tmux.ts";
 
 /**
  * Calculate how many milliseconds to sleep before spawning a new agent,
@@ -476,6 +482,34 @@ export async function slingCommand(args: string[]): Promise<void> {
 			beadId: taskId,
 		});
 
+		// 7b. Register placeholder session immediately after worktree creation.
+		// This closes the race window where worktree clean could delete the worktree
+		// before the session record exists (the worktree exists in git but the
+		// SessionStore has no record, so clean treats it as orphaned).
+		// PID is null until tmux starts; we update it in step 13.
+		const tmuxSessionName = `legio-${config.project.name}-${name}`;
+		const terminalLogPath = join(legioDir, "logs", name, "terminal.log");
+		const session: AgentSession = {
+			id: `session-${Date.now()}-${name}`,
+			agentName: name,
+			capability,
+			worktreePath,
+			branchName,
+			beadId: taskId,
+			tmuxSession: tmuxSessionName,
+			state: "booting",
+			pid: null,
+			parentAgent: parentAgent,
+			depth,
+			runId,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+			terminalLogPath,
+		};
+		store.upsert(session);
+
 		// 8. Generate + write overlay CLAUDE.md
 		const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
 		const baseDefinition = await readFile(agentDefPath, "utf-8");
@@ -603,7 +637,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			JSON.stringify({ skipDangerousModePermissionPrompt: true }),
 			"utf-8",
 		);
-		const tmuxSessionName = `legio-${config.project.name}-${name}`;
+		// tmuxSessionName computed in step 7b (early session registration)
 		const claudeCmd = `claude --model ${agentDef.model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await createSession(tmuxSessionName, worktreePath, claudeCmd, {
 			...collectProviderEnv(),
@@ -611,39 +645,20 @@ export async function slingCommand(args: string[]): Promise<void> {
 			LEGIO_WORKTREE_PATH: worktreePath,
 		});
 
-		// 13. Record session BEFORE sending the beacon so that hook-triggered
-		// updateLastActivity() can find the entry and transition booting->working.
-		// Without this, a race exists: hooks fire before the session is persisted,
-		// leaving the agent stuck in "booting" (legio-036f).
-		const terminalLogPath = join(legioDir, "logs", name, "terminal.log");
-		const session: AgentSession = {
-			id: `session-${Date.now()}-${name}`,
-			agentName: name,
-			capability,
-			worktreePath,
-			branchName,
-			beadId: taskId,
-			tmuxSession: tmuxSessionName,
-			state: "booting",
-			pid,
-			parentAgent: parentAgent,
-			depth,
-			runId,
-			startedAt: new Date().toISOString(),
-			lastActivity: new Date().toISOString(),
-			escalationLevel: 0,
-			stalledSince: null,
-			terminalLogPath,
-		};
-
+		// 13. Update the placeholder session with PID from tmux.
+		// The session was registered in step 7b immediately after worktree creation
+		// to close the race window. Now we update it with the actual PID so the
+		// watchdog and status commands can track the process.
+		session.pid = pid;
+		session.lastActivity = new Date().toISOString();
 		store.upsert(session);
 
 		// Increment agent count for the run
-		const runStore = createRunStore(join(legioDir, "sessions.db"));
+		const runStore2 = createRunStore(join(legioDir, "sessions.db"));
 		try {
-			runStore.incrementAgentCount(runId);
+			runStore2.incrementAgentCount(runId);
 		} finally {
-			runStore.close();
+			runStore2.close();
 		}
 
 		// 13b. Send beacon prompt via tmux send-keys
@@ -664,14 +679,52 @@ export async function slingCommand(args: string[]): Promise<void> {
 			parentAgent,
 			depth,
 		});
-		await sendKeys(tmuxSessionName, beacon);
 
-		// 13d. Send a follow-up Enter after a short delay to ensure submission.
-		// Claude Code's TUI may consume the first Enter during initialization,
-		// leaving the beacon text visible but unsubmitted (legio-yhv6).
-		// A redundant Enter on an empty input line is harmless.
-		await new Promise<void>((resolve) => setTimeout(resolve, 500));
-		await sendKeys(tmuxSessionName, "");
+		// 13d. Send beacon with delivery verification.
+		// After sending the beacon text + Enter, verify the agent actually received
+		// it by checking the pane content. If the beacon text is still visible in
+		// the pane (not consumed by the TUI), or the TUI shows no agent activity,
+		// retry up to 3 times with increasing delays.
+		const maxBeaconAttempts = 3;
+		let beaconDelivered = false;
+
+		for (let attempt = 0; attempt < maxBeaconAttempts; attempt++) {
+			await sendKeys(tmuxSessionName, beacon);
+
+			// Wait for the TUI to process the submission
+			const verifyDelay = 1000 + attempt * 1000; // 1s, 2s, 3s
+			await new Promise<void>((resolve) => setTimeout(resolve, verifyDelay));
+
+			// Check if the beacon was consumed: if the pane shows agent activity
+			// (spinner, tool calls, thinking indicators) the beacon was delivered.
+			// If the raw beacon text is still sitting in the input area, it wasn't
+			// submitted — retry.
+			const paneContent = await capturePaneContent(tmuxSessionName);
+			const beaconTag = `[LEGIO] ${name}`;
+			const hasAgentActivity =
+				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
+				paneContent.includes("Claude") || // Agent response header
+				paneContent.includes("Reading") || // Tool usage
+				paneContent.includes("Searching"); // Tool usage
+			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
+
+			if (!beaconStillInInput) {
+				beaconDelivered = true;
+				break;
+			}
+
+			// Beacon text still in input — send a follow-up Enter to submit it
+			process.stderr.write(
+				`⚠️  Beacon attempt ${attempt + 1}/${maxBeaconAttempts} not consumed — retrying\n`,
+			);
+			await sendKeys(tmuxSessionName, "");
+		}
+
+		if (!beaconDelivered) {
+			process.stderr.write(
+				`⚠️  Warning: Beacon for "${name}" may not have been delivered after ${maxBeaconAttempts} attempts. Check agent manually.\n`,
+			);
+		}
 
 		// 14. Output result
 		const output = {
