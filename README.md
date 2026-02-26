@@ -36,12 +36,6 @@ Legio changes that. It spawns specialized agents in isolated git worktrees, coor
 </p>
 
 <p align="center">
-  <img src="assets/gateway-chat.png" alt="Gateway Chat — conversational planning interface" width="800">
-  <br>
-  <em>Gateway Chat: natural language interface for planning and task decomposition</em>
-</p>
-
-<p align="center">
   <img src="assets/inspect.png" alt="Inspect — deep per-agent inspection" width="800">
   <br>
   <em>Inspect: deep dive into any agent's activity, tool calls, and terminal output</em>
