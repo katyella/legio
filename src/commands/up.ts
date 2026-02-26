@@ -6,7 +6,8 @@
  * 2. Initialize .legio/ if needed (legio init)
  * 3. Start the server in daemon mode (legio server start --daemon)
  *    The server auto-starts the coordinator with watchdog.
- * 4. Open the browser (unless --no-open)
+ * 4. Start the gateway (legio gateway start --no-attach)
+ * 5. Open the browser (unless --no-open)
  *
  * Running legio up when everything is already running is a safe no-op.
  */
@@ -116,8 +117,8 @@ Options:
   --help, -h     Show this help
 
 legio up initializes .legio/ if needed, starts the server in daemon mode,
-and opens the browser. The server auto-starts the coordinator with watchdog
-Running legio up when already running is a no-op.`;
+starts the gateway, and opens the browser. The server auto-starts the
+coordinator with watchdog. Running legio up when already running is a no-op.`;
 
 /**
  * Entry point for \`legio up [options]\`.
@@ -163,6 +164,8 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	let initRan = false;
 	let serverStarted = false;
 	let serverAlreadyRunning = false;
+	let gatewayStarted = false;
+	let gatewayAlreadyRunning = false;
 
 	// 2. Check if .legio/ is initialized
 	const configPath = join(projectRoot, ".legio", "config.yaml");
@@ -204,7 +207,7 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	}
 
 	if (!serverAlreadyRunning) {
-		// 4. Start server in daemon mode
+		// Start server in daemon mode
 		if (!json) {
 			process.stdout.write(`Starting server on ${host}:${port}...\n`);
 		}
@@ -219,6 +222,33 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 		serverStarted = true;
 	}
 
+	// 4. Check if gateway is already running and start if needed (non-fatal)
+	let gatewayRunning = false;
+	try {
+		const gatewayStatus = await run(["legio", "gateway", "status", "--json"], { cwd: projectRoot });
+		if (gatewayStatus.exitCode === 0) {
+			const statusData = JSON.parse(gatewayStatus.stdout.trim()) as { running?: boolean };
+			if (statusData.running === true) {
+				gatewayAlreadyRunning = true;
+				gatewayRunning = true;
+				if (!json) process.stdout.write("Gateway already running\n");
+			}
+		}
+	} catch {
+		// ignore status check errors, proceed to try starting
+	}
+	if (!gatewayRunning) {
+		const gatewayStart = await run(["legio", "gateway", "start", "--no-attach"], {
+			cwd: projectRoot,
+		});
+		if (gatewayStart.exitCode === 0) {
+			gatewayStarted = true;
+			if (!json && gatewayStart.stdout) process.stdout.write(gatewayStart.stdout);
+		} else {
+			process.stderr.write(`Warning: gateway start failed: ${gatewayStart.stderr.trim()}\n`);
+		}
+	}
+
 	const url = `http://${host}:${port}`;
 
 	// 5. Open browser (unless --no-open)
@@ -229,7 +259,15 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	// 6. Print summary
 	if (json) {
 		process.stdout.write(
-			`${JSON.stringify({ url, initRan, serverStarted, serverAlreadyRunning, serverPid })}\n`,
+			`${JSON.stringify({
+				url,
+				initRan,
+				serverStarted,
+				serverAlreadyRunning,
+				serverPid,
+				gatewayStarted,
+				gatewayAlreadyRunning,
+			})}\n`,
 		);
 	} else {
 		process.stdout.write(`\nLegio is up at ${url}\n`);

@@ -31,6 +31,12 @@ function makeRunCommand(
 const GIT_OK = { stdout: "true\n", stderr: "", exitCode: 0 };
 const INIT_OK = { stdout: "Initialized .legio/\n", stderr: "", exitCode: 0 };
 const SERVER_START_OK = { stdout: "Server started\n", stderr: "", exitCode: 0 };
+const GATEWAY_STATUS_NOT_RUNNING = {
+	stdout: JSON.stringify({ running: false }),
+	stderr: "",
+	exitCode: 0,
+};
+const GATEWAY_START_OK = { stdout: "Gateway started\n", stderr: "", exitCode: 0 };
 
 describe("upCommand", () => {
 	let capturedStdout: string;
@@ -95,6 +101,10 @@ describe("upCommand", () => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "init") return INIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => false, // config.yaml not found, no server.pid
@@ -120,6 +130,10 @@ describe("upCommand", () => {
 				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // config exists, no server.pid
@@ -143,6 +157,10 @@ describe("upCommand", () => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "init") return INIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // initialized, no server.pid
@@ -164,6 +182,10 @@ describe("upCommand", () => {
 			_runCommand: async (cmd) => {
 				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => true, // config.yaml exists AND server.pid exists
@@ -190,6 +212,10 @@ describe("upCommand", () => {
 				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml") || p.endsWith("server.pid"),
@@ -214,6 +240,10 @@ describe("upCommand", () => {
 				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // no server.pid
@@ -241,6 +271,10 @@ describe("upCommand", () => {
 				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -266,6 +300,10 @@ describe("upCommand", () => {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -287,6 +325,10 @@ describe("upCommand", () => {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -345,6 +387,10 @@ describe("upCommand", () => {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -361,17 +407,25 @@ describe("upCommand", () => {
 			initRan: boolean;
 			serverStarted: boolean;
 			serverAlreadyRunning: boolean;
+			gatewayStarted: boolean;
+			gatewayAlreadyRunning: boolean;
 		};
 		expect(parsed.url).toBe("http://127.0.0.1:4173");
 		expect(parsed.serverStarted).toBe(true);
 		expect(parsed.initRan).toBe(false);
 		expect(parsed.serverAlreadyRunning).toBe(false);
+		expect(parsed.gatewayStarted).toBe(true);
+		expect(parsed.gatewayAlreadyRunning).toBe(false);
 	});
 
 	it("JSON output shows serverAlreadyRunning when server is up", async () => {
 		const deps: UpDeps = {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => true,
@@ -396,6 +450,10 @@ describe("upCommand", () => {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -407,5 +465,133 @@ describe("upCommand", () => {
 
 		await upCommand(["--port", "5000"], deps);
 		expect(capturedStdout).toContain("http://127.0.0.1:5000");
+	});
+
+	it("starts gateway when not already running", async () => {
+		const commands: string[][] = [];
+		const deps: UpDeps = {
+			_runCommand: async (cmd) => {
+				commands.push(cmd);
+				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
+				return { stdout: "", stderr: "unexpected", exitCode: 1 };
+			},
+			_fileExists: async (p) => p.endsWith("config.yaml"),
+			_readPid: async () => null,
+			_isProcessRunning: () => false,
+			_openBrowser: () => {},
+			_projectRoot: "/tmp/test-project",
+		};
+
+		await upCommand(["--json"], deps);
+
+		const gatewayStartCalled = commands.some(
+			(c) =>
+				c[0] === "legio" && c[1] === "gateway" && c[2] === "start" && c.includes("--no-attach"),
+		);
+		expect(gatewayStartCalled).toBe(true);
+
+		const parsed = JSON.parse(capturedStdout.trim()) as {
+			gatewayStarted: boolean;
+			gatewayAlreadyRunning: boolean;
+		};
+		expect(parsed.gatewayStarted).toBe(true);
+		expect(parsed.gatewayAlreadyRunning).toBe(false);
+	});
+
+	it("skips gateway start when already running", async () => {
+		const commands: string[][] = [];
+		const deps: UpDeps = {
+			_runCommand: async (cmd) => {
+				commands.push(cmd);
+				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status") {
+					return { stdout: JSON.stringify({ running: true }), stderr: "", exitCode: 0 };
+				}
+				return { stdout: "", stderr: "unexpected", exitCode: 1 };
+			},
+			_fileExists: async (p) => p.endsWith("config.yaml"),
+			_readPid: async () => null,
+			_isProcessRunning: () => false,
+			_openBrowser: () => {},
+			_projectRoot: "/tmp/test-project",
+		};
+
+		await upCommand(["--json"], deps);
+
+		const gatewayStartCalled = commands.some(
+			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
+		);
+		expect(gatewayStartCalled).toBe(false);
+
+		const parsed = JSON.parse(capturedStdout.trim()) as {
+			gatewayStarted: boolean;
+			gatewayAlreadyRunning: boolean;
+		};
+		expect(parsed.gatewayStarted).toBe(false);
+		expect(parsed.gatewayAlreadyRunning).toBe(true);
+	});
+
+	it("continues when gateway start fails (non-fatal)", async () => {
+		const deps: UpDeps = {
+			_runCommand: async (cmd) => {
+				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start") {
+					return { stdout: "", stderr: "gateway failed", exitCode: 1 };
+				}
+				return { stdout: "", stderr: "unexpected", exitCode: 1 };
+			},
+			_fileExists: async (p) => p.endsWith("config.yaml"),
+			_readPid: async () => null,
+			_isProcessRunning: () => false,
+			_openBrowser: () => {},
+			_projectRoot: "/tmp/test-project",
+		};
+
+		await expect(upCommand(["--json"], deps)).resolves.toBeUndefined();
+
+		const parsed = JSON.parse(capturedStdout.trim()) as {
+			gatewayStarted: boolean;
+			gatewayAlreadyRunning: boolean;
+		};
+		expect(parsed.gatewayStarted).toBe(false);
+		expect(parsed.gatewayAlreadyRunning).toBe(false);
+	});
+
+	it("continues when gateway status check fails", async () => {
+		const commands: string[][] = [];
+		const deps: UpDeps = {
+			_runCommand: async (cmd) => {
+				commands.push(cmd);
+				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status") {
+					return { stdout: "", stderr: "status failed", exitCode: 1 };
+				}
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
+					return GATEWAY_START_OK;
+				return { stdout: "", stderr: "unexpected", exitCode: 1 };
+			},
+			_fileExists: async (p) => p.endsWith("config.yaml"),
+			_readPid: async () => null,
+			_isProcessRunning: () => false,
+			_openBrowser: () => {},
+			_projectRoot: "/tmp/test-project",
+		};
+
+		await expect(upCommand([], deps)).resolves.toBeUndefined();
+
+		const gatewayStartCalled = commands.some(
+			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
+		);
+		expect(gatewayStartCalled).toBe(true);
 	});
 });
