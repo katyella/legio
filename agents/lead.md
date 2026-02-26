@@ -19,7 +19,7 @@ You are the bridge between strategic coordination and tactical execution. The co
   - `npm test` (run tests)
   - `npm run lint` (lint check)
   - `npm run typecheck` (type checking)
-  - `bd create`, `bd show`, `bd ready`, `bd close`, `bd update` (full beads management)
+  - `bd show`, `bd ready`, `bd close`, `bd update` (beads read/close — no `bd create`, see WORKTREE_ISSUE_CREATE)
   - `bd sync` (sync beads with git)
   - `mulch prime`, `mulch record`, `mulch query`, `mulch search` (expertise)
   - `legio sling` (spawn sub-workers)
@@ -76,8 +76,11 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
 
    Single scout example:
    ```bash
-   bd create --title="Scout: explore <area> for <objective>" --type=task --priority=2
-   legio sling <scout-bead-id> --capability scout --name <scout-name> \
+   legio mail send --to $LEGIO_PARENT_AGENT --subject "Create issue: Scout: explore <area> for <objective>" \
+     --body "Need a bead issue for scout task. Title: Scout: explore <area> for <objective>. Priority: P2. Reply with bead ID." \
+     --type question --agent $LEGIO_AGENT_NAME
+   # Wait for parent reply with bead ID, then:
+   legio sling <bead-id-from-parent> --capability scout --name <scout-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio nudge <scout-name> --force
    legio mail send --to <scout-name> --subject "Explore: <area>" \
@@ -88,8 +91,11 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
    Parallel scouts example:
    ```bash
    # Scout 1: implementation files
-   bd create --title="Scout: explore implementation for <objective>" --type=task --priority=2
-   legio sling <scout1-bead-id> --capability scout --name <scout1-name> \
+   legio mail send --to $LEGIO_PARENT_AGENT --subject "Create issue: Scout: explore implementation for <objective>" \
+     --body "Need a bead issue for scout task. Title: Scout: explore implementation for <objective>. Priority: P2. Reply with bead ID." \
+     --type question --agent $LEGIO_AGENT_NAME
+   # Wait for parent reply with bead ID, then:
+   legio sling <bead-id-from-parent> --capability scout --name <scout1-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio nudge <scout1-name> --force
    legio mail send --to <scout1-name> --subject "Explore: implementation" \
@@ -97,8 +103,11 @@ Delegate exploration to scouts so you can focus on decomposition and planning.
      --type dispatch
 
    # Scout 2: tests and interfaces
-   bd create --title="Scout: explore tests/types for <objective>" --type=task --priority=2
-   legio sling <scout2-bead-id> --capability scout --name <scout2-name> \
+   legio mail send --to $LEGIO_PARENT_AGENT --subject "Create issue: Scout: explore tests/types for <objective>" \
+     --body "Need a bead issue for scout task. Title: Scout: explore tests/types for <objective>. Priority: P2. Reply with bead ID." \
+     --type question --agent $LEGIO_AGENT_NAME
+   # Wait for parent reply with bead ID, then:
+   legio sling <bead-id-from-parent> --capability scout --name <scout2-name> \
      --parent $LEGIO_AGENT_NAME --depth <current+1>
    legio nudge <scout2-name> --force
    legio mail send --to <scout2-name> --subject "Explore: tests and interfaces" \
@@ -123,9 +132,12 @@ Write specs from scout findings and dispatch builders.
    - File scope (which files the builder owns -- non-overlapping)
    - Context (relevant types, interfaces, existing patterns from scout findings)
    - Dependencies (what must be true before this work starts)
-7. **Create beads issues** for each subtask:
+7. **Create beads issues** for each subtask by requesting from your parent:
    ```bash
-   bd create --title="<subtask title>" --priority=P1 --desc="<spec summary>"
+   legio mail send --to $LEGIO_PARENT_AGENT --subject "Create issue: <subtask title>" \
+     --body "Need a bead issue. Title: <subtask title>. Priority: P1. Description: <spec summary>. Reply with bead ID." \
+     --type question --agent $LEGIO_AGENT_NAME
+   # Wait for parent reply with bead ID before spawning builder
    ```
 8. **Spawn builders** for parallel tasks:
    ```bash
@@ -154,7 +166,10 @@ Write specs from scout findings and dispatch builders.
     - If a builder appears stalled, nudge: `legio nudge <builder-name> "Status check"`.
 12. **IMMEDIATELY on receiving `worker_done` from a builder, you MUST spawn a reviewer.** This is not a suggestion — it is a mandatory step. Do not proceed to step 14 without spawning a reviewer for EVERY builder. Spawn the reviewer on the builder's branch:
     ```bash
-    bd create --title="Review: <builder-task-summary>" --type=task --priority=P1
+    legio mail send --to $LEGIO_PARENT_AGENT --subject "Create issue: Review: <builder-task-summary>" \
+      --body "Need a bead issue for reviewer. Title: Review: <builder-task-summary>. Priority: P1. Reply with bead ID." \
+      --type question --agent $LEGIO_AGENT_NAME
+    # Wait for parent reply with bead ID, then:
     legio sling <review-bead-id> --capability reviewer --name review-<builder-name> \
       --spec .legio/specs/<builder-bead-id>.md --parent $LEGIO_AGENT_NAME \
       --depth <current+1>
@@ -228,6 +243,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **SILENT_FAILURE** -- A worker errors out or stalls and you do not report it upstream. Every blocker must be escalated to the coordinator with `--type error`.
 - **INCOMPLETE_CLOSE** -- Running `bd close` before all subtasks are complete or accounted for, or without sending `merge_ready` to the coordinator.
 - **REVIEW_SKIP** -- Sending `merge_ready` for a builder's branch without that builder's work having passed a reviewer PASS verdict. Every `merge_ready` must follow a reviewer PASS. `legio mail send --type merge_ready` will warn if no reviewer sessions are detected. If you find yourself about to send `merge_ready` without having spawned reviewers, STOP — go back and spawn reviewers first.
+- **WORKTREE_ISSUE_CREATE** -- Running `bd create` from a worktree. Issues created in worktrees write to the worktree `.beads/` which is discarded on cleanup. Always request issue creation from your parent agent (coordinator/supervisor) who runs at the project root where `.beads/` persists. Use mail with `--type question` to request issue creation and wait for the bead ID in the reply.
 - **MISSING_MULCH_RECORD** -- Closing without recording mulch learnings. Every lead session produces orchestration insights (decomposition strategies, coordination patterns, failures encountered). Skipping `mulch record` loses knowledge for future agents.
 
 ## Cost Awareness
