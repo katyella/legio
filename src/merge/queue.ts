@@ -17,6 +17,18 @@ export interface MergeQueue {
 	/** Remove and return the first pending entry, or null if none. */
 	dequeue(): MergeEntry | null;
 
+	/**
+	 * Remove and return all pending entries whose file scopes are mutually disjoint.
+	 *
+	 * Walks the pending queue in FIFO order. The first entry is always included.
+	 * Each subsequent entry is included only if its filesModified does not overlap
+	 * with any already-selected entry. Overlapping entries are left in the queue
+	 * for the next dequeue cycle.
+	 *
+	 * Returns an empty array when the queue has no pending entries.
+	 */
+	dequeueParallel(): MergeEntry[];
+
 	/** Return the first pending entry without removing it, or null if none. */
 	peek(): MergeEntry | null;
 
@@ -112,6 +124,10 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 		SELECT * FROM merge_queue WHERE status = 'pending' ORDER BY id ASC LIMIT 1
 	`);
 
+	const getAllPendingStmt = db.prepare(`
+		SELECT * FROM merge_queue WHERE status = 'pending' ORDER BY id ASC
+	`);
+
 	const deleteByIdStmt = db.prepare(`
 		DELETE FROM merge_queue WHERE id = $id
 	`);
@@ -165,6 +181,35 @@ export function createMergeQueue(dbPath: string): MergeQueue {
 			deleteByIdStmt.run({ id: row.id });
 
 			return rowToEntry(row);
+		},
+
+		dequeueParallel(): MergeEntry[] {
+			const rows = getAllPendingStmt.all() as MergeQueueRow[];
+
+			if (rows.length === 0) {
+				return [];
+			}
+
+			const selected: MergeQueueRow[] = [];
+			const claimedFiles = new Set<string>();
+
+			for (const row of rows) {
+				const entry = rowToEntry(row);
+				const hasOverlap = entry.filesModified.some((f) => claimedFiles.has(f));
+
+				if (!hasOverlap) {
+					selected.push(row);
+					for (const f of entry.filesModified) {
+						claimedFiles.add(f);
+					}
+				}
+			}
+
+			for (const row of selected) {
+				deleteByIdStmt.run({ id: row.id });
+			}
+
+			return selected.map(rowToEntry);
 		},
 
 		peek(): MergeEntry | null {
