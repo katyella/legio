@@ -22,10 +22,5 @@ jobs:
 
       - run: npm ci
 
-      # First publish: uses NPM_TOKEN secret (granular access token)
-      # After OIDC trusted publisher is configured: remove NPM_TOKEN,
-      # npm will authenticate via OIDC automatically
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
