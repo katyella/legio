@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { WorktreeError } from "../errors.ts";
 import {
 	cleanupTempDir,
+	cloneFixtureRepo,
 	commitFile,
-	createTempGitRepo,
 	getDefaultBranch,
 } from "../test-helpers.ts";
 import { createWorktree, isBranchMerged, listWorktrees, removeWorktree } from "./manager.ts";
@@ -47,7 +47,7 @@ describe("createWorktree", () => {
 
 	beforeEach(async () => {
 		// realpathSync resolves macOS /var -> /private/var symlink so paths match git output
-		repoDir = realpathSync(await createTempGitRepo());
+		repoDir = realpathSync(await cloneFixtureRepo());
 		defaultBranch = await getDefaultBranch(repoDir);
 		worktreesDir = join(repoDir, ".legio", "worktrees");
 		await mkdir(worktreesDir, { recursive: true });
@@ -152,7 +152,7 @@ describe("listWorktrees", () => {
 	let defaultBranch: string;
 
 	beforeEach(async () => {
-		repoDir = realpathSync(await createTempGitRepo());
+		repoDir = realpathSync(await cloneFixtureRepo());
 		defaultBranch = await getDefaultBranch(repoDir);
 		worktreesDir = join(repoDir, ".legio", "worktrees");
 		await mkdir(worktreesDir, { recursive: true });
@@ -255,7 +255,7 @@ describe("removeWorktree", () => {
 	let defaultBranch: string;
 
 	beforeEach(async () => {
-		repoDir = realpathSync(await createTempGitRepo());
+		repoDir = realpathSync(await cloneFixtureRepo());
 		defaultBranch = await getDefaultBranch(repoDir);
 		worktreesDir = join(repoDir, ".legio", "worktrees");
 		await mkdir(worktreesDir, { recursive: true });
@@ -381,7 +381,7 @@ describe("isBranchMerged", () => {
 	let defaultBranch: string;
 
 	beforeEach(async () => {
-		repoDir = realpathSync(await createTempGitRepo());
+		repoDir = realpathSync(await cloneFixtureRepo());
 		defaultBranch = await getDefaultBranch(repoDir);
 		worktreesDir = join(repoDir, ".legio", "worktrees");
 		await mkdir(worktreesDir, { recursive: true });
