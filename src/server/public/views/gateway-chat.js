@@ -239,6 +239,9 @@ export function GatewayChat({ gwRunning }) {
 
 		try {
 			setInput("");
+			if (inputRef.current) {
+				inputRef.current.style.height = "auto";
+			}
 			inputRef.current?.focus();
 			thinkingCountRef.current += 1;
 			setThinking(true);
@@ -267,6 +270,9 @@ export function GatewayChat({ gwRunning }) {
 	const handleInput = useCallback((e) => {
 		const value = e.target.value;
 		setInput(value);
+		// Auto-resize textarea: grow to content height, cap at 200px then scroll internally
+		e.target.style.height = "auto";
+		e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
 		const cursorPos = e.target.selectionStart ?? value.length;
 		const textBeforeCursor = value.slice(0, cursorPos);
 
