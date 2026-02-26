@@ -445,4 +445,52 @@ describe("DEFAULT_CONFIG", () => {
 	test("agents.maxAgentsPerLead defaults to 5", () => {
 		expect(DEFAULT_CONFIG.agents.maxAgentsPerLead).toBe(5);
 	});
+
+	test("has qualityGates with npm defaults", () => {
+		expect(DEFAULT_CONFIG.qualityGates).toBeDefined();
+		expect(DEFAULT_CONFIG.qualityGates?.test).toBe("npm test");
+		expect(DEFAULT_CONFIG.qualityGates?.lint).toBe("npm run lint");
+		expect(DEFAULT_CONFIG.qualityGates?.typecheck).toBe("npm run typecheck");
+	});
+});
+
+describe("loadConfig qualityGates", () => {
+	let tempDir: string;
+
+	beforeEach(async () => {
+		tempDir = await mkdtemp(join(tmpdir(), "legio-test-"));
+		await mkdir(join(tempDir, ".legio"), { recursive: true });
+	});
+
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
+	});
+
+	async function writeConfig(yaml: string): Promise<void> {
+		await writeFile(join(tempDir, ".legio", "config.yaml"), yaml);
+	}
+
+	test("full custom qualityGates override", async () => {
+		await writeConfig(`
+qualityGates:
+  test: "bun test"
+  lint: "bun run lint"
+  typecheck: "bun run typecheck"
+`);
+		const config = await loadConfig(tempDir);
+		expect(config.qualityGates?.test).toBe("bun test");
+		expect(config.qualityGates?.lint).toBe("bun run lint");
+		expect(config.qualityGates?.typecheck).toBe("bun run typecheck");
+	});
+
+	test("partial qualityGates override keeps defaults for unspecified fields", async () => {
+		await writeConfig(`
+qualityGates:
+  test: "bun test"
+`);
+		const config = await loadConfig(tempDir);
+		expect(config.qualityGates?.test).toBe("bun test");
+		expect(config.qualityGates?.lint).toBe("npm run lint");
+		expect(config.qualityGates?.typecheck).toBe("npm run typecheck");
+	});
 });

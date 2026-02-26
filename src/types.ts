@@ -59,6 +59,11 @@ export interface LegioConfig {
 		verbose: boolean;
 		redactSecrets: boolean;
 	};
+	qualityGates?: {
+		test?: string; // default: "npm test"
+		lint?: string; // default: "npm run lint"
+		typecheck?: string; // default: "npm run typecheck"
+	};
 }
 
 // === Agent Manifest ===
@@ -298,6 +303,12 @@ export interface OverlayConfig {
 	canonicalRoot?: string;
 	/** When true, lead agents should skip reviewer spawning and self-verify quality gates instead. */
 	skipReview?: boolean;
+	/** Per-project quality gate commands, passed through from LegioConfig. */
+	qualityGates?: {
+		test: string;
+		lint: string;
+		typecheck: string;
+	};
 }
 
 // === Merge Queue ===

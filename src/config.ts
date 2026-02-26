@@ -53,6 +53,11 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		verbose: false,
 		redactSecrets: true,
 	},
+	qualityGates: {
+		test: "npm test",
+		lint: "npm run lint",
+		typecheck: "npm run typecheck",
+	},
 };
 
 const CONFIG_FILENAME = "config.yaml";
