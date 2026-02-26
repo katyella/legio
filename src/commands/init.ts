@@ -419,6 +419,7 @@ async function migrateExistingDatabases(legioPath: string): Promise<string[]> {
 	if (await fileExists(mailDbPath)) {
 		const db = new Database(mailDbPath);
 		db.exec("PRAGMA journal_mode = WAL");
+		db.exec("PRAGMA synchronous = NORMAL");
 		db.exec("PRAGMA busy_timeout = 5000");
 		db.exec(`
 CREATE TABLE IF NOT EXISTS messages (
@@ -445,6 +446,7 @@ CREATE INDEX IF NOT EXISTS idx_thread ON messages(thread_id)`);
 	if (await fileExists(metricsDbPath)) {
 		const db = new Database(metricsDbPath);
 		db.exec("PRAGMA journal_mode = WAL");
+		db.exec("PRAGMA synchronous = NORMAL");
 		db.exec("PRAGMA busy_timeout = 5000");
 		db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (

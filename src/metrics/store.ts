@@ -222,6 +222,7 @@ export function createMetricsStore(dbPath: string): MetricsStore {
 
 	// Configure for concurrent access
 	db.exec("PRAGMA journal_mode = WAL");
+	db.exec("PRAGMA synchronous = NORMAL");
 	db.exec("PRAGMA busy_timeout = 5000");
 
 	// Create schema
