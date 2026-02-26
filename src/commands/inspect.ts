@@ -8,7 +8,6 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { readTerminalLog } from "../worktree/tmux.ts";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
@@ -16,6 +15,7 @@ import { color } from "../logging/color.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession, StoredEvent, ToolStats } from "../types.ts";
+import { readTerminalLog } from "../worktree/tmux.ts";
 
 /**
  * Parse a named flag value from args.

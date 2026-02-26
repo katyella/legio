@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, stat } from "node:fs/promises";
 import { EventEmitter } from "node:events";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AgentError } from "../errors.ts";
@@ -1058,17 +1058,13 @@ describe("startPipePane", () => {
 	});
 
 	test("throws AgentError if tmux pipe-pane fails", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "can't find session: legio-auth", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "can't find session: legio-auth", 1));
 
 		await expect(startPipePane("legio-auth", "/tmp/terminal.log")).rejects.toThrow(AgentError);
 	});
 
 	test("AgentError includes session name on failure", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "no server running", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "no server running", 1));
 
 		try {
 			await startPipePane("my-agent", "/tmp/terminal.log");
@@ -1099,9 +1095,7 @@ describe("stopPipePane", () => {
 	});
 
 	test("does not throw when tmux returns non-zero exit code", async () => {
-		mockSpawn.mockImplementation(() =>
-			createMockProcess("", "can't find session: gone", 1),
-		);
+		mockSpawn.mockImplementation(() => createMockProcess("", "can't find session: gone", 1));
 
 		// Should not throw — stopPipePane is best-effort
 		await expect(stopPipePane("gone-session")).resolves.toBeUndefined();
