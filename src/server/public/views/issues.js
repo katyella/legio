@@ -198,6 +198,7 @@ export function IssuesView() {
 
 	const visibleIssues = showClosed ? filtered : filtered.filter((i) => i.status !== "closed");
 	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
+	closed.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
 	const filterButtons = [null, 0, 1, 2, 3, 4];
 
@@ -319,6 +320,7 @@ window.renderIssues = (appState, el) => {
 
 	const visibleIssues = showClosed ? filtered : filtered.filter((i) => i.status !== "closed");
 	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
+	closed.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
 	const filterButtons = [
 		{ key: "all", label: "All" },
