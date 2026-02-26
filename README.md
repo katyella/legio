@@ -4,6 +4,7 @@
   <img src="assets/legio-mascot.png" alt="Legio mascot" width="400">
 </p>
 
+[![npm](https://img.shields.io/npm/v/@katyella/legio)](https://www.npmjs.com/package/@katyella/legio)
 [![CI](https://img.shields.io/github/actions/workflow/status/katyella/legio/ci.yml?branch=main)](https://github.com/katyella/legio/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/Node-%E2%89%A522-green)](https://nodejs.org)
@@ -172,7 +173,7 @@ Legio includes a browser-based dashboard for real-time fleet monitoring. Start i
 ## Installation
 
 ```bash
-npm install -g legio
+npm install -g @katyella/legio
 ```
 
 ### From Source
@@ -453,13 +454,13 @@ npm run test:e2e
 npx vitest run src/config.test.ts
 
 # Lint + format check
-npx biome check .
+npm run lint
 
 # Type check
-tsc --noEmit
+npm run typecheck
 
 # All quality gates
-npm test && npx biome check . && tsc --noEmit
+npm test && npm run lint && npm run typecheck
 ```
 
 ### Versioning
