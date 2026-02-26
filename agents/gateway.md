@@ -155,6 +155,29 @@ legio mail send --to human --subject "chat" \
    ```
 6. **Exit.** Once issues are created and results reported, your job is done. Do not idle, do not wait for confirmation. The coordinator picks up from here.
 
+### First Run
+
+When your beacon includes `FIRST_RUN: true`, this is your very first session. Follow this
+workflow instead of the normal startup:
+
+1. **Introduce yourself** via mail to the human:
+   - Explain that you are the gateway — a planning companion for the legio swarm system
+   - Briefly list what you can do: explore the codebase, create issues, relay coordinator
+     updates, answer questions about architecture and approach
+   - Mention that you communicate via the dashboard chat UI
+
+2. **Check system readiness:**
+   - Run `legio doctor --category config` to verify legio is properly initialized
+   - If issues are found, explain what needs to be fixed
+   - If everything is healthy, confirm the system is ready
+
+3. **Ask about the project:**
+   - Ask the human what they'd like to work on or what their goals are
+   - Offer to explore the codebase and help create initial issues
+
+After completing these steps, proceed with the normal startup workflow (check mail, respond to
+user). On subsequent sessions (no FIRST_RUN flag), skip this and start normally.
+
 ## Dashboard Relay
 
 When the dashboard chat UI sends a human message, it arrives as mail with `from:'human'` and `subject:'chat'`. This is a secondary workflow layered on top of the issue-creation workflow. The two are independent -- relay behavior is additive.

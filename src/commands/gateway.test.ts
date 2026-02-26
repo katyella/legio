@@ -449,6 +449,42 @@ describe("startGateway", () => {
 		}
 	});
 
+	test("sends FIRST_RUN beacon on first run (no existing identity)", async () => {
+		const { deps, calls } = makeDeps();
+
+		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
+
+		// First sendKeys call should be the beacon
+		const beaconCall = calls.sendKeys.find((c) => c.keys.includes("[LEGIO]"));
+		expect(beaconCall).toBeDefined();
+		expect(beaconCall?.keys).toContain("FIRST_RUN: true");
+	});
+
+	test("does not send FIRST_RUN beacon on subsequent runs (identity exists)", async () => {
+		// Create identity first so it exists before starting
+		const identityDir = join(legioDir, "agents", "gateway");
+		await mkdir(identityDir, { recursive: true });
+		await writeFile(
+			join(identityDir, "identity.yaml"),
+			[
+				"name: gateway",
+				"capability: gateway",
+				`created: ${new Date().toISOString()}`,
+				"sessionsCompleted: 1",
+				"expertiseDomains: []",
+				"recentTasks: []",
+			].join("\n"),
+		);
+
+		const { deps, calls } = makeDeps();
+
+		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
+
+		const beaconCall = calls.sendKeys.find((c) => c.keys.includes("[LEGIO]"));
+		expect(beaconCall).toBeDefined();
+		expect(beaconCall?.keys).not.toContain("FIRST_RUN");
+	});
+
 	test("cleans up dead session and starts new one", async () => {
 		// Write an existing session that claims to be working
 		const deadSession = makeGatewaySession({
@@ -666,6 +702,30 @@ describe("buildGatewayBeacon", () => {
 		// Should have exactly 4 " — " separators (5 parts)
 		const dashes = beacon.split(" — ");
 		expect(dashes).toHaveLength(5);
+	});
+
+	test("default (no args) does not include FIRST_RUN", () => {
+		const beacon = buildGatewayBeacon();
+		expect(beacon).not.toContain("FIRST_RUN");
+	});
+
+	test("isFirstRun=false does not include FIRST_RUN", () => {
+		const beacon = buildGatewayBeacon(false);
+		expect(beacon).not.toContain("FIRST_RUN");
+	});
+
+	test("isFirstRun=true includes FIRST_RUN flag", () => {
+		const beacon = buildGatewayBeacon(true);
+		expect(beacon).toContain("FIRST_RUN: true");
+		expect(beacon).toContain("Follow the First Run workflow");
+	});
+
+	test("isFirstRun=true beacon is longer than default", () => {
+		const normal = buildGatewayBeacon(false);
+		const firstRun = buildGatewayBeacon(true);
+		expect(firstRun.length).toBeGreaterThan(normal.length);
+		// The FIRST_RUN part is appended as an additional em-dash separated segment
+		expect(firstRun).toContain("FIRST_RUN: true");
 	});
 });
 

@@ -67,7 +67,7 @@ export interface GatewayDeps {
  * Build the gateway startup beacon — the first message sent to the gateway
  * via tmux send-keys after Claude Code initializes.
  */
-export function buildGatewayBeacon(): string {
+export function buildGatewayBeacon(isFirstRun = false): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
 		`[LEGIO] ${GATEWAY_NAME} (gateway) ${timestamp}`,
@@ -76,6 +76,9 @@ export function buildGatewayBeacon(): string {
 		"ISSUES: Use bd create",
 		`Startup: run mulch prime, check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user`,
 	];
+	if (isFirstRun) {
+		parts.push("FIRST_RUN: true — Follow the First Run workflow in your agent definition");
+	}
 	return parts.join(" — ");
 }
 
@@ -224,8 +227,9 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		}
 
 		// Send beacon after TUI initialization delay
+		const isFirstRun = !existingIdentity;
 		await sleep(3_000);
-		const beacon = buildGatewayBeacon();
+		const beacon = buildGatewayBeacon(isFirstRun);
 		await tmux.sendKeys(tmuxSession, beacon);
 
 		// Follow-up Enter to ensure submission (same pattern as sling.ts)
