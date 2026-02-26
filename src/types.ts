@@ -51,7 +51,6 @@ export interface LegioConfig {
 		tier0IntervalMs: number; // Default 30_000
 		tier1Enabled: boolean; // Tier 1: Triage agent (ephemeral AI analysis)
 		tier2Enabled: boolean; // Tier 2: Monitor agent (continuous patrol — not yet implemented)
-		staleThresholdMs: number; // When to consider agent stale
 		zombieThresholdMs: number; // When to kill
 		nudgeIntervalMs: number; // Time between progressive nudge stages (default 60_000)
 	};
@@ -98,7 +97,7 @@ export type Capability = (typeof SUPPORTED_CAPABILITIES)[number];
 
 // === Agent Session ===
 
-export type AgentState = "booting" | "working" | "completed" | "stalled" | "zombie";
+export type AgentState = "booting" | "working" | "completed" | "zombie";
 
 export interface AgentSession {
 	id: string; // Unique session ID

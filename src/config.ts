@@ -45,7 +45,6 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		tier0IntervalMs: 30_000,
 		tier1Enabled: false, // Tier 1: Triage agent (AI analysis)
 		tier2Enabled: false, // Tier 2: Monitor agent (not yet implemented)
-		staleThresholdMs: 300_000, // 5 minutes
 		zombieThresholdMs: 600_000, // 10 minutes
 		nudgeIntervalMs: 60_000, // 1 minute between progressive nudge stages
 	},
@@ -396,15 +395,8 @@ function validateConfig(config: LegioConfig): void {
 		});
 	}
 
-	if (config.watchdog.staleThresholdMs <= 0) {
-		throw new ValidationError("watchdog.staleThresholdMs must be positive", {
-			field: "watchdog.staleThresholdMs",
-			value: config.watchdog.staleThresholdMs,
-		});
-	}
-
-	if (config.watchdog.zombieThresholdMs <= config.watchdog.staleThresholdMs) {
-		throw new ValidationError("watchdog.zombieThresholdMs must be greater than staleThresholdMs", {
+	if (config.watchdog.zombieThresholdMs <= 0) {
+		throw new ValidationError("watchdog.zombieThresholdMs must be positive", {
 			field: "watchdog.zombieThresholdMs",
 			value: config.watchdog.zombieThresholdMs,
 		});
