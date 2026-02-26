@@ -14,26 +14,18 @@ Built on [Overstory](https://github.com/jayminwest/overstory).
 
 **Turn one Claude Code session into a multi-agent fleet.**
 
-Claude Code is powerful — but it works one task at a time, sequentially. One agent, one context window, one thread of execution.
+Claude Code is powerful — but it works one task at a time. One agent, one context window, one thread of execution.
 
-Legio changes that. It spawns specialized agents in isolated git worktrees, coordinates them through a typed SQLite messaging system, and merges their work back automatically with tiered conflict resolution. Your session becomes the orchestrator. The agents do the work in parallel.
+Legio changes that. It spawns specialized agents in isolated git worktrees, coordinates them through a typed SQLite messaging system, and merges their work back automatically. Your session becomes the orchestrator. The agents do the work in parallel.
+
+- **Parallel execution** — 5-10 agents working simultaneously, each in its own tmux session
+- **Conflict-free isolation** — every agent in its own git worktree with exclusive file ownership
+- **Structured coordination** — typed SQLite mail system with protocol-level message types, not ad-hoc prompts
+- **Automatic merge pipeline** — FIFO queue with 4-tier conflict resolution
+- **Real-time visibility** — browser dashboard shows every agent's status, cost, and output live
+- **Tiered health monitoring** — mechanical watchdog catches stalls and crashes before you do
 
 > **Warning: Agent swarms are not a universal solution.** Do not deploy Legio without understanding the risks of multi-agent orchestration — compounding error rates, cost amplification, debugging complexity, and merge conflicts are the normal case, not edge cases. Read [STEELMAN.md](STEELMAN.md) for a full risk analysis and the [Agentic Engineering Book](https://github.com/jayminwest/agentic-engineering-book) ([web version](https://jayminwest.com/agentic-engineering-book)) before using this tool in production.
-
-## Why Legio?
-
-**The problem:** Claude Code runs a single agent in a single session. Ten files across three subsystems means sequential work — one change at a time, in one context window, with no parallelism.
-
-**The solution:** A fleet of specialized agents, each with its own worktree, file scope, and tmux session. A coordinator decomposes the objective. Leads break it into tasks. Builders implement. Reviewers validate. Mergers integrate. All in parallel.
-
-**The payoff:**
-
-- Parallel execution — 5-10 agents working simultaneously
-- Conflict-free isolation — every agent in its own git worktree with exclusive file ownership
-- Structured coordination — typed SQLite mail system, not ad-hoc prompts
-- Automatic merge pipeline — FIFO queue with 4-tier conflict resolution
-- Real-time visibility — browser dashboard shows every agent status, cost, and output live
-- Tiered health monitoring — mechanical watchdog catches stalls and crashes
 
 ## See It in Action
 
@@ -57,8 +49,6 @@ Legio changes that. It spawns specialized agents in isolated git worktrees, coor
 
 ## Quick Start
 
-The fastest way to get started:
-
 ```bash
 cd your-project
 
@@ -72,41 +62,9 @@ legio doctor
 legio down
 ```
 
-Or step by step:
-
-```bash
-# Initialize legio in your project
-legio init
-
-# Install hooks into .claude/settings.local.json
-legio hooks install
-
-# Start the web UI server (daemon mode)
-legio server start --daemon
-
-# Start a coordinator (persistent orchestrator)
-legio coordinator start
-
-# Or spawn individual worker agents
-# Task IDs come from beads: run `bd ready` to find available work, or `bd create` to create new tasks
-legio sling <task-id> --capability builder --name my-builder
-
-# Check agent status
-legio status
-
-# Live TUI dashboard for monitoring the fleet
-legio dashboard
-
-# Nudge a stalled agent
-legio nudge <agent-name>
-
-# Check mail from agents
-legio mail check --inject
-```
-
 ## How It Works
 
-CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator agent manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
+CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
 
 ```
 Coordinator (persistent orchestrator at project root)
@@ -114,61 +72,17 @@ Coordinator (persistent orchestrator at project root)
         --> Workers: Scout, Builder, Reviewer, Merger (depth 2)
 ```
 
-### Agent Types
+**Agent types:** Coordinator, Lead, Gateway, Supervisor, Scout, Builder, Reviewer, Merger, Monitor, CTO — each with defined access levels (read-only vs read-write) and hierarchy constraints. See [docs/architecture.md](docs/architecture.md) for details.
 
-| Agent | Role | Access |
-|-------|------|--------|
-| **Coordinator** | Persistent orchestrator — decomposes objectives, dispatches agents, tracks task groups | Read-only |
-| **Lead** | Team coordination, can spawn sub-workers | Read-write |
-| **Gateway** | Planning companion — analyzes codebase, decomposes objectives into issues, bridges human intent and agent work | Read-only |
-| **Scout** | Read-only exploration and research | Read-only |
-| **Builder** | Implementation and code changes | Read-write |
-| **Reviewer** | Validation and code review | Read-only |
-| **Merger** | Branch merge specialist | Read-write |
-| **Supervisor** | Per-project team lead — manages worker lifecycle, handles nudge/escalation | Read-only |
-| **CTO** | Strategic technical leadership | Read-only |
-| **Monitor** | Tier 2 continuous fleet patrol — ongoing health monitoring | Read-only |
+## Key Features
 
-### Key Architecture
-
-- **Agent Definitions**: Two-layer system — base `.md` files define the HOW (workflow), per-task overlays define the WHAT (task scope). Base definition content is injected into spawned agent overlays automatically.
-- **Messaging**: Custom SQLite mail system with typed protocol — 8 message types (`worker_done`, `merge_ready`, `dispatch`, `escalation`, etc.) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
-- **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
-- **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
-- **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
-- **Web UI**: Browser-based dashboard with real-time WebSocket updates — agent monitoring, mail, terminal access, cost tracking, and setup wizard
-- **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
-- **Task Groups**: Batch coordination with auto-close when all member issues complete
-- **Session Lifecycle**: Checkpoint save/restore for compaction survivability, handoff orchestration for crash recovery
-- **Token Instrumentation**: Session metrics extracted from Claude Code transcript JSONL files
-
-## Web UI
-
-Legio includes a browser-based dashboard for real-time fleet monitoring. Start it with `legio server start` or `legio up`.
-
-**Views:**
-
-| View | Description |
-|------|-------------|
-| **Dashboard** | Agent status, mail feed, merge queue, system metrics |
-| **Costs** | Token usage and cost breakdown |
-| **Tasks** | Beads issue tracking and status |
-| **Chat** | Task-based conversations grouped by issue |
-| **Setup** | Initialization wizard and configuration |
-| **Gateway Chat** | Gateway agent conversation interface |
-| **Inspect** | Deep per-agent inspection |
-| **Task Detail** | Task overview with agents and communication tabs |
-
-**Tech:** Preact + HTM + Tailwind CSS, WebSocket for real-time updates, zero build step.
-
-## Requirements
-
-- [Node.js](https://nodejs.org) (v22+)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- git
-- tmux
-- [bd (beads)](https://github.com/jayminwest/beads) — issue tracking CLI
-- [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI
+- **Messaging system** — SQLite-backed typed mail with protocol messages (`worker_done`, `merge_ready`, `dispatch`, `escalation`), broadcast groups (`@all`, `@builders`), and auto-nudge on high priority
+- **Merge pipeline** — FIFO queue with 4-tier conflict resolution, from fast-forward through AI-assisted merge
+- **Web dashboard** — Real-time agent monitoring, mail feed, cost tracking, terminal access, and setup wizard via browser UI (Preact + HTM, zero build step)
+- **Health monitoring** — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 continuous monitor agent
+- **Tool enforcement** — PreToolUse hooks mechanically block dangerous operations per agent role
+- **Task groups** — Batch coordination with auto-close when all member issues complete
+- **Session lifecycle** — Checkpoint save/restore for compaction survivability, crash recovery handoffs
 
 ## Installation
 
@@ -185,366 +99,25 @@ npm install
 npm link
 ```
 
-## CLI Reference
+## Requirements
 
-### Bootstrap
+- [Node.js](https://nodejs.org) (v22+)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- git
+- tmux
+- [bd (beads)](https://github.com/jayminwest/beads) — issue tracking CLI
+- [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI
 
-```
-legio up                            Start everything (init + server + coordinator)
-  --port <n>                             Server port (default: 4173)
-  --host <addr>                          Server host (default: 127.0.0.1)
-  --no-open                              Skip opening browser
-  --force                                Reinitialize even if .legio/ exists
-  --json                                 JSON output
+## Documentation
 
-legio down                          Stop everything (coordinator + server)
-  --json                                 JSON output
-```
-
-### Core Workflow
-
-```
-legio init                          Initialize .legio/ in current project
-                                        (deploys agent definitions automatically)
-
-legio sling <task-id>              Spawn a worker agent
-  --capability <type>                    builder | scout | reviewer | lead | merger
-                                         | coordinator | supervisor | monitor
-  --name <name>                          Unique agent name
-  --spec <path>                          Path to task spec file
-  --files <f1,f2,...>                    Exclusive file scope
-  --parent <agent-name>                  Parent (for hierarchy tracking)
-  --depth <n>                            Current hierarchy depth
-  --json                                 JSON output
-
-legio prime                         Load context for orchestrator/agent
-  --agent <name>                         Per-agent priming
-  --compact                              Restore from checkpoint (compaction)
-
-legio spec write <bead-id>          Write a task specification
-  --body <content>                       Spec content (or pipe via stdin)
-
-legio agents discover               Discover agents by capability/state/parent
-  --capability <type>                    Filter by capability type
-  --state <state>                        Filter by agent state
-  --parent <name>                        Filter by parent agent
-  --json                                 JSON output
-```
-
-### Server
-
-```
-legio server start                  Start the web UI server
-  --port <n>                             Server port (default: 4173)
-  --host <addr>                          Server host (default: 127.0.0.1)
-  --open                                 Open browser on start
-  --daemon                               Run as background process
-legio server stop                   Stop the server daemon
-legio server status                 Show server state
-```
-
-### Coordination Agents
-
-```
-legio coordinator start             Start persistent coordinator agent
-  --attach / --no-attach                 TTY-aware tmux attach (default: auto)
-  --watchdog                             Auto-start watchdog daemon with coordinator
-  --monitor                              Auto-start Tier 2 monitor agent
-legio coordinator stop              Stop coordinator
-legio coordinator status            Show coordinator state
-
-legio supervisor start              Start per-project supervisor agent
-  --task <bead-id>                       Bead task ID (required)
-  --name <name>                          Unique name (required)
-  --parent <agent>                       Parent agent (default: coordinator)
-  --depth <n>                            Hierarchy depth (default: 1)
-  --attach / --no-attach                 TTY-aware tmux attach (default: auto)
-legio supervisor stop               Stop supervisor
-legio supervisor status             Show supervisor state
-
-legio monitor start                 Start Tier 2 monitor agent
-legio monitor stop                  Stop monitor agent
-legio monitor status                Show monitor state
-```
-
-### Messaging
-
-```
-legio mail send                     Send a message
-  --to <agent>  --subject <text>  --body <text>
-  --to @all | @builders | @scouts ...    Broadcast to group addresses
-  --type <status|question|result|error>
-  --priority <low|normal|high|urgent>    (urgent/high auto-nudges recipient)
-
-legio mail check                    Check inbox (unread messages)
-  --agent <name>  --inject  --json
-  --debounce <ms>                        Skip if checked within window
-
-legio mail list                     List messages with filters
-  --from <name>  --to <name>  --unread
-
-legio mail read <id>                Mark message as read
-legio mail reply <id> --body <text> Reply in same thread
-
-legio nudge <agent> [message]       Send a text nudge to an agent
-  --from <name>                          Sender name (default: orchestrator)
-  --force                                Skip debounce check
-  --json                                 JSON output
-```
-
-### Merge & Groups
-
-```
-legio merge                         Merge agent branches into canonical
-  --branch <name>                        Specific branch
-  --all                                  All completed branches
-  --into <branch>                        Target branch (default: session-branch.txt > canonicalBranch)
-  --dry-run                              Check for conflicts only
-
-legio group create <name>           Create a task group for batch tracking
-legio group status <name>           Show group progress
-legio group add <name> <issue-id>   Add issue to group
-legio group list                    List all groups
-```
-
-### Monitoring & Observability
-
-```
-legio status                        Show all active agents, worktrees, beads state
-  --json  --verbose
-
-legio dashboard                     Live TUI dashboard for agent monitoring
-  --interval <ms>                        Refresh interval (default: 2000)
-
-legio inspect <agent>               Deep per-agent inspection
-  --json  --follow  --interval <ms>  --no-tmux  --limit <n>
-
-legio trace                         View agent/bead timeline
-  --agent <name>  --run <id>
-  --since <ts>  --until <ts>  --limit <n>  --json
-
-legio feed [options]                Unified real-time event stream across agents
-  --follow, -f  --interval <ms>
-  --agent <name>  --run <id>  --json
-
-legio errors                        Aggregated error view across agents
-  --agent <name>  --run <id>
-  --since <ts>  --until <ts>  --limit <n>  --json
-
-legio replay                        Interleaved chronological replay
-  --run <id>  --agent <name>
-  --since <ts>  --until <ts>  --limit <n>  --json
-
-legio logs [options]                Query NDJSON logs across agents
-  --agent <name>  --level <level>
-  --since <ts>  --until <ts>  --follow  --json
-
-legio costs                         Token/cost analysis and breakdown
-  --live  --agent <name>  --run <id>
-  --by-capability  --last <n>  --json
-
-legio metrics                       Show session metrics
-  --last <n>  --json
-
-legio run list                      List orchestration runs
-legio run show <id>                 Show run details
-legio run complete                  Mark current run complete
-```
-
-### Infrastructure
-
-```
-legio hooks install                 Install orchestrator hooks to .claude/settings.local.json
-  --force                                Overwrite existing hooks
-legio hooks uninstall               Remove orchestrator hooks
-legio hooks status                  Check if hooks are installed
-
-legio worktree list                 List worktrees with status
-legio worktree clean                Remove completed worktrees
-  --completed  --all
-
-legio watch                         Start watchdog daemon (Tier 0)
-  --interval <ms>  --background
-
-legio doctor                        Run health checks on legio setup
-  --json  --category <name>
-
-legio clean                         Clean up worktrees, sessions, artifacts
-  --all  --mail  --sessions  --metrics
-  --logs  --worktrees  --branches
-  --agents  --specs  --json
-
-legio log <event>                   Log a hook event (called by hooks)
-
-Global Flags:
-  --quiet, -q                            Suppress non-error output
-  --completions <shell>                  Generate shell completions (bash, zsh, fish)
-```
-
-## REST API
-
-When the server is running, a full REST API is available at `http://localhost:4173/api/`:
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/status` | Overall project status |
-| `GET /api/health` | Server health check |
-| `GET /api/agents` | List all agents |
-| `GET /api/agents/active` | Active agents only |
-| `GET /api/agents/:name` | Agent details |
-| `GET /api/agents/:name/inspect` | Deep inspection data |
-| `GET /api/agents/:name/events` | Agent events |
-| `POST /api/agents/:name/chat` | Send chat message to agent |
-| `GET /api/agents/:name/chat/history` | Agent chat history |
-| `POST /api/agents/spawn` | Spawn agent from UI |
-| `POST /api/coordinator/chat` | Send chat message to coordinator |
-| `GET /api/coordinator/chat/history` | Coordinator chat history |
-| `POST /api/gateway/chat` | Send chat message to gateway |
-| `GET /api/gateway/chat/history` | Gateway chat history |
-| `GET /api/chat/unified/history` | Unified chat timeline |
-| `POST /api/chat/transcript-sync` | Sync transcript data |
-| `GET /api/ideas` | Ideas list |
-| `POST /api/ideas` | Create idea |
-| `PUT /api/ideas/:id` | Update idea |
-| `DELETE /api/ideas/:id` | Delete idea |
-| `POST /api/ideas/:id/dispatch` | Dispatch idea to agents |
-| `POST /api/ideas/:id/backlog` | Move idea to backlog |
-| `GET /api/mail` | All messages |
-| `GET /api/mail/unread` | Unread messages |
-| `GET /api/mail/conversations` | Thread grouping |
-| `POST /api/mail/send` | Send a message |
-| `GET /api/events` | Tool events |
-| `GET /api/events/errors` | Error events |
-| `GET /api/metrics` | Session metrics |
-| `GET /api/runs` | All runs |
-| `GET /api/runs/active` | Active run |
-| `GET /api/issues` | Beads issues |
-| `GET /api/merge-queue` | Merge queue status |
-| `POST /api/terminal/send` | Send keys to tmux pane |
-| `GET /api/terminal/capture` | Capture pane output |
-| `POST /api/setup/init` | Initialize legio from UI |
-| `GET /api/setup/status` | Setup status |
-| `GET /api/audit` | Query audit trail |
-| `WS /ws` | WebSocket for real-time updates |
-
-## Tech Stack
-
-- **Runtime**: Node/tsx (TypeScript directly, no build step)
-- **Node.js**: v22+ (required for `better-sqlite3`)
-- **Dependencies**: `better-sqlite3` (SQLite), `tsx` (TypeScript execution), `ws` (WebSocket server)
-- **Database**: SQLite via `better-sqlite3` (WAL mode for concurrent access)
-- **Web UI**: Preact + HTM + Tailwind CSS (zero build step, served from `src/server/public/`)
-- **Linting**: Biome (formatter + linter)
-- **Testing**: `vitest` (stores, server) + `playwright` (e2e)
-- **External CLIs**: `bd` (beads), `mulch`, `git`, `tmux` — invoked as subprocesses
+- [CLI Reference](docs/cli.md) — full command reference with all flags
+- [REST API](docs/api.md) — server endpoints and WebSocket
+- [Architecture](docs/architecture.md) — tech stack, agent types, project structure
 
 ## Development
 
 ```bash
-# Run core tests
-npm test
-
-# Run store/server tests (vitest)
-npm run test:server
-
-# Run e2e tests (playwright)
-npm run test:e2e
-
-# Run a single test file
-npx vitest run src/config.test.ts
-
-# Lint + format check
-npm run lint
-
-# Type check
-npm run typecheck
-
-# All quality gates
 npm test && npm run lint && npm run typecheck
-```
-
-### Versioning
-
-Version is maintained in two places that must stay in sync:
-
-1. `package.json` — `"version"` field
-2. `src/index.ts` — `VERSION` constant
-
-Version bumps are handled by the GitHub Actions `workflow_dispatch` workflow. Do not bump versions manually.
-
-## Project Structure
-
-```
-legio/
-  src/
-    index.ts                      CLI entry point (command router)
-    types.ts                      Shared types and interfaces
-    config.ts                     Config loader + validation
-    errors.ts                     Custom error types
-    commands/                     One file per CLI subcommand (34 commands)
-      up.ts                       Bootstrap full stack
-      down.ts                     Shutdown full stack
-      server.ts                   Web UI server lifecycle
-      agents.ts                   Agent discovery and querying
-      coordinator.ts              Persistent orchestrator lifecycle
-      gateway.ts                  Gateway agent lifecycle
-      supervisor.ts               Team lead management
-      dashboard.ts                Live TUI dashboard (ANSI, zero deps)
-      hooks.ts                    Orchestrator hooks management
-      sling.ts                    Agent spawning
-      group.ts                    Task group batch tracking
-      nudge.ts                    Agent nudging
-      mail.ts                     Inter-agent messaging
-      monitor.ts                  Tier 2 monitor management
-      merge.ts                    Branch merging
-      status.ts                   Fleet status overview
-      prime.ts                    Context priming
-      init.ts                     Project initialization
-      worktree.ts                 Worktree management
-      watch.ts                    Watchdog daemon
-      log.ts                      Hook event logging
-      logs.ts                     NDJSON log query
-      feed.ts                     Unified real-time event stream
-      run.ts                      Orchestration run lifecycle
-      trace.ts                    Agent/bead timeline viewing
-      clean.ts                    Worktree/session cleanup
-      doctor.ts                   Health check runner (9 check modules)
-      inspect.ts                  Deep per-agent inspection
-      spec.ts                     Task spec management
-      errors.ts                   Aggregated error view
-      replay.ts                   Interleaved event replay
-      costs.ts                    Token/cost analysis
-      metrics.ts                  Session metrics
-      completions.ts              Shell completion generation (bash/zsh/fish)
-    server/                       Web UI server
-      routes.ts                   REST API routes
-      websocket.ts                WebSocket real-time updates
-      audit-store.ts              SQLite audit trail
-      public/                     Frontend (Preact + HTM + Tailwind)
-        views/                    UI views (command, chat, dashboard, etc.)
-        components/               Reusable UI components
-        lib/                      Client-side state, API, WebSocket
-    agents/                       Agent lifecycle management
-      manifest.ts                 Agent registry (load + query)
-      overlay.ts                  Dynamic CLAUDE.md overlay generator
-      identity.ts                 Persistent agent identity (CVs)
-      checkpoint.ts               Session checkpoint save/restore
-      lifecycle.ts                Handoff orchestration
-      hooks-deployer.ts           Deploy hooks + tool enforcement
-    worktree/                     Git worktree + tmux management
-    mail/                         SQLite mail system (typed protocol, broadcast)
-    merge/                        FIFO queue + conflict resolution
-    watchdog/                     Tiered health monitoring (daemon, triage, health)
-    logging/                      Multi-format logger + sanitizer + reporter + color control
-    metrics/                      SQLite metrics + transcript parsing
-    doctor/                       Health check modules (9 checks)
-    insights/                     Session insight analyzer for auto-expertise
-    beads/                        bd CLI wrapper + molecules
-    mulch/                        mulch CLI wrapper
-    e2e/                          End-to-end lifecycle tests
-  agents/                         Base agent definitions (.md, 10 roles)
-
-  templates/                      Templates for overlays and hooks
 ```
 
 ## License
