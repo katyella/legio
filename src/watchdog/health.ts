@@ -38,12 +38,11 @@ import type { AgentSession, AgentState, HealthCheck } from "../types.ts";
 const PERSISTENT_CAPABILITIES = new Set(["coordinator", "monitor", "gateway"]);
 
 /** Numeric ordering for forward-only state transitions. */
-const STATE_ORDER: Record<AgentState, number> = {
+const STATE_ORDER: Partial<Record<AgentState, number>> = {
 	booting: 0,
 	working: 1,
 	completed: 2,
-	stalled: 3,
-	zombie: 4,
+	zombie: 3,
 };
 
 /**
@@ -80,19 +79,18 @@ export function isProcessRunning(pid: number): boolean {
  * 4. pid dead + tmux alive → zombie, terminate. The agent process exited but
  *    the tmux pane shell survived. The agent is not doing work.
  * 5. lastActivity older than zombieMs → zombie, terminate.
- * 6. lastActivity older than staleMs → stalled, escalate.
- * 7. booting with recent activity → working.
- * 8. Otherwise → working, healthy.
+ * 6. booting with recent activity → working.
+ * 7. Otherwise → working, healthy.
  *
  * @param session - The agent session to evaluate
  * @param tmuxAlive - Whether the agent's tmux session is still running
- * @param thresholds - Staleness and zombie time thresholds in milliseconds
+ * @param thresholds - Zombie time threshold in milliseconds
  * @returns A HealthCheck describing the agent's current state and recommended action
  */
 export function evaluateHealth(
 	session: AgentSession,
 	tmuxAlive: boolean,
-	thresholds: { staleMs: number; zombieMs: number },
+	thresholds: { zombieMs: number },
 ): HealthCheck {
 	const now = new Date();
 	const lastActivityTime = new Date(session.lastActivity).getTime();
@@ -167,7 +165,7 @@ export function evaluateHealth(
 	}
 
 	// Persistent capabilities (coordinator, monitor) are expected to have long idle
-	// periods waiting for mail/events. Skip time-based stale/zombie detection for
+	// periods waiting for mail/events. Skip time-based zombie detection for
 	// them — only tmux/pid liveness matters (checked above).
 	if (PERSISTENT_CAPABILITIES.has(session.capability)) {
 		// Transition booting → working if we reach here (tmux alive, pid alive)
@@ -175,12 +173,9 @@ export function evaluateHealth(
 		return {
 			...base,
 			processAlive: true,
-			state: state === "stalled" ? "working" : state,
+			state,
 			action: "none",
-			reconciliationNote:
-				session.state === "stalled"
-					? `Persistent capability "${session.capability}" exempted from stale detection — resetting to working`
-					: null,
+			reconciliationNote: null,
 		};
 	}
 
@@ -193,17 +188,6 @@ export function evaluateHealth(
 			processAlive: true,
 			state: "zombie",
 			action: "terminate",
-			reconciliationNote: null,
-		};
-	}
-
-	// lastActivity older than staleMs → stalled
-	if (elapsedMs > thresholds.staleMs) {
-		return {
-			...base,
-			processAlive: true,
-			state: "stalled",
-			action: "escalate",
 			reconciliationNote: null,
 		};
 	}
@@ -233,7 +217,7 @@ export function evaluateHealth(
  * Compute the next agent state based on a health check.
  *
  * State transitions are strictly forward-only using the ordering:
- *   booting(0) → working(1) → stalled(2) → zombie(3)
+ *   booting(0) → working(1) → completed(2) → zombie(3)
  *
  * A state can only advance forward, never move backwards.
  * For example, a zombie can never become working again.
@@ -252,8 +236,8 @@ export function transitionState(currentState: AgentState, check: HealthCheck): A
 		return currentState;
 	}
 
-	const currentOrder = STATE_ORDER[currentState];
-	const checkOrder = STATE_ORDER[check.state];
+	const currentOrder = STATE_ORDER[currentState] ?? 0;
+	const checkOrder = STATE_ORDER[check.state] ?? 0;
 
 	// Only move forward — never regress
 	if (checkOrder > currentOrder) {

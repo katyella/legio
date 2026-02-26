@@ -2,13 +2,8 @@
  * Tier 0 mechanical process monitoring daemon.
  *
  * Runs on a configurable interval, checking the health of all active agent
- * sessions. Implements progressive nudging for stalled agents instead of
- * immediately escalating to AI triage:
- *
- *   Level 0 (warn):      Log warning via onHealthCheck callback, no direct action
- *   Level 1 (nudge):     Send tmux nudge via nudgeAgent()
- *   Level 2 (escalate):  Invoke Tier 1 AI triage (if tier1Enabled), else skip
- *   Level 3 (terminate): Kill tmux session
+ * sessions. Detects zombie agents (dead tmux or process) and attempts
+ * auto-recovery from checkpoints.
  *
  * Phase 4 tier numbering:
  *   Tier 0 = Mechanical daemon (this file)
@@ -24,17 +19,12 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCheckpoint } from "../agents/checkpoint.ts";
-import { nudgeAgent } from "../commands/nudge.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession, EventStore, HealthCheck, SessionCheckpoint } from "../types.ts";
 import { isSessionAlive, killSession } from "../worktree/tmux.ts";
 import { evaluateHealth, transitionState } from "./health.ts";
-import { triageAgent } from "./triage.ts";
-
-/** Maximum escalation level (terminate). */
-const MAX_ESCALATION_LEVEL = 3;
 
 /**
  * Record an agent failure to mulch for future reference.
@@ -345,29 +335,13 @@ async function attemptRecovery(options: {
 /** Options shared between startDaemon and runDaemonTick. */
 export interface DaemonOptions {
 	root: string;
-	staleThresholdMs: number;
 	zombieThresholdMs: number;
-	nudgeIntervalMs?: number;
-	tier1Enabled?: boolean;
 	onHealthCheck?: (check: HealthCheck) => void;
 	/** Dependency injection for testing. Uses real implementations when omitted. */
 	_tmux?: {
 		isSessionAlive: (name: string) => Promise<boolean>;
 		killSession: (name: string) => Promise<void>;
 	};
-	/** Dependency injection for testing. Uses real triageAgent when omitted. */
-	_triage?: (options: {
-		agentName: string;
-		root: string;
-		lastActivity: string;
-	}) => Promise<"retry" | "terminate" | "extend">;
-	/** Dependency injection for testing. Uses real nudgeAgent when omitted. */
-	_nudge?: (
-		projectRoot: string,
-		agentName: string,
-		message: string,
-		force: boolean,
-	) => Promise<{ delivered: boolean; reason?: string }>;
 	/** Dependency injection for testing. Overrides EventStore creation. */
 	_eventStore?: EventStore | null;
 	/** Dependency injection for testing. Uses real recordFailure when omitted. */
@@ -402,10 +376,7 @@ export interface DaemonOptions {
  *
  * @param options.root - Project root directory (contains .legio/)
  * @param options.intervalMs - Polling interval in milliseconds
- * @param options.staleThresholdMs - Time after which an agent is considered stale
  * @param options.zombieThresholdMs - Time after which an agent is considered a zombie
- * @param options.nudgeIntervalMs - Time between progressive nudge stage transitions (default 60000)
- * @param options.tier1Enabled - Whether Tier 1 AI triage is enabled (default false)
  * @param options.onHealthCheck - Optional callback for each health check result
  * @returns An object with a `stop` function to halt the daemon
  */
@@ -437,17 +408,8 @@ export function startDaemon(options: DaemonOptions & { intervalMs: number }): { 
  * @param options - Same options as startDaemon (minus intervalMs)
  */
 export async function runDaemonTick(options: DaemonOptions): Promise<void> {
-	const {
-		root,
-		staleThresholdMs,
-		zombieThresholdMs,
-		nudgeIntervalMs = 60_000,
-		tier1Enabled = false,
-		onHealthCheck,
-	} = options;
+	const { root, zombieThresholdMs, onHealthCheck } = options;
 	const tmux = options._tmux ?? { isSessionAlive, killSession };
-	const triage = options._triage ?? triageAgent;
-	const nudge = options._nudge ?? nudgeAgent;
 	const recordFailureFn = options._recordFailure ?? recordFailure;
 	const maxRecoveryAttempts = options.maxRecoveryAttempts ?? 1;
 	const slingFn = options._sling ?? ((args: string[]) => reSling(args, root));
@@ -480,7 +442,6 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 
 	try {
 		const thresholds = {
-			staleMs: staleThresholdMs,
 			zombieMs: zombieThresholdMs,
 		};
 
@@ -556,60 +517,6 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 				// Log the conflict but do NOT auto-kill.
 				// The onHealthCheck callback surfaces this to the operator.
 				// No state change — keep zombie until a human or higher-tier agent decides.
-			} else if (check.action === "escalate") {
-				// Progressive nudging: increment escalation level based on elapsed time
-				// instead of immediately delegating to AI triage.
-
-				// Initialize stalledSince on first escalation detection
-				if (session.stalledSince === null) {
-					session.stalledSince = new Date().toISOString();
-					session.escalationLevel = 0;
-					store.updateEscalation(session.agentName, 0, session.stalledSince);
-				}
-
-				// Check if enough time has passed to advance to the next escalation level
-				const stalledMs = Date.now() - new Date(session.stalledSince).getTime();
-				const expectedLevel = Math.min(
-					Math.floor(stalledMs / nudgeIntervalMs),
-					MAX_ESCALATION_LEVEL,
-				);
-
-				if (expectedLevel > session.escalationLevel) {
-					session.escalationLevel = expectedLevel;
-					store.updateEscalation(session.agentName, expectedLevel, session.stalledSince);
-				}
-
-				// Execute the action for the current escalation level
-				const actionResult = await executeEscalationAction({
-					session,
-					root,
-					legioDir,
-					tmuxAlive,
-					tier1Enabled,
-					tmux,
-					triage,
-					nudge,
-					eventStore,
-					runId,
-					recordFailure: recordFailureFn,
-					maxRecoveryAttempts,
-					sling: slingFn,
-					loadCheckpointFn,
-					sendRecoveryMailFn,
-				});
-
-				if (actionResult.terminated) {
-					store.updateState(session.agentName, "zombie");
-					store.updateEscalation(session.agentName, 0, null);
-					session.state = "zombie";
-					session.escalationLevel = 0;
-					session.stalledSince = null;
-				}
-			} else if (check.action === "none" && session.stalledSince !== null) {
-				// Agent recovered — reset escalation tracking
-				store.updateEscalation(session.agentName, 0, null);
-				session.stalledSince = null;
-				session.escalationLevel = 0;
 			}
 		}
 	} finally {
@@ -621,199 +528,6 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 			} catch {
 				// Non-fatal
 			}
-		}
-	}
-}
-
-/**
- * Execute the escalation action corresponding to the agent's current escalation level.
- *
- * Level 0 (warn):      No direct action — onHealthCheck callback already fired above.
- * Level 1 (nudge):     Send a tmux nudge to the agent.
- * Level 2 (escalate):  Invoke Tier 1 AI triage (if tier1Enabled; skip otherwise).
- * Level 3 (terminate): Kill the tmux session.
- *
- * @returns Object indicating whether the agent was terminated or state changed.
- */
-async function executeEscalationAction(ctx: {
-	session: AgentSession;
-	root: string;
-	legioDir: string;
-	tmuxAlive: boolean;
-	tier1Enabled: boolean;
-	tmux: {
-		isSessionAlive: (name: string) => Promise<boolean>;
-		killSession: (name: string) => Promise<void>;
-	};
-	triage: (options: {
-		agentName: string;
-		root: string;
-		lastActivity: string;
-	}) => Promise<"retry" | "terminate" | "extend">;
-	nudge: (
-		projectRoot: string,
-		agentName: string,
-		message: string,
-		force: boolean,
-	) => Promise<{ delivered: boolean; reason?: string }>;
-	eventStore: EventStore | null;
-	runId: string | null;
-	recordFailure: (
-		root: string,
-		session: AgentSession,
-		reason: string,
-		tier: 0 | 1,
-		triageSuggestion?: string,
-	) => Promise<void>;
-	maxRecoveryAttempts: number;
-	sling: (args: string[]) => Promise<{ exitCode: number; stderr: string }>;
-	loadCheckpointFn: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
-	sendRecoveryMailFn: (args: string[]) => Promise<void>;
-}): Promise<{ terminated: boolean; stateChanged: boolean }> {
-	const {
-		session,
-		root,
-		legioDir,
-		tmuxAlive,
-		tier1Enabled,
-		tmux,
-		triage,
-		nudge,
-		eventStore,
-		runId,
-		recordFailure,
-		maxRecoveryAttempts,
-		sling,
-		loadCheckpointFn,
-		sendRecoveryMailFn,
-	} = ctx;
-
-	switch (session.escalationLevel) {
-		case 0: {
-			// Level 0: warn — onHealthCheck callback already fired, no direct action
-			recordEvent(eventStore, {
-				runId,
-				agentName: session.agentName,
-				eventType: "custom",
-				level: "warn",
-				data: { type: "escalation", escalationLevel: 0, action: "warn" },
-			});
-			return { terminated: false, stateChanged: false };
-		}
-
-		case 1: {
-			// Level 1: nudge — send a tmux nudge to the agent
-			let delivered = false;
-			try {
-				const result = await nudge(
-					root,
-					session.agentName,
-					`[WATCHDOG] Agent "${session.agentName}" appears stalled. Please check your current task and report status.`,
-					true, // force — skip debounce for watchdog nudges
-				);
-				delivered = result.delivered;
-			} catch {
-				// Nudge delivery failure is non-fatal for the watchdog
-			}
-			recordEvent(eventStore, {
-				runId,
-				agentName: session.agentName,
-				eventType: "custom",
-				level: "warn",
-				data: { type: "nudge", escalationLevel: 1, delivered },
-			});
-			return { terminated: false, stateChanged: false };
-		}
-
-		case 2: {
-			// Level 2: escalate — invoke Tier 1 AI triage if enabled
-			if (!tier1Enabled) {
-				// Tier 1 disabled — skip triage, progressive nudging continues to level 3
-				return { terminated: false, stateChanged: false };
-			}
-
-			const verdict = await triage({
-				agentName: session.agentName,
-				root,
-				lastActivity: session.lastActivity,
-			});
-
-			recordEvent(eventStore, {
-				runId,
-				agentName: session.agentName,
-				eventType: "custom",
-				level: "warn",
-				data: { type: "triage", escalationLevel: 2, verdict },
-			});
-
-			if (verdict === "terminate") {
-				// Record the failure via mulch (Tier 1 AI triage)
-				await recordFailure(root, session, "AI triage classified as terminal failure", 1, verdict);
-
-				if (tmuxAlive) {
-					try {
-						await tmux.killSession(session.tmuxSession);
-					} catch {
-						// Session may have died — not an error
-					}
-				}
-				return { terminated: true, stateChanged: true };
-			}
-
-			if (verdict === "retry") {
-				// Send a nudge with a recovery message
-				try {
-					await nudge(
-						root,
-						session.agentName,
-						"[WATCHDOG] Triage suggests recovery is possible. " +
-							"Please retry your current operation or check for errors.",
-						true, // force — skip debounce
-					);
-				} catch {
-					// Nudge delivery failure is non-fatal
-				}
-			}
-
-			// "retry" (after nudge) and "extend" leave the session running
-			return { terminated: false, stateChanged: false };
-		}
-
-		default: {
-			// Level 3+: terminate — kill the tmux session
-			recordEvent(eventStore, {
-				runId,
-				agentName: session.agentName,
-				eventType: "custom",
-				level: "error",
-				data: { type: "escalation", escalationLevel: 3, action: "terminate" },
-			});
-
-			// Record the failure via mulch (Tier 0: progressive escalation to terminal level)
-			await recordFailure(root, session, "Progressive escalation reached terminal level", 0);
-
-			if (tmuxAlive) {
-				try {
-					await tmux.killSession(session.tmuxSession);
-				} catch {
-					// Session may have died — not an error
-				}
-			}
-
-			// Attempt auto-recovery from checkpoint before marking zombie
-			const { recovered } = await attemptRecovery({
-				session,
-				legioDir,
-				root,
-				maxRecoveryAttempts,
-				eventStore,
-				runId,
-				sling,
-				loadCheckpointFn,
-				sendRecoveryMail: sendRecoveryMailFn,
-			});
-
-			return { terminated: !recovered, stateChanged: true };
 		}
 	}
 }
