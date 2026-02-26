@@ -28,6 +28,7 @@ export interface LegioConfig {
 		maxConcurrent: number; // Rate limit ceiling
 		staggerDelayMs: number; // Delay between spawns
 		maxDepth: number; // Hierarchy depth limit (default 2)
+		maxAgentsPerLead?: number; // Max child agents per lead (default 5)
 	};
 	worktrees: {
 		baseDir: string; // Where worktrees live
