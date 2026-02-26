@@ -2,8 +2,8 @@
 // Exports IssuesView (Preact component) and sets window.renderIssues (legacy shim)
 
 import { IssueCard } from "../components/issue-card.js";
-import { fetchJson } from "../lib/api.js";
-import { h, html, useEffect, useState } from "../lib/preact-setup.js";
+import { fetchJson, postJson } from "../lib/api.js";
+import { h, html, useCallback, useEffect, useRef, useState } from "../lib/preact-setup.js";
 import { appState } from "../lib/state.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -50,6 +50,76 @@ function categorize(issues) {
 	return { open, inProgress, blocked, closed };
 }
 
+// ── Search helper ──────────────────────────────────────────────────────────
+
+function matchSearch(issue, query) {
+	if (!query) return true;
+	const q = query.toLowerCase();
+	return (
+		(issue.id ?? "").toLowerCase().includes(q) ||
+		(issue.title ?? "").toLowerCase().includes(q) ||
+		(issue.description ?? "").toLowerCase().includes(q) ||
+		(issue.status ?? "").toLowerCase().includes(q) ||
+		(issue.priority != null && `p${issue.priority}`.includes(q))
+	);
+}
+
+// ── Preact sub-component: DispatchableCard ─────────────────────────────────
+
+function DispatchableCard({ issue }) {
+	const [dispatching, setDispatching] = useState(false);
+	const [dispatched, setDispatched] = useState(false);
+	const [dispatchError, setDispatchError] = useState(null);
+
+	const isDispatchable = issue.status === "open" || issue.status === "in_progress";
+
+	const handleDispatch = useCallback(
+		async (e) => {
+			e.stopPropagation();
+			if (dispatching || dispatched) return;
+			setDispatching(true);
+			setDispatchError(null);
+			try {
+				await postJson(`/api/issues/${issue.id}/dispatch`, {});
+				setDispatched(true);
+			} catch (err) {
+				setDispatchError(err.message || "Dispatch failed");
+			} finally {
+				setDispatching(false);
+			}
+		},
+		[issue.id, dispatching, dispatched],
+	);
+
+	return html`
+		<div>
+			<${IssueCard} issue=${issue} />
+			${
+				isDispatchable
+					? html`
+				<div class="flex items-center gap-2 mt-1 px-1">
+					<button
+						onClick=${handleDispatch}
+						disabled=${dispatching || dispatched}
+						class=${
+							dispatched
+								? "px-2 py-1 text-xs rounded-sm border border-green-700 text-green-400 bg-green-900/20 cursor-default"
+								: dispatching
+									? "px-2 py-1 text-xs rounded-sm border border-[#444] text-[#999] cursor-wait"
+									: "px-2 py-1 text-xs rounded-sm border border-[#E64415] text-[#E64415] hover:bg-[#E64415]/10"
+						}
+					>
+						${dispatched ? "✓ Dispatched" : dispatching ? "Dispatching…" : "Dispatch"}
+					</button>
+					${dispatchError ? html`<span class="text-red-400 text-xs">${dispatchError}</span>` : null}
+				</div>
+			`
+					: null
+			}
+		</div>
+	`;
+}
+
 // ── Preact sub-component: Column ───────────────────────────────────────────
 
 function Column({ title, issues, borderClass }) {
@@ -63,7 +133,7 @@ function Column({ title, issues, borderClass }) {
 				${
 					issues.length === 0
 						? html`<div class="text-[#999] text-sm text-center py-4">No issues</div>`
-						: issues.map((issue) => html`<${IssueCard} key=${issue.id} issue=${issue} />`)
+						: issues.map((issue) => html`<${DispatchableCard} key=${issue.id} issue=${issue} />`)
 				}
 			</div>
 		</div>
@@ -76,6 +146,9 @@ export function IssuesView() {
 	// null = show all priorities
 	const [priorityFilter, setPriorityFilter] = useState(null);
 	const [showClosed, setShowClosed] = useState(true);
+	const [searchInput, setSearchInput] = useState("");
+	const [searchText, setSearchText] = useState("");
+	const debounceRef = useRef(null);
 
 	// Read from signal (establishes subscription if auto-tracking works)
 	const signalIssues = appState.issues.value;
@@ -106,11 +179,23 @@ export function IssuesView() {
 		};
 	}, []);
 
+	// Debounce search input
+	const handleSearchChange = useCallback((e) => {
+		const val = e.target.value;
+		setSearchInput(val);
+		if (debounceRef.current) clearTimeout(debounceRef.current);
+		debounceRef.current = setTimeout(() => {
+			setSearchText(val);
+		}, 200);
+	}, []);
+
 	// Prefer signal (non-empty) over fetched data
 	const issues = signalIssues && signalIssues.length > 0 ? signalIssues : (fetchedIssues ?? []);
 
+	const afterSearch = searchText ? issues.filter((i) => matchSearch(i, searchText)) : issues;
+
 	const filtered =
-		priorityFilter == null ? issues : issues.filter((i) => i.priority === priorityFilter);
+		priorityFilter == null ? afterSearch : afterSearch.filter((i) => i.priority === priorityFilter);
 
 	const visibleIssues = showClosed ? filtered : filtered.filter((i) => i.status !== "closed");
 	const { open, inProgress, blocked, closed } = categorize(visibleIssues);
@@ -119,6 +204,16 @@ export function IssuesView() {
 
 	return html`
 		<div class="p-4">
+			<!-- Search input -->
+			<div class="mb-3">
+				<input
+					type="text"
+					placeholder="Search issues…"
+					value=${searchInput}
+					onInput=${handleSearchChange}
+					class="w-full max-w-sm bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm px-3 py-1.5 text-sm text-[#e5e5e5] placeholder-[#555] focus:outline-none focus:border-[#444]"
+				/>
+			</div>
 			<!-- Priority filter bar -->
 			<div class="flex items-center gap-2 mb-4">
 				${filterButtons.map((p) => {

@@ -1100,6 +1100,47 @@ export async function handleApiRequest(
 		}
 	}
 
+	// -------------------------------------------------------------------------
+	// Issues — POST routes (before the GET-only guard)
+	// -------------------------------------------------------------------------
+
+	{
+		const params = matchRoute(path, "/api/issues/:id/dispatch");
+		if (request.method === "POST" && params) {
+			const { id } = params;
+			if (!id) return errorResponse("Missing issue ID", 400);
+			try {
+				const client = createBeadsClient(projectRoot);
+				const issue = await client.show(id);
+				const body = issue.description
+					? `${issue.title}\n\n${issue.description}`
+					: issue.title;
+				const store = createMailStore(join(legioDir, "mail.db"));
+				const messageId = `issue-dispatch-${randomUUID().slice(0, 8)}`;
+				store.insert({
+					id: messageId,
+					from: "human",
+					to: "coordinator",
+					subject: `dispatch: ${issue.title}`,
+					body,
+					type: "dispatch",
+					priority: "normal",
+					threadId: null,
+					audience: "agent",
+				});
+				store.close();
+				return jsonResponse({ success: true, message: "Dispatched" });
+			} catch (err) {
+				if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+					return errorResponse(`Issue not found: ${id}`, 404);
+				}
+				return errorResponse(
+					`Failed to dispatch issue: ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
+	}
+
 	// Only handle GET requests for all other routes
 	if (request.method !== "GET") {
 		return errorResponse("Method not allowed", 405);
