@@ -6,6 +6,6 @@ export default defineConfig({
 		testTimeout: 15_000,
 		hookTimeout: 30_000,
 		reporters: ["dot"],
-		pool: "threads",
+		pool: "forks",
 	},
 });
