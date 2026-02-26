@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 // Bootstrap shim: re-exec Node with --import tsx so TypeScript files load
