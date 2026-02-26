@@ -153,10 +153,10 @@ export function parentHasScouts(
 }
 
 /**
- * Validate hierarchy constraints: the coordinator (no parent) may only spawn leads.
+ * Validate hierarchy constraints: the coordinator (no parent) may only spawn leads and scouts.
  *
  * When parentAgent is null, the caller is the coordinator or a human.
- * Only "lead" capability is allowed in that case. All other capabilities
+ * Only "lead" and "scout" capabilities are allowed in that case. All other capabilities
  * (builder, scout, reviewer, merger) must be spawned by a lead or supervisor
  * that passes --parent.
  *
@@ -178,9 +178,9 @@ export function validateHierarchy(
 		return;
 	}
 
-	if (parentAgent === null && capability !== "lead") {
+	if (parentAgent === null && capability !== "lead" && capability !== "scout") {
 		throw new HierarchyError(
-			`Coordinator cannot spawn "${capability}" directly. Only "lead" is allowed without --parent. Use a lead as intermediary, or pass --force-hierarchy to bypass.`,
+			`Coordinator cannot spawn "${capability}" directly. Only "lead" and "scout" are allowed without --parent. Use a lead as intermediary, or pass --force-hierarchy to bypass.`,
 			{ agentName: name, requestedCapability: capability },
 		);
 	}
@@ -299,7 +299,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		);
 	}
 
-	// 2b. Validate hierarchy: coordinator (no --parent) can only spawn leads
+	// 2b. Validate hierarchy: coordinator (no --parent) can only spawn leads and scouts
 	validateHierarchy(parentAgent, capability, name, depth, forceHierarchy);
 
 	// 3. Load manifest and validate capability
