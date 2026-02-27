@@ -33,7 +33,8 @@ describe("loadConfig", () => {
 		expect(config.project.canonicalBranch).toBe("main");
 		expect(config.agents.maxConcurrent).toBe(25);
 		expect(config.agents.maxDepth).toBe(2);
-		expect(config.beads.enabled).toBe(true);
+		expect(config.taskTracker?.enabled).toBe(true);
+		expect(config.taskTracker?.backend).toBe("auto");
 		expect(config.mulch.enabled).toBe(true);
 		expect(config.mulch.primeFormat).toBe("markdown");
 		expect(config.logging.verbose).toBe(false);
@@ -61,7 +62,7 @@ agents:
 		expect(config.agents.maxConcurrent).toBe(10);
 		// Non-overridden values keep defaults
 		expect(config.agents.maxDepth).toBe(2);
-		expect(config.beads.enabled).toBe(true);
+		expect(config.taskTracker?.enabled).toBe(true);
 	});
 
 	test("always sets project.root to the actual projectRoot", async () => {
@@ -78,8 +79,9 @@ project:
 	test("parses boolean values correctly", async () => {
 		await ensureLegioDir();
 		await writeConfig(`
-beads:
+taskTracker:
   enabled: false
+  backend: beads
 mulch:
   enabled: true
 logging:
@@ -89,7 +91,8 @@ logging:
 
 		const config = await loadConfig(tempDir);
 
-		expect(config.beads.enabled).toBe(false);
+		expect(config.taskTracker?.enabled).toBe(false);
+		expect(config.taskTracker?.backend).toBe("beads");
 		expect(config.mulch.enabled).toBe(true);
 		expect(config.logging.verbose).toBe(true);
 		expect(config.logging.redactSecrets).toBe(false);
@@ -222,6 +225,18 @@ watchdog:
 		expect(config.watchdog.tier0IntervalMs).toBe(45000);
 		// Old tier2 (AI triage) → new tier1
 		expect(config.watchdog.tier1Enabled).toBe(true);
+	});
+
+	test("migrates deprecated 'beads' key to taskTracker", async () => {
+		await ensureLegioDir();
+		await writeConfig(`
+beads:
+  enabled: false
+`);
+
+		const config = await loadConfig(tempDir);
+		expect(config.taskTracker?.enabled).toBe(false);
+		expect(config.taskTracker?.backend).toBe("auto");
 	});
 
 	test("new-style tier keys take precedence over deprecated keys", async () => {
@@ -425,7 +440,7 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.project).toBeDefined();
 		expect(DEFAULT_CONFIG.agents).toBeDefined();
 		expect(DEFAULT_CONFIG.worktrees).toBeDefined();
-		expect(DEFAULT_CONFIG.beads).toBeDefined();
+		expect(DEFAULT_CONFIG.taskTracker).toBeDefined();
 		expect(DEFAULT_CONFIG.mulch).toBeDefined();
 		expect(DEFAULT_CONFIG.merge).toBeDefined();
 		expect(DEFAULT_CONFIG.watchdog).toBeDefined();

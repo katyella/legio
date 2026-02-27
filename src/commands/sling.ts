@@ -25,14 +25,14 @@ import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader } from "../agents/manifest.ts";
 import { writeOverlay } from "../agents/overlay.ts";
-import type { BeadIssue } from "../beads/client.ts";
-import { createBeadsClient } from "../beads/client.ts";
 import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMulchClient, inferDomainsFromFiles } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
+import { createTrackerClient } from "../tracker/factory.ts";
+import type { TrackerIssue } from "../tracker/types.ts";
 import type { AgentSession, OverlayConfig } from "../types.ts";
 import { createWorktree } from "../worktree/manager.ts";
 import {
@@ -448,14 +448,14 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// 5e. Prevent duplicate leads on the same task
 		checkDuplicateLead(activeSessions, taskId, capability, name);
 
-		// 6. Validate bead exists and is in a workable state (if beads enabled)
-		const beads = createBeadsClient(config.project.root);
-		if (config.beads.enabled) {
-			let issue: BeadIssue;
+		// 6. Validate task exists and is in a workable state (if tracker enabled)
+		const tracker = createTrackerClient(config.taskTracker?.backend ?? "auto", config.project.root);
+		if (config.taskTracker?.enabled ?? true) {
+			let issue: TrackerIssue;
 			try {
-				issue = await beads.show(taskId);
+				issue = await tracker.show(taskId);
 			} catch (err) {
-				throw new AgentError(`Bead task "${taskId}" not found or inaccessible`, {
+				throw new AgentError(`Task "${taskId}" not found or inaccessible`, {
 					agentName: name,
 					cause: err instanceof Error ? err : undefined,
 				});
@@ -464,7 +464,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 			const workableStatuses = ["open", "in_progress"];
 			if (!workableStatuses.includes(issue.status)) {
 				throw new ValidationError(
-					`Bead task "${taskId}" is not workable (status: ${issue.status}). Only open or in_progress issues can be assigned.`,
+					`Task "${taskId}" is not workable (status: ${issue.status}). Only open or in_progress issues can be assigned.`,
 					{ field: "taskId", value: taskId },
 				);
 			}
@@ -580,10 +580,10 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// 9. Deploy hooks config (capability-specific guards)
 		await deployHooks(worktreePath, name, capability);
 
-		// 10. Claim beads issue
-		if (config.beads.enabled) {
+		// 10. Claim task issue
+		if (config.taskTracker?.enabled ?? true) {
 			try {
-				await beads.claim(taskId);
+				await tracker.claim(taskId);
 			} catch {
 				// Non-fatal: issue may already be claimed
 			}

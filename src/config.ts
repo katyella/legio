@@ -27,7 +27,8 @@ export const DEFAULT_CONFIG: LegioConfig = {
 	worktrees: {
 		baseDir: ".legio/worktrees",
 	},
-	beads: {
+	taskTracker: {
+		backend: "auto" as const,
 		enabled: true,
 	},
 	mulch: {
@@ -428,6 +429,37 @@ function validateConfig(config: LegioConfig): void {
 }
 
 /**
+ * Migrate deprecated 'beads' config key to 'taskTracker'.
+ *
+ * If the parsed config has a 'beads' key but no 'taskTracker', map
+ * beads.enabled to taskTracker.enabled with backend set to 'auto'.
+ *
+ * Detection: 'beads' key present and 'taskTracker' key absent.
+ * Mutates the parsed config object in place.
+ */
+function migrateDeprecatedBeadsKey(parsed: Record<string, unknown>): void {
+	const hasBeads = "beads" in parsed;
+	const hasTaskTracker = "taskTracker" in parsed;
+
+	if (!hasBeads || hasTaskTracker) {
+		return;
+	}
+
+	const beads = parsed.beads;
+	if (beads === null || beads === undefined || typeof beads !== "object") {
+		return;
+	}
+
+	const b = beads as Record<string, unknown>;
+	parsed.taskTracker = {
+		backend: "auto",
+		enabled: typeof b.enabled === "boolean" ? b.enabled : true,
+	};
+	delete parsed.beads;
+	process.stderr.write("[legio] DEPRECATED: config 'beads' key → use 'taskTracker'\n");
+}
+
+/**
  * Load and merge config.local.yaml on top of the current config.
  *
  * config.local.yaml is gitignored and provides machine-specific overrides
@@ -467,6 +499,7 @@ async function mergeLocalConfig(resolvedRoot: string, config: LegioConfig): Prom
 	}
 
 	migrateDeprecatedWatchdogKeys(parsed);
+	migrateDeprecatedBeadsKey(parsed);
 
 	return deepMerge(config as unknown as Record<string, unknown>, parsed) as unknown as LegioConfig;
 }
@@ -578,6 +611,8 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 	// Old naming: tier1 = mechanical daemon, tier2 = AI triage
 	// New naming: tier0 = mechanical daemon, tier1 = AI triage, tier2 = monitor agent
 	migrateDeprecatedWatchdogKeys(parsed);
+	// Backward compatibility: migrate deprecated 'beads' key to 'taskTracker'.
+	migrateDeprecatedBeadsKey(parsed);
 
 	// Deep merge parsed config over defaults
 	let merged = deepMerge(

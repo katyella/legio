@@ -11,7 +11,6 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createBeadsClient } from "../beads/client.ts";
 import { gatherInspectData } from "../commands/inspect.ts";
 import { gatherStatus } from "../commands/status.ts";
 import { loadConfig } from "../config.ts";
@@ -21,6 +20,7 @@ import { createMergeQueue } from "../merge/queue.ts";
 import { createMetricsStore } from "../metrics/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore, createSessionStore } from "../sessions/store.ts";
+import { createTrackerClient } from "../tracker/factory.ts";
 import type {
 	EventLevel,
 	HeadlessCoordinatorConfig,
@@ -635,7 +635,7 @@ export async function handleApiRequest(
 				const idea = data.ideas.find((i) => i.id === id);
 				if (!idea) return errorResponse(`Idea not found: ${id}`, 404);
 
-				const client = createBeadsClient(projectRoot);
+				const client = createTrackerClient("auto", projectRoot);
 				const issueId = await client.create(idea.title, { description: idea.body });
 
 				idea.status = "backlog";
@@ -1106,7 +1106,7 @@ export async function handleApiRequest(
 			const { id } = params;
 			if (!id) return errorResponse("Missing issue ID", 400);
 			try {
-				const client = createBeadsClient(projectRoot);
+				const client = createTrackerClient("auto", projectRoot);
 				const issue = await client.show(id);
 				const body = issue.description ? `${issue.title}\n\n${issue.description}` : issue.title;
 				const store = createMailStore(join(legioDir, "mail.db"));
@@ -1143,7 +1143,7 @@ export async function handleApiRequest(
 			try {
 				const body = (await request.json().catch(() => ({}))) as { reason?: string };
 				const reason = typeof body.reason === "string" ? body.reason : "Closed from dashboard";
-				const client = createBeadsClient(projectRoot);
+				const client = createTrackerClient("auto", projectRoot);
 				await client.close(id, reason);
 				return jsonResponse({ success: true, id });
 			} catch (err) {
@@ -1711,7 +1711,7 @@ export async function handleApiRequest(
 		}
 
 		try {
-			const client = createBeadsClient(projectRoot);
+			const client = createTrackerClient("auto", projectRoot);
 			const issues = await client.list({ status: statusParam, limit, all });
 			if (isDefaultRequest) {
 				issuesCacheData = issues;
@@ -1725,7 +1725,7 @@ export async function handleApiRequest(
 
 	if (path === "/api/issues/ready") {
 		try {
-			const client = createBeadsClient(projectRoot);
+			const client = createTrackerClient("auto", projectRoot);
 			const issues = await client.ready();
 			return jsonResponse(issues);
 		} catch {
@@ -1740,7 +1740,7 @@ export async function handleApiRequest(
 			const { id } = params;
 			if (!id) return errorResponse("Missing issue ID", 400);
 			try {
-				const client = createBeadsClient(projectRoot);
+				const client = createTrackerClient("auto", projectRoot);
 				const issue = await client.show(id);
 				return jsonResponse(issue);
 			} catch {

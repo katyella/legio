@@ -17,10 +17,10 @@ import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
-import { createBeadsClient } from "../beads/client.ts";
 import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
+import { createTrackerClient } from "../tracker/factory.ts";
 import type { AgentSession } from "../types.ts";
 import {
 	createSession,
@@ -156,11 +156,11 @@ async function startSupervisor(args: string[]): Promise<void> {
 	const config = await loadConfig(cwd);
 	const projectRoot = config.project.root;
 
-	// Validate bead exists and is workable (open or in_progress)
-	const beads = createBeadsClient(projectRoot);
-	const bead = await beads.show(flags.task);
-	if (bead.status !== "open" && bead.status !== "in_progress") {
-		throw new ValidationError(`Bead ${flags.task} is not workable (status: ${bead.status})`, {
+	// Validate task exists and is workable (open or in_progress)
+	const tracker = createTrackerClient(config.taskTracker?.backend ?? "auto", projectRoot);
+	const task = await tracker.show(flags.task);
+	if (task.status !== "open" && task.status !== "in_progress") {
+		throw new ValidationError(`Task ${flags.task} is not workable (status: ${task.status})`, {
 			field: "task",
 			value: flags.task,
 		});

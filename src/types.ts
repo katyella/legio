@@ -33,7 +33,12 @@ export interface LegioConfig {
 	worktrees: {
 		baseDir: string; // Where worktrees live
 	};
-	beads: {
+	/** @deprecated Use taskTracker instead. Kept for backward compatibility with inline fixtures. */
+	beads?: {
+		enabled: boolean;
+	};
+	taskTracker?: {
+		backend: "auto" | "seeds" | "beads";
 		enabled: boolean;
 	};
 	mulch: {
