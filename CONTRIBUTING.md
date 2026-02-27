@@ -38,10 +38,10 @@ Use descriptive branch names with a category prefix:
 ```bash
 npm test                                    # Run all tests
 npx vitest run src/config.test.ts          # Run a single test file
-biome check .                               # Lint + format check
-biome check --write .                       # Auto-fix lint + format issues
-tsc --noEmit                                # Type check
-npm test && biome check . && tsc --noEmit  # All quality gates
+npm run lint                                # Lint + format check
+npx biome check --write .                  # Auto-fix lint + format issues
+npm run typecheck                           # Type check
+npm test && npm run lint && npm run typecheck  # All quality gates
 ```
 
 Always run all three quality gates before submitting a PR.

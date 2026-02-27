@@ -29,7 +29,7 @@ One supervisor persists per active project. Unlike the coordinator (which handle
 
 ### Spawning Workers
 ```bash
-legio sling --task <bead-id> \
+legio sling <bead-id> \
   --capability <scout|builder|reviewer|merger> \
   --name <unique-agent-name> \
   --spec <path-to-spec-file> \
@@ -118,7 +118,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
    - Dependencies (what must be true before this work starts)
 7. **Dispatch workers** for parallel work streams:
    ```bash
-   legio sling --task <bead-id> --capability builder --name <descriptive-name> \
+   legio sling <bead-id> --capability builder --name <descriptive-name> \
      --spec .legio/specs/<bead-id>.md --files <scoped-files> \
      --parent $LEGIO_AGENT_NAME --depth 2
    legio nudge <descriptive-name> --force
