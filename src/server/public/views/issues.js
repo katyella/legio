@@ -144,7 +144,7 @@ function DispatchableCard({ issue }) {
 						class=${
 							closing
 								? "px-2 py-1 text-xs rounded-sm border border-[#444] text-[#999] cursor-wait"
-								: "px-2 py-1 text-xs rounded-sm border border-red-700 text-red-400 hover:bg-red-900/20"
+								: "px-2 py-1 text-xs rounded-sm border border-[#666] text-[#999] hover:bg-[#666]/10"
 						}
 					>
 						${closing ? "Closing…" : closeConfirm ? "Confirm?" : "Close"}
