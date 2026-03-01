@@ -253,7 +253,7 @@ export function InspectView({ agentName }) {
 	return html`
 		<div class="p-4 text-[#e5e5e5]">
 			<!-- Header -->
-			<div class="flex items-center gap-3 mb-1">
+			<div class="flex flex-wrap items-center gap-3 mb-1">
 				<h2 class="text-xl font-semibold">${agent.agentName || agentName}</h2>
 				<span class=${`text-sm px-2 py-0.5 rounded-sm ${badgeClass}`}>
 					${agent.state || ""}
@@ -263,14 +263,14 @@ export function InspectView({ agentName }) {
 			</div>
 
 			<!-- Subheader -->
-			<div class="text-[#999] text-sm mb-4">
+			<div class="text-[#999] text-sm mb-4 break-words">
 				Branch: ${agent.branchName || "\u2014"} |
 				Parent: ${agent.parentAgent || "orchestrator"} |
 				Duration: ${formatDuration(dur)}
 			</div>
 
 			<!-- Token stat cards -->
-			<div class="grid grid-cols-3 gap-2 mb-6">
+			<div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-6">
 				${statCards.map(
 					({ label, value }) => html`
 					<div class="bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm p-3">
