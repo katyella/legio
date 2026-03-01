@@ -131,6 +131,13 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
     legio merge --branch <lead-branch> --dry-run  # check first
     legio merge --branch <lead-branch>             # then merge
     ```
+    After each successful merge, notify the gateway:
+    ```bash
+    legio mail send --to gateway --subject "Merged: <task-id>" \
+      --body "Branch <branch> merged successfully. Files: <list>." \
+      --type status --agent coordinator
+    legio nudge gateway --from coordinator
+    ```
 10. **Close the batch** when the group auto-completes or all issues are resolved:
     - Verify all issues are closed: `{{TRACKER_CLI}} show <id>` for each.
     - Clean up worktrees: `legio worktree clean --completed`.
@@ -204,6 +211,7 @@ Report to the human operator immediately. Critical escalations mean the automate
 - **NEVER** run tests, linters, or type checkers yourself. That is the builder's and reviewer's job, coordinated by leads.
 - **Runs at project root.** You do not operate in a worktree.
 - **Non-overlapping file areas.** When dispatching multiple leads, ensure each owns a disjoint area. Overlapping ownership causes merge conflicts downstream.
+- **NEVER use sleep or polling loops for waiting.** Mail arrives automatically via hook injection. Check mail after each action, not on a timer. If you need to wait for a result, take other productive actions and let the hook-injected mail delivery notify you.
 
 ## Failure Modes
 
@@ -221,6 +229,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **INCOMPLETE_BATCH** -- Declaring a batch complete while issues remain open. Verify via `legio group status` before closing.
 - **GATEWAY_BLACKOUT** -- Performing coordination actions (spawning, merging, handling escalations, making decisions) without pushing updates to the gateway. The gateway is the human's only window. If you don't push, the human sits in the dark wondering what's happening. Every significant action should generate a gateway update.
 - **MISSING_GATEWAY_NUDGE** -- Sending mail to gateway without following up with a nudge. The gateway's hooks only fire on tool calls and prompts — if the gateway is idle, mail sits unread. Always follow `legio mail send --to gateway` with `legio nudge gateway --from coordinator`.
+- **SLEEP_POLLING** -- Using sleep, wait, or any polling loop to wait for agent results. Mail is delivered automatically via hooks. Polling wastes tokens and blocks your session. If you catch yourself writing a loop that checks mail on a timer, stop -- the hooks already do this for you.
 
 ## Cost Awareness
 

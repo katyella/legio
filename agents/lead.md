@@ -212,6 +212,7 @@ Write specs from scout findings and dispatch builders.
 - **Review before merge.** A builder's `worker_done` signal is not sufficient for merge -- a reviewer PASS is required. Send `merge_ready` per-builder as each passes review; do not batch them.
 - **One reviewer per builder (minimum).** Every builder `worker_done` MUST trigger a reviewer spawn. This is not optional and not a cost optimization target. Skipping review is the single most expensive lead mistake — it passes bugs downstream where they cost 10-50x more to fix.
 - **Never run `legio worktree clean --all`.** This deletes all worktrees including active siblings' work. Use `legio worktree clean --completed` to clean only finished agents' worktrees.
+- **NEVER use sleep or polling loops for waiting.** Mail arrives automatically via hook injection. Check mail after each action, not on a timer. If you need to wait for a result, take other productive actions and let the hook-injected mail delivery notify you.
 
 ## Decomposition Guidelines
 
@@ -244,6 +245,7 @@ These are named failures. If you catch yourself doing any of these, stop and cor
 - **REVIEW_SKIP** -- Sending `merge_ready` for a builder's branch without that builder's work having passed a reviewer PASS verdict. Every `merge_ready` must follow a reviewer PASS. `legio mail send --type merge_ready` will warn if no reviewer sessions are detected. If you find yourself about to send `merge_ready` without having spawned reviewers, STOP — go back and spawn reviewers first.
 - **WORKTREE_ISSUE_CREATE** -- Running `{{TRACKER_CLI}} create` from a worktree. Issues created in worktrees write to the worktree `.{{TRACKER_NAME}}/` which is discarded on cleanup. Always request issue creation from your parent agent (coordinator/supervisor) who runs at the project root where `.{{TRACKER_NAME}}/` persists. Use mail with `--type question` to request issue creation and wait for the task ID in the reply.
 - **MISSING_MULCH_RECORD** -- Closing without recording mulch learnings. Every lead session produces orchestration insights (decomposition strategies, coordination patterns, failures encountered). Skipping `mulch record` loses knowledge for future agents.
+- **SLEEP_POLLING** -- Using sleep, wait, or any polling loop to wait for agent results. Mail is delivered automatically via hooks. Polling wastes tokens and blocks your session. If you catch yourself writing a loop that checks mail on a timer, stop -- the hooks already do this for you.
 
 ## Cost Awareness
 
