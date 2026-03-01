@@ -16,9 +16,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCheckpoint } from "../agents/checkpoint.ts";
+import { loadConfig } from "../config.ts";
 import { createEventStore } from "../events/store.ts";
 import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
@@ -332,6 +333,34 @@ async function attemptRecovery(options: {
 	}
 }
 
+/**
+ * List all tmux session names that match a given prefix.
+ * Returns an empty array if tmux is not running or returns no sessions.
+ */
+async function listTmuxSessions(prefix: string): Promise<string[]> {
+	return new Promise((resolve) => {
+		const proc = spawn("tmux", ["list-sessions", "-F", "#{session_name}"], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let stdout = "";
+		proc.stdout?.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString();
+		});
+		proc.on("close", (code) => {
+			if (code !== 0) {
+				resolve([]);
+				return;
+			}
+			const sessions = stdout
+				.split("\n")
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0 && line.startsWith(prefix));
+			resolve(sessions);
+		});
+		proc.on("error", () => resolve([]));
+	});
+}
+
 /** Options shared between startDaemon and runDaemonTick. */
 export interface DaemonOptions {
 	root: string;
@@ -360,6 +389,16 @@ export interface DaemonOptions {
 	_loadCheckpoint?: (agentsDir: string, agentName: string) => Promise<SessionCheckpoint | null>;
 	/** DI for testing. Overrides mail sending for recovery notifications. */
 	_sendRecoveryMail?: (args: string[]) => Promise<void>;
+	/**
+	 * Boot timeout in milliseconds for agents stuck in booting state (default: 90000).
+	 * When an agent has been in the "booting" state longer than this threshold,
+	 * it is treated as a zombie and an urgent alert is sent to its parent.
+	 */
+	bootTimeoutMs?: number;
+	/** DI for testing. Overrides tmux session listing for unregistered agent detection. */
+	_listTmuxSessions?: (prefix: string) => Promise<string[]>;
+	/** DI for testing. Overrides project name lookup (bypasses loadConfig). */
+	_projectName?: string;
 }
 
 /**
@@ -459,6 +498,48 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 			const tmuxAlive = await tmux.isSessionAlive(session.tmuxSession);
 			const check = evaluateHealth(session, tmuxAlive, thresholds);
 
+			// Boot timeout detection: agent stuck in booting state beyond threshold.
+			// Fires when tmux is alive (the session started) but the agent never
+			// transitioned out of "booting" within the allowed window.
+			if (session.state === "booting" && tmuxAlive) {
+				const bootElapsed = Date.now() - new Date(session.startedAt).getTime();
+				const bootTimeoutMs = options.bootTimeoutMs ?? 90_000;
+				if (bootElapsed > bootTimeoutMs) {
+					const notifyTarget = session.parentAgent ?? "coordinator";
+					try {
+						await sendRecoveryMailFn([
+							"--to",
+							notifyTarget,
+							"--subject",
+							`Boot timeout: ${session.agentName}`,
+							"--body",
+							`Agent ${session.agentName} stuck in booting state for ${Math.round(bootElapsed / 1000)}s (threshold: ${Math.round(bootTimeoutMs / 1000)}s). Marking zombie.`,
+							"--type",
+							"error",
+							"--priority",
+							"urgent",
+							"--from",
+							"watchdog",
+						]);
+					} catch {
+						// Fire-and-forget: mail failure must not break the watchdog
+					}
+					recordEvent(eventStore, {
+						runId,
+						agentName: session.agentName,
+						eventType: "custom",
+						level: "warn",
+						data: { type: "boot_timeout", bootElapsedMs: bootElapsed, bootTimeoutMs },
+					});
+					store.updateState(session.agentName, "zombie");
+					session.state = "zombie";
+					if (onHealthCheck) {
+						onHealthCheck(check);
+					}
+					continue;
+				}
+			}
+
 			// Transition state forward only (investigate action holds state)
 			const newState = transitionState(session.state, check);
 			if (newState !== session.state) {
@@ -518,6 +599,95 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 				// The onHealthCheck callback surfaces this to the operator.
 				// No state change — keep zombie until a human or higher-tier agent decides.
 			}
+		}
+
+		// Unregistered agent detection: find tmux sessions with no DB registration.
+		// Compares live tmux sessions against sessions.db. Sessions that appear in
+		// tmux but not in the DB may be rogue processes or orphaned from a crash.
+		// On first sighting, writes a marker file. On subsequent ticks, if the session
+		// has been running unregistered for >3 minutes, sends an urgent alert.
+		try {
+			let projectName: string;
+			if (options._projectName !== undefined) {
+				projectName = options._projectName;
+			} else {
+				const config = await loadConfig(root);
+				projectName = config.project.name;
+			}
+			const sessionPrefix = `legio-${projectName}-`;
+			const listSessionsFn = options._listTmuxSessions ?? listTmuxSessions;
+			const tmuxSessionNames = await listSessionsFn(sessionPrefix);
+
+			// Build set of all registered tmux session names (including completed/zombie)
+			const registeredTmuxSessions = new Set(sessions.map((s) => s.tmuxSession));
+
+			// Persistent coordination agents are excluded — they may not always be in sessions.db
+			const EXCLUDED_AGENTS = new Set(["coordinator", "gateway", "monitor"]);
+			const unregisteredDir = join(legioDir, "unregistered-agents");
+
+			for (const tmuxSession of tmuxSessionNames) {
+				if (registeredTmuxSessions.has(tmuxSession)) continue;
+
+				// Extract agent name by stripping the session prefix
+				const agentName = tmuxSession.slice(sessionPrefix.length);
+				if (EXCLUDED_AGENTS.has(agentName)) continue;
+
+				const markerPath = join(unregisteredDir, `${agentName}.txt`);
+				let firstSeenMs: number | null = null;
+				try {
+					const content = await readFile(markerPath, "utf-8");
+					firstSeenMs = Number.parseInt(content.trim(), 10) || null;
+				} catch {
+					// Marker doesn't exist — first sighting: write the timestamp
+					try {
+						await mkdir(unregisteredDir, { recursive: true });
+						await writeFile(markerPath, String(Date.now()), "utf-8");
+					} catch {
+						// Non-fatal: marker write failure
+					}
+					continue;
+				}
+
+				if (firstSeenMs !== null) {
+					const elapsed = Date.now() - firstSeenMs;
+					if (elapsed > 3 * 60 * 1000) {
+						// Session has been unregistered for >3 minutes — send alert
+						try {
+							await sendRecoveryMailFn([
+								"--to",
+								"coordinator",
+								"--subject",
+								`Unregistered agent: ${agentName}`,
+								"--body",
+								`Tmux session ${tmuxSession} has been running for ${Math.round(elapsed / 60000)}min but is not registered in sessions.db. Possible zombie or rogue process.`,
+								"--type",
+								"error",
+								"--priority",
+								"urgent",
+								"--from",
+								"watchdog",
+							]);
+						} catch {
+							// Fire-and-forget: mail failure must not break the watchdog
+						}
+						recordEvent(eventStore, {
+							runId,
+							agentName,
+							eventType: "custom",
+							level: "warn",
+							data: { type: "unregistered_zombie", tmuxSession, elapsedMs: elapsed },
+						});
+						// Clean up the marker so we don't re-alert on every tick
+						try {
+							await unlink(markerPath);
+						} catch {
+							// Non-fatal: marker cleanup failure
+						}
+					}
+				}
+			}
+		} catch {
+			// Non-fatal: unregistered agent detection must not break the daemon
 		}
 	} finally {
 		store.close();
