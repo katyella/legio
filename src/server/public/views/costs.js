@@ -66,7 +66,7 @@ function modelColor(model) {
 
 function StatCard({ label, value }) {
 	return html`
-		<div class="bg-surface border border-border rounded-sm p-4 flex-1 min-w-0">
+		<div class="bg-surface border border-border rounded-sm p-4 flex-1 min-w-[140px]">
 			<div class="text-xs text-gray-500 uppercase tracking-wider mb-1">${label}</div>
 			<div class="text-2xl font-mono text-white">${value}</div>
 		</div>
@@ -95,7 +95,7 @@ function ModelBreakdown({ modelData }) {
 				const color = modelColor(row.model);
 				return html`
 					<div key=${row.model || "unknown"} class="flex items-center gap-3">
-						<div class="flex items-center gap-2 w-[140px] shrink-0">
+						<div class="flex items-center gap-2 w-[100px] md:w-[140px] shrink-0">
 							<div class=${`${color} w-2 h-2 rounded-full shrink-0`}></div>
 							<span class="text-sm text-gray-300 truncate">${row.model || "unknown"}</span>
 						</div>
@@ -198,7 +198,7 @@ function AgentBarChart({ metrics }) {
 					<div key=${name} class="flex items-center gap-3">
 						<a
 							href=${`#inspect/${encodeURIComponent(name)}`}
-							class="text-blue-400 hover:text-blue-300 text-sm w-[140px] shrink-0 truncate"
+							class="text-blue-400 hover:text-blue-300 text-sm w-[100px] md:w-[140px] shrink-0 truncate"
 						>
 							${name}
 						</a>
@@ -298,7 +298,7 @@ function CapabilityChart({ metrics }) {
 				const pct = maxCost > 0 ? (cost / maxCost) * 100 : 0;
 				return html`
 					<div key=${cap} class="flex items-center gap-3">
-						<span class="text-sm text-gray-400 w-[140px] shrink-0 truncate">${cap}</span>
+						<span class="text-sm text-gray-400 w-[100px] md:w-[140px] shrink-0 truncate">${cap}</span>
 						<div class="flex-1 bg-white/5 rounded-sm h-5 overflow-hidden">
 							<div
 								class="bg-blue-400 h-full rounded-sm"
@@ -510,7 +510,7 @@ export function CostsView({ metrics: initialMetrics, snapshots }) {
 			</div>
 
 			<!-- Summary Stat Cards -->
-			<div class="flex gap-4">
+			<div class="flex flex-wrap gap-4">
 				<${StatCard}
 					label="Total Cost"
 					value=${totals.cost != null ? formatCostShort(totals.cost) : "—"}
