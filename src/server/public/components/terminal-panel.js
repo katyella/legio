@@ -8,58 +8,35 @@ function stripAnsi(str) {
 	return str.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "");
 }
 
-function diffCapture(baselineText, currentText) {
-	const baselineLines = baselineText.trimEnd().split("\n");
-	const currentLines = currentText.trimEnd().split("\n");
-	const anchorLen = Math.min(3, baselineLines.length);
-	const anchor = baselineLines.slice(-anchorLen);
+const ACTIVITY_LEVEL = { idle: 0, stale: 1, active: 2 };
 
-	// Search for the anchor sequence in current capture (prefer latest match)
-	for (let i = currentLines.length - anchorLen; i >= 0; i--) {
-		let match = true;
-		for (let j = 0; j < anchorLen; j++) {
-			if (currentLines[i + j] !== anchor[j]) {
-				match = false;
-				break;
-			}
-		}
-		if (match) {
-			return currentLines.slice(i + anchorLen).join("\n");
-		}
-	}
-	// Baseline scrolled off — show tail
-	return currentLines.slice(-20).join("\n");
+function higherActivity(a, b) {
+	return (ACTIVITY_LEVEL[a] ?? 0) >= (ACTIVITY_LEVEL[b] ?? 0) ? a : b;
 }
 
 // TerminalPanel — collapsible terminal capture sub-component
 // Props:
 //   chatTarget {string} — agent name to capture terminal from
-//   thinking   {boolean} — when true, streams diff-based new output
-export function TerminalPanel({ chatTarget, thinking }) {
-	const [expanded, setExpanded] = useState(false);
-	const [streamText, setStreamText] = useState("");
-	const [loading, setLoading] = useState(false);
-	const baselineCaptureRef = useRef(null);
+//   activity   {string} — 'idle'|'active'|'stale' hint from parent (e.g. gateway just sent a message)
+export function TerminalPanel({ chatTarget, activity = "idle" }) {
+	const [userExpanded, setUserExpanded] = useState(false);
+	const [captureText, setCaptureText] = useState("");
+	const [captureActivity, setCaptureActivity] = useState("idle");
+	const lastChangeTimeRef = useRef(Date.now());
+	const lastHashRef = useRef("");
 	const terminalRef = useRef(null);
 
 	// Reset when chatTarget changes
 	useEffect(() => {
-		setStreamText("");
-		setLoading(false);
-		baselineCaptureRef.current = null;
+		setCaptureText("");
+		setCaptureActivity("idle");
+		lastChangeTimeRef.current = Date.now();
+		lastHashRef.current = "";
 	}, [chatTarget]);
 
-	// Poll terminal capture when thinking OR expanded; clear when neither
+	// Always poll to drive the activity state machine via hash-based change detection
 	useEffect(() => {
-		if (!thinking && !expanded) {
-			setStreamText("");
-			setLoading(false);
-			baselineCaptureRef.current = null;
-			return;
-		}
-
 		let cancelled = false;
-		setLoading(true);
 
 		async function pollCapture() {
 			try {
@@ -67,69 +44,77 @@ export function TerminalPanel({ chatTarget, thinking }) {
 				if (!res.ok || cancelled) return;
 				const data = await res.json();
 				const output = stripAnsi(data.output || "");
-				if (!cancelled) setLoading(false);
+				if (cancelled) return;
 
-				if (thinking) {
-					// Streaming mode: diff against baseline to show new output
-					if (baselineCaptureRef.current === null) {
-						baselineCaptureRef.current = output;
-						return;
-					}
-					const delta = diffCapture(baselineCaptureRef.current, output);
-					if (!cancelled && delta.trim()) {
-						setStreamText(delta);
-					}
+				const now = Date.now();
+				if (output !== lastHashRef.current) {
+					// Capture changed — transition to active
+					lastHashRef.current = output;
+					lastChangeTimeRef.current = now;
+					setCaptureActivity("active");
 				} else {
-					// Expanded viewer mode: show full terminal capture directly
-					if (!cancelled && output.trim()) {
-						setStreamText(output);
+					// No change — decay based on elapsed time since last change
+					const elapsed = now - lastChangeTimeRef.current;
+					if (elapsed >= 30000) {
+						setCaptureActivity("idle");
+					} else if (elapsed >= 5000) {
+						setCaptureActivity("stale");
 					}
 				}
+
+				if (output.trim()) {
+					setCaptureText(output);
+				}
 			} catch (_err) {
-				// non-fatal — capture may fail if coordinator tmux not ready
+				// non-fatal — capture may fail if agent tmux session not ready
 			}
 		}
 
 		pollCapture();
-		const interval = setInterval(pollCapture, 1500);
+		const interval = setInterval(pollCapture, 2000);
 		return () => {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, [thinking, expanded, chatTarget]);
+	}, [chatTarget]);
 
 	// Auto-scroll terminal to bottom when new output arrives
 	useEffect(() => {
 		const el = terminalRef.current;
 		if (el) el.scrollTop = el.scrollHeight;
-	}, [streamText]);
+	}, [captureText]);
+
+	// Effective activity: max of parent hint and internal capture-driven state
+	const effectiveActivity = higherActivity(activity, captureActivity);
+
+	const dotClass =
+		"w-2 h-2 rounded-full flex-shrink-0 " +
+		(effectiveActivity === "active"
+			? "bg-yellow-500 animate-pulse"
+			: effectiveActivity === "stale"
+				? "bg-yellow-500/50"
+				: "bg-[#333]");
 
 	return html`
 		<div class="border-t border-[#2a2a2a] shrink-0">
 			<div
 				class="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-white/5"
-				onClick=${() => setExpanded((prev) => !prev)}
+				onClick=${() => setUserExpanded((prev) => !prev)}
 			>
-				<span
-					class=${
-						"w-2 h-2 rounded-full flex-shrink-0 " +
-						(thinking ? "bg-yellow-500 animate-pulse" : "bg-[#333]")
-					}
-				></span>
+				<span class=${dotClass}></span>
 				<span class="text-xs text-[#666]">Terminal</span>
-				${thinking ? html`<span class="text-xs text-yellow-500 animate-pulse">active</span>` : null}
-				<span class="ml-auto text-xs text-[#444]">${expanded ? "\u25b2" : "\u25bc"}</span>
+				${effectiveActivity === "active" ? html`<span class="text-xs text-yellow-500 animate-pulse">active</span>` : null}
+				${effectiveActivity === "stale" ? html`<span class="text-xs text-yellow-500/50">stale</span>` : null}
+				<span class="ml-auto text-xs text-[#444]">${userExpanded ? "\u25b2" : "\u25bc"}</span>
 			</div>
 			${
-				expanded
+				userExpanded
 					? html`
 					<div ref=${terminalRef} class="max-h-[200px] overflow-y-auto px-3 pb-2">
 						${
-							streamText
-								? html`<pre class="text-xs text-[#ccc] font-mono whitespace-pre-wrap break-words">${streamText}</pre>`
-								: loading
-									? html`<div class="text-xs text-[#666] py-1 italic animate-pulse">Connecting...</div>`
-									: html`<div class="text-xs text-[#444] py-1 italic">No output yet</div>`
+							captureText
+								? html`<pre class="text-xs text-[#ccc] font-mono whitespace-pre-wrap break-words">${captureText}</pre>`
+								: html`<div class="text-xs text-[#444] py-1 italic">No output yet</div>`
 						}
 					</div>
 				`
