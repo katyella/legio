@@ -485,9 +485,9 @@ describe("deployHooks", () => {
 		expect(writeBlockGuard).toBeDefined();
 		expect(writeBlockGuard.hooks[0].command).toContain('"decision":"block"');
 
-		// Should have multiple Bash guards: danger guard + file guard + template push-guard
+		// Should have multiple Bash guards: danger guard + file guard + template push-guard + sleep-guard
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3); // danger guard + file guard + template push-guard
+		expect(bashGuards.length).toBe(4); // danger guard + file guard + template push-guard + sleep-guard
 	});
 
 	test("reviewer capability adds same guards as scout", async () => {
@@ -529,9 +529,9 @@ describe("deployHooks", () => {
 		expect(guardMatchers).toContain("NotebookEdit");
 		expect(guardMatchers).toContain("Bash");
 
-		// Should have 3 Bash guards: danger guard + file guard + template push-guard
+		// Should have 4 Bash guards: danger guard + file guard + template push-guard + sleep-guard
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3);
+		expect(bashGuards.length).toBe(4);
 	});
 
 	test("builder capability gets path boundary + Bash danger + Bash path boundary guards + native team tool blocks", async () => {
@@ -561,9 +561,9 @@ describe("deployHooks", () => {
 		expect(writeGuards[0].hooks[0].command).toContain("LEGIO_WORKTREE_PATH");
 		expect(writeGuards[0].hooks[0].command).not.toContain("cannot modify files");
 
-		// Builder should have 3 Bash guards: danger guard + path boundary guard + template push-guard
+		// Builder should have 4 Bash guards: danger guard + path boundary guard + template push-guard + sleep-guard
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3);
+		expect(bashGuards.length).toBe(4);
 		// One should be the danger guard (checks git push)
 		const dangerGuard = bashGuards.find(
 			(h: { hooks: Array<{ command: string }> }) =>
@@ -1206,7 +1206,7 @@ describe("structural enforcement integration", () => {
 
 		// Find the bash file guard (the second Bash entry, after the danger guard)
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3); // danger guard + file guard + template push-guard
+		expect(bashGuards.length).toBe(4); // danger guard + file guard + template push-guard + sleep-guard
 
 		// The file guard (second Bash guard) should whitelist git add/commit
 		const fileGuard = bashGuards[1];
@@ -1689,8 +1689,8 @@ describe("bash path boundary integration", () => {
 		const preToolUse = parsed.hooks.PreToolUse;
 
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		// Should have 3 Bash guards: danger guard + path boundary guard + template push-guard
-		expect(bashGuards.length).toBe(3);
+		// Should have 4 Bash guards: danger guard + path boundary guard + template push-guard + sleep-guard
+		expect(bashGuards.length).toBe(4);
 
 		// Find the path boundary guard
 		const pathGuard = bashGuards.find((h: { hooks: Array<{ command: string }> }) =>
@@ -1711,7 +1711,7 @@ describe("bash path boundary integration", () => {
 		const preToolUse = parsed.hooks.PreToolUse;
 
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3); // danger guard + path boundary guard + template push-guard
+		expect(bashGuards.length).toBe(4); // danger guard + path boundary guard + template push-guard + sleep-guard
 
 		const pathGuard = bashGuards.find((h: { hooks: Array<{ command: string }> }) =>
 			h.hooks[0]?.command?.includes("Bash path boundary violation"),
@@ -1729,9 +1729,9 @@ describe("bash path boundary integration", () => {
 		const parsed = JSON.parse(content);
 		const preToolUse = parsed.hooks.PreToolUse;
 
-		// Scout gets danger guard + file guard + template push-guard (3 Bash guards), but NOT path boundary
+		// Scout gets danger guard + file guard + template push-guard + sleep-guard (4 Bash guards), but NOT path boundary
 		const bashGuards = preToolUse.filter((h: { matcher: string }) => h.matcher === "Bash");
-		expect(bashGuards.length).toBe(3);
+		expect(bashGuards.length).toBe(4);
 
 		const pathGuard = bashGuards.find((h: { hooks: Array<{ command: string }> }) =>
 			h.hooks[0]?.command?.includes("Bash path boundary violation"),
