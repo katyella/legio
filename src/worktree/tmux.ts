@@ -99,10 +99,10 @@ export async function createSession(
 ): Promise<number> {
 	// Clear Claude Code nesting detection so child Claude Code instances
 	// don't refuse to start with "cannot be launched inside another session".
-	// This MUST be part of the shell command (not tmux -e) because we need
-	// to *unset* vars inherited from the parent process environment.
-	const shellPrefix = "unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT";
-	const wrappedCommand = `${shellPrefix} && ${command}`;
+	// Use `env -u` instead of shell-builtin `unset` because tmux inherits the
+	// user's default shell which may be fish (where `unset` is invalid syntax).
+	// `env -u VAR cmd` is a standalone binary (/usr/bin/env) that works in any shell.
+	const wrappedCommand = `env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT ${command}`;
 
 	// Build tmux args. Environment variables are passed via `-e KEY=VALUE`
 	// flags (tmux 3.2+) instead of shell `export` commands to avoid

@@ -128,8 +128,9 @@ describe("createSession", () => {
 		expect(args).toContain("my-session");
 		expect(args).toContain("-c");
 		expect(args).toContain("/work/dir");
-		// The command is the last arg, wrapped with unset prefix
+		// The command is the last arg, wrapped with env -u prefix
 		const wrappedCmd = args[args.length - 1] as string;
+		expect(wrappedCmd).toContain("env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT");
 		expect(wrappedCmd).toContain("echo hello");
 		// PATH is injected via -e flag, not shell export
 		expect(args).toContain("-e");
