@@ -1,6 +1,6 @@
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 /** Test helper: check whether a file exists using Node.js fs/promises. */
 async function fileExists(path: string): Promise<boolean> {
@@ -48,13 +48,11 @@ const EXPECTED_AGENT_DEFS = [
 
 describe("E2E: init→sling lifecycle on external project", () => {
 	let tempDir: string;
-	let originalCwd: string;
 	let originalWrite: typeof process.stdout.write;
 
 	beforeEach(async () => {
 		tempDir = await createTempGitRepo();
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		// Suppress stdout noise from initCommand
 		originalWrite = process.stdout.write;
@@ -62,7 +60,6 @@ describe("E2E: init→sling lifecycle on external project", () => {
 	});
 
 	afterEach(async () => {
-		process.chdir(originalCwd);
 		process.stdout.write = originalWrite;
 		await cleanupTempDir(tempDir);
 	});

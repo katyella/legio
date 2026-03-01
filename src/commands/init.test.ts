@@ -1,6 +1,6 @@
 import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { detectQualityGates, initCommand, LEGIO_GITIGNORE } from "./init.ts";
 
@@ -29,13 +29,11 @@ const SOURCE_AGENTS_DIR = join(import.meta.dirname, "..", "..", "agents");
 
 describe("initCommand: agent-defs deployment", () => {
 	let tempDir: string;
-	let originalCwd: string;
 	let originalWrite: typeof process.stdout.write;
 
 	beforeEach(async () => {
 		tempDir = await createTempGitRepo();
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		// Suppress stdout noise from initCommand
 		originalWrite = process.stdout.write;
@@ -43,7 +41,6 @@ describe("initCommand: agent-defs deployment", () => {
 	});
 
 	afterEach(async () => {
-		process.chdir(originalCwd);
 		process.stdout.write = originalWrite;
 		await cleanupTempDir(tempDir);
 	});
@@ -109,13 +106,11 @@ describe("initCommand: agent-defs deployment", () => {
 
 describe("initCommand: .legio/.gitignore", () => {
 	let tempDir: string;
-	let originalCwd: string;
 	let originalWrite: typeof process.stdout.write;
 
 	beforeEach(async () => {
 		tempDir = await createTempGitRepo();
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		// Suppress stdout noise from initCommand
 		originalWrite = process.stdout.write;
@@ -123,7 +118,6 @@ describe("initCommand: .legio/.gitignore", () => {
 	});
 
 	afterEach(async () => {
-		process.chdir(originalCwd);
 		process.stdout.write = originalWrite;
 		await cleanupTempDir(tempDir);
 	});
@@ -326,20 +320,17 @@ describe("detectQualityGates", () => {
 
 describe("initCommand: quality gates detection", () => {
 	let tempDir: string;
-	let originalCwd: string;
 	let originalWrite: typeof process.stdout.write;
 
 	beforeEach(async () => {
 		tempDir = await createTempGitRepo();
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		originalWrite = process.stdout.write;
 		process.stdout.write = (() => true) as typeof process.stdout.write;
 	});
 
 	afterEach(async () => {
-		process.chdir(originalCwd);
 		process.stdout.write = originalWrite;
 		await cleanupTempDir(tempDir);
 	});

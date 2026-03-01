@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { AgentSession } from "../types.ts";
 import { printStatus, type StatusData, statusCommand, type VerboseAgentDetail } from "./status.ts";
 
@@ -256,8 +256,7 @@ describe("--watch deprecation", () => {
 		// but the deprecation notice is written before that. We just verify
 		// the notice was emitted.
 		const tmpDir = await mkdtemp(join(tmpdir(), "status-deprecation-"));
-		const originalCwd = process.cwd();
-		process.chdir(tmpDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
 
 		try {
 			await statusCommand(["--watch"]);
@@ -265,7 +264,6 @@ describe("--watch deprecation", () => {
 			// Expected: loadConfig fails without .legio/
 		} finally {
 			process.stderr.write = originalStderr;
-			process.chdir(originalCwd);
 			await rm(tmpDir, { recursive: true, force: true });
 		}
 

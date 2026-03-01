@@ -11,7 +11,7 @@
 import { existsSync } from "node:fs";
 import { access, mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createMailStore } from "../mail/store.ts";
 import { createMergeQueue } from "../merge/queue.ts";
@@ -23,7 +23,6 @@ import { cleanCommand } from "./clean.ts";
 
 let tempDir: string;
 let legioDir: string;
-let originalCwd: string;
 let stdoutOutput: string;
 let _stderrOutput: string;
 let originalStdoutWrite: typeof process.stdout.write;
@@ -46,8 +45,7 @@ beforeEach(async () => {
 	await mkdir(join(legioDir, "specs"), { recursive: true });
 	await mkdir(join(legioDir, "worktrees"), { recursive: true });
 
-	originalCwd = process.cwd();
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 	// Capture stdout/stderr
 	stdoutOutput = "";
@@ -65,7 +63,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-	process.chdir(originalCwd);
 	process.stdout.write = originalStdoutWrite;
 	process.stderr.write = originalStderrWrite;
 	await cleanupTempDir(tempDir);

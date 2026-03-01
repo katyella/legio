@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import type { LogEvent } from "../types.ts";
 import { logsCommand } from "./logs.ts";
@@ -30,7 +30,6 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 
 describe("logsCommand", () => {
 	let tmpDir: string;
-	let originalCwd: string;
 
 	beforeEach(async () => {
 		// Create a temp directory for each test
@@ -40,16 +39,10 @@ describe("logsCommand", () => {
 		);
 		await mkdir(tmpDir, { recursive: true });
 
-		// Save original cwd and change to tmpDir so loadConfig finds our test config
-		originalCwd = process.cwd();
-		process.chdir(tmpDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
 	});
 
 	afterEach(async () => {
-		// Restore cwd
-		process.chdir(originalCwd);
-
-		// Clean up temp directory
 		try {
 			await rm(tmpDir, { recursive: true, force: true });
 		} catch {

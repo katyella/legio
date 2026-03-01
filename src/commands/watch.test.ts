@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { watchCommand } from "./watch.ts";
 
 /**
@@ -24,7 +24,6 @@ describe("watchCommand", () => {
 	let originalWrite: typeof process.stdout.write;
 	let originalStderrWrite: typeof process.stderr.write;
 	let tempDir: string;
-	let originalCwd: string;
 	let originalExitCode: string | number | null | undefined;
 
 	beforeEach(async () => {
@@ -57,16 +56,13 @@ describe("watchCommand", () => {
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
 
-		// Change to temp dir so loadConfig() works
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 	});
 
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
 		process.stderr.write = originalStderrWrite;
 		process.exitCode = originalExitCode;
-		process.chdir(originalCwd);
 		await rm(tempDir, { recursive: true, force: true });
 	});
 

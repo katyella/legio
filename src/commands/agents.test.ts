@@ -239,7 +239,6 @@ describe("discoverAgents", () => {
 
 describe("agentsCommand", () => {
 	let tempDir: string;
-	let originalCwd: string;
 	let originalStdoutWrite: typeof process.stdout.write;
 	let stdoutBuffer: string;
 
@@ -296,9 +295,7 @@ logging:
 			return true;
 		});
 
-		// Change to temp dir
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 	});
 
 	it("should show help with --help flag", async () => {
@@ -319,7 +316,6 @@ logging:
 
 	afterEach(async () => {
 		process.stdout.write = originalStdoutWrite;
-		process.chdir(originalCwd);
 		await rm(tempDir, { recursive: true, force: true });
 	});
 });

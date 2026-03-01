@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 /** Test helper: create a file accessor for checking existence and reading content. */
 function fileAccessor(path: string) {
@@ -37,7 +37,6 @@ describe("logCommand", () => {
 	let chunks: string[];
 	let originalWrite: typeof process.stdout.write;
 	let tempDir: string;
-	let originalCwd: string;
 
 	beforeEach(async () => {
 		// Spy on stdout
@@ -57,14 +56,11 @@ describe("logCommand", () => {
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
 
-		// Change to temp dir so loadConfig() works
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 	});
 
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
-		process.chdir(originalCwd);
 		// Retry cleanup: SQLite WAL checkpoint may still be flushing on Linux CI
 		for (let i = 0; i < 3; i++) {
 			try {

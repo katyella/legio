@@ -8,7 +8,7 @@
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createEventStore } from "../events/store.ts";
 import { createMailClient } from "../mail/client.ts";
 import { createMailStore } from "../mail/store.ts";
@@ -17,7 +17,6 @@ import { mailCommand } from "./mail.ts";
 
 describe("mailCommand", () => {
 	let tempDir: string;
-	let origCwd: string;
 	let origWrite: typeof process.stdout.write;
 	let origStderrWrite: typeof process.stderr.write;
 	let output: string;
@@ -44,9 +43,7 @@ describe("mailCommand", () => {
 		});
 		client.close();
 
-		// Change cwd to temp dir so the command finds .legio/mail.db
-		origCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		// Capture stdout
 		output = "";
@@ -68,7 +65,6 @@ describe("mailCommand", () => {
 	afterEach(async () => {
 		process.stdout.write = origWrite;
 		process.stderr.write = origStderrWrite;
-		process.chdir(origCwd);
 		await rm(tempDir, { recursive: true, force: true });
 	});
 

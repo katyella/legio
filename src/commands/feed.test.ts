@@ -11,7 +11,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
 import type { InsertEvent } from "../types.ts";
@@ -37,7 +37,6 @@ describe("feedCommand", () => {
 	let chunks: string[];
 	let originalWrite: typeof process.stdout.write;
 	let tempDir: string;
-	let originalCwd: string;
 
 	beforeEach(async () => {
 		// Spy on stdout
@@ -57,14 +56,11 @@ describe("feedCommand", () => {
 			`project:\n  name: test\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 		);
 
-		// Change to temp dir so loadConfig() works
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 	});
 
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
-		process.chdir(originalCwd);
 		await rm(tempDir, { recursive: true, force: true });
 	});
 

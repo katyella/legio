@@ -9,7 +9,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { dashboardCommand } from "./dashboard.ts";
 
@@ -74,10 +74,9 @@ describe("dashboardCommand", () => {
 		// throws BEFORE the infinite while loop starts. This proves validation passed
 		// (no ValidationError about interval) while preventing the loop from leaking.
 
-		const originalCwd = process.cwd();
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 		try {
-			process.chdir(tempDir);
 			await dashboardCommand(["--interval", "500"]);
 		} catch (err) {
 			// If it's a ValidationError about interval, the test should fail
@@ -85,8 +84,6 @@ describe("dashboardCommand", () => {
 				throw new Error("Interval validation should have passed for value 500");
 			}
 			// Other errors (like from loadConfig) are expected - they occur after validation passed
-		} finally {
-			process.chdir(originalCwd);
 		}
 
 		// If we reach here without throwing a ValidationError about interval, validation passed

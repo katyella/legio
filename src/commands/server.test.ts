@@ -25,11 +25,8 @@ import {
 
 let tempDir: string;
 let legioDir: string;
-const originalCwd = process.cwd();
 
 beforeEach(async () => {
-	process.chdir(originalCwd);
-
 	tempDir = await realpath(await createTempGitRepo());
 	legioDir = join(tempDir, ".legio");
 	await mkdir(legioDir, { recursive: true });
@@ -40,11 +37,10 @@ beforeEach(async () => {
 		["project:", "  name: test-server", `  root: ${tempDir}`, "  canonicalBranch: main"].join("\n"),
 	);
 
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 });
 
 afterEach(async () => {
-	process.chdir(originalCwd);
 	await cleanupTempDir(tempDir);
 });
 

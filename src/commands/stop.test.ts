@@ -11,7 +11,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openSessionStore } from "../sessions/compat.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import type { AgentSession } from "../types.ts";
@@ -51,7 +51,6 @@ function makeFakeTmux(aliveMap: Record<string, boolean> = {}): {
 
 let tempDir: string;
 let legioDir: string;
-const originalCwd = process.cwd();
 
 /** Make a minimal AgentSession for inserting into the store. */
 function makeSession(overrides: Partial<AgentSession> = {}): AgentSession {
@@ -97,7 +96,6 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 // ---------------------------------------------------------------------------
 
 beforeEach(async () => {
-	process.chdir(originalCwd);
 	tempDir = await createTempGitRepo();
 	legioDir = join(tempDir, ".legio");
 	await mkdir(legioDir, { recursive: true });
@@ -110,11 +108,10 @@ beforeEach(async () => {
 		),
 	);
 
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 });
 
 afterEach(async () => {
-	process.chdir(originalCwd);
 	await cleanupTempDir(tempDir);
 });
 

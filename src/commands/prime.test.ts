@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { openSessionStore } from "../sessions/compat.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { primeCommand } from "./prime.ts";
@@ -19,7 +19,6 @@ describe("primeCommand", () => {
 	let originalStderrWrite: typeof process.stderr.write;
 	let stderrChunks: string[];
 	let tempDir: string;
-	let originalCwd: string;
 
 	beforeEach(async () => {
 		// Spy on stdout
@@ -47,15 +46,12 @@ describe("primeCommand", () => {
 			`project:\n  name: test-project\n  root: ${tempDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 		);
 
-		// Change to temp dir so loadConfig() works
-		originalCwd = process.cwd();
-		process.chdir(tempDir);
+		vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 	});
 
 	afterEach(async () => {
 		process.stdout.write = originalWrite;
 		process.stderr.write = originalStderrWrite;
-		process.chdir(originalCwd);
 		await rm(tempDir, { recursive: true, force: true });
 	});
 
@@ -331,8 +327,7 @@ recentTasks: []
 					`project:\n  name: branch-test\n  root: ${gitRepoDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 				);
 
-				// Save and change cwd to the git repo
-				process.chdir(gitRepoDir);
+				vi.spyOn(process, "cwd").mockReturnValue(gitRepoDir);
 
 				await primeCommand([]);
 				const out = output();
@@ -344,7 +339,6 @@ recentTasks: []
 				const content = await readFile(sessionBranchPath, "utf-8");
 				expect(content.trim()).toBe("main");
 			} finally {
-				process.chdir(originalCwd);
 				await cleanupTempDir(gitRepoDir);
 			}
 		});
@@ -364,7 +358,7 @@ recentTasks: []
 					`project:\n  name: branch-test\n  root: ${gitRepoDir}\n  canonicalBranch: main\nmulch:\n  enabled: false\n`,
 				);
 
-				process.chdir(gitRepoDir);
+				vi.spyOn(process, "cwd").mockReturnValue(gitRepoDir);
 
 				await primeCommand([]);
 				const out = output();
@@ -376,7 +370,6 @@ recentTasks: []
 				const content = await readFile(sessionBranchPath, "utf-8");
 				expect(content.trim()).toBe("feature/my-work");
 			} finally {
-				process.chdir(originalCwd);
 				await cleanupTempDir(gitRepoDir);
 			}
 		});

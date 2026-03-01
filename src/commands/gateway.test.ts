@@ -13,7 +13,7 @@
 
 import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
@@ -77,7 +77,6 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 
 let tempDir: string;
 let legioDir: string;
-const originalCwd = process.cwd();
 
 /** Save sessions to the SessionStore (sessions.db) for test setup. */
 function saveSessionsToDb(sessions: AgentSession[]): void {
@@ -102,10 +101,6 @@ function loadSessionsFromDb(): AgentSession[] {
 }
 
 beforeEach(async () => {
-	// Restore cwd FIRST so createTempGitRepo's git operations don't fail
-	// if a prior test's tempDir was already cleaned up.
-	process.chdir(originalCwd);
-
 	tempDir = await realpath(await createTempGitRepo());
 	legioDir = join(tempDir, ".legio");
 	await mkdir(legioDir, { recursive: true });
@@ -141,12 +136,10 @@ beforeEach(async () => {
 	);
 	await writeFile(join(agentDefsDir, "gateway.md"), "# Gateway\n");
 
-	// Override cwd so gateway commands find our temp project
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 }, 30000); // 30s timeout: createTempGitRepo can be slow on first run
 
 afterEach(async () => {
-	process.chdir(originalCwd);
 	await cleanupTempDir(tempDir);
 });
 

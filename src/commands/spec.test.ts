@@ -7,13 +7,12 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { specCommand, writeSpec } from "./spec.ts";
 
 let tempDir: string;
 let legioDir: string;
-let originalCwd: string;
 let stdoutOutput: string;
 let _stderrOutput: string;
 let originalStdoutWrite: typeof process.stdout.write;
@@ -34,8 +33,7 @@ beforeEach(async () => {
 		`project:\n  name: test-project\n  root: ${tempDir}\n  canonicalBranch: main\n`,
 	);
 
-	originalCwd = process.cwd();
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 
 	// Capture stdout/stderr
 	stdoutOutput = "";
@@ -54,7 +52,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
 	process.stdin.isTTY = originalIsTTY as true;
-	process.chdir(originalCwd);
 	process.stdout.write = originalStdoutWrite;
 	process.stderr.write = originalStderrWrite;
 	await cleanupTempDir(tempDir);

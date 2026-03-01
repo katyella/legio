@@ -8,13 +8,12 @@
 
 import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ValidationError } from "../errors.ts";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { hooksCommand } from "./hooks.ts";
 
 let tempDir: string;
-const originalCwd = process.cwd();
 
 /** Orchestrator hooks content for .legio/hooks.json. */
 const SAMPLE_HOOKS = {
@@ -51,7 +50,6 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 }
 
 beforeEach(async () => {
-	process.chdir(originalCwd);
 	tempDir = await realpath(await createTempGitRepo());
 
 	// Create minimal .legio/ with config.yaml
@@ -64,11 +62,10 @@ beforeEach(async () => {
 		),
 	);
 
-	process.chdir(tempDir);
+	vi.spyOn(process, "cwd").mockReturnValue(tempDir);
 });
 
 afterEach(async () => {
-	process.chdir(originalCwd);
 	await cleanupTempDir(tempDir);
 });
 
