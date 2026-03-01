@@ -6,7 +6,7 @@
  * and various filters for listing messages.
  */
 
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { resolveProjectRoot } from "../config.ts";
 import { MailError, ValidationError } from "../errors.ts";
@@ -56,7 +56,15 @@ function hasFlag(args: string[], flag: string): boolean {
 }
 
 /** Boolean flags that do NOT consume the next arg as a value. */
-const BOOLEAN_FLAGS = new Set(["--json", "--inject", "--unread", "--all", "--help", "-h"]);
+const BOOLEAN_FLAGS = new Set([
+	"--json",
+	"--inject",
+	"--unread",
+	"--all",
+	"--signal",
+	"--help",
+	"-h",
+]);
 
 /**
  * Extract positional arguments from an args array, skipping flag-value pairs.
@@ -155,15 +163,22 @@ function pendingNudgeDir(cwd: string): string {
 /**
  * Check if an agent is idle (not actively executing a tool).
  *
- * An agent is considered idle when `.legio/agent-busy/{agentName}` does NOT exist.
- * The busy marker is written by hooks during active tool execution and removed when idle.
+ * An agent is considered idle when `.legio/agent-busy/{agentName}` does NOT exist
+ * or when the marker is stale (older than 5 minutes, indicating a crashed agent).
+ * The busy marker contains an ISO timestamp written by hooks during active tool execution.
  * Idle agents can receive a direct tmux nudge; busy agents only get the pending marker.
  */
 async function isAgentIdle(cwd: string, agentName: string): Promise<boolean> {
 	const busyPath = join(cwd, ".legio", "agent-busy", agentName);
 	try {
-		await access(busyPath);
-		return false; // busy marker present — agent is actively working
+		const timestamp = await readFile(busyPath, "utf-8");
+		const age = Date.now() - new Date(timestamp.trim()).getTime();
+		if (age > 5 * 60 * 1000) {
+			// Stale marker from crashed agent — clean up
+			await unlink(busyPath).catch(() => {});
+			return true;
+		}
+		return false; // busy marker present and fresh — agent is actively working
 	} catch {
 		return true; // no busy marker — agent is idle
 	}
@@ -199,7 +214,9 @@ async function writePendingNudge(
 		createdAt: new Date().toISOString(),
 	};
 	const filePath = join(dir, `${agentName}.json`);
-	await writeFile(filePath, `${JSON.stringify(marker, null, "\t")}\n`);
+	const tmpPath = `${filePath}.tmp`;
+	await writeFile(tmpPath, `${JSON.stringify(marker, null, "\t")}\n`);
+	await rename(tmpPath, filePath);
 }
 
 /**
@@ -234,70 +251,6 @@ async function readAndClearPendingNudge(
 		}
 		return null;
 	}
-}
-
-// === Mail Check Debounce ===
-//
-// Prevents excessive mail checking by tracking the last check timestamp per agent.
-// When --debounce flag is provided, mail check will skip if called within the
-// debounce window.
-
-/**
- * Path to the mail check debounce state file.
- */
-function mailCheckStatePath(cwd: string): string {
-	return join(cwd, ".legio", "mail-check-state.json");
-}
-
-/**
- * Check if a mail check for this agent is within the debounce window.
- *
- * @param cwd - Project root directory
- * @param agentName - Agent name
- * @param debounceMs - Debounce interval in milliseconds
- * @returns true if the last check was within the debounce window
- */
-async function isMailCheckDebounced(
-	cwd: string,
-	agentName: string,
-	debounceMs: number,
-): Promise<boolean> {
-	const statePath = mailCheckStatePath(cwd);
-	try {
-		await access(statePath);
-	} catch {
-		return false;
-	}
-	try {
-		const text = await readFile(statePath, "utf-8");
-		const state = JSON.parse(text) as Record<string, number>;
-		const lastCheck = state[agentName];
-		if (lastCheck === undefined) {
-			return false;
-		}
-		return Date.now() - lastCheck < debounceMs;
-	} catch {
-		return false;
-	}
-}
-
-/**
- * Record a mail check timestamp for debounce tracking.
- *
- * @param cwd - Project root directory
- * @param agentName - Agent name
- */
-async function recordMailCheck(cwd: string, agentName: string): Promise<void> {
-	const statePath = mailCheckStatePath(cwd);
-	let state: Record<string, number> = {};
-	try {
-		const text = await readFile(statePath, "utf-8");
-		state = JSON.parse(text) as Record<string, number>;
-	} catch {
-		// File does not exist or corrupt state — start fresh
-	}
-	state[agentName] = Date.now();
-	await writeFile(statePath, `${JSON.stringify(state, null, "\t")}\n`);
 }
 
 /**
@@ -628,8 +581,17 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 	const agent = getFlag(args, "--agent") ?? "orchestrator";
 	const inject = hasFlag(args, "--inject");
 	const json = hasFlag(args, "--json");
-	const debounceFlag = getFlag(args, "--debounce");
+	const signal = hasFlag(args, "--signal");
 	const audience = getFlag(args, "--audience");
+
+	// --debounce is deprecated (no-op). Accept silently for backward compat.
+	// The --signal flag replaces debounce — signal files are the authoritative trigger.
+	if (getFlag(args, "--debounce") !== undefined) {
+		process.stderr.write(
+			"⚠️  --debounce is deprecated and ignored. Use --signal for signal-gated mail checks.\n",
+		);
+	}
+
 	if (audience !== undefined && !(VALID_AUDIENCES as readonly string[]).includes(audience)) {
 		throw new ValidationError(
 			`Invalid --audience "${audience}". Must be one of: ${VALID_AUDIENCES.join(", ")}`,
@@ -637,24 +599,14 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 		);
 	}
 
-	// Parse debounce interval if provided
-	let debounceMs: number | undefined;
-	if (debounceFlag !== undefined) {
-		const parsed = Number.parseInt(debounceFlag, 10);
-		if (Number.isNaN(parsed) || parsed < 0) {
-			throw new ValidationError(
-				`--debounce must be a non-negative integer (milliseconds), got: ${debounceFlag}`,
-				{ field: "debounce", value: debounceFlag },
-			);
-		}
-		debounceMs = parsed;
-	}
-
-	// Check debounce if enabled
-	if (debounceMs !== undefined) {
-		const debounced = await isMailCheckDebounced(cwd, agent, debounceMs);
-		if (debounced) {
-			// Silent skip — no output when debounced
+	// Signal-gated mode: skip DB query entirely if no signal file exists.
+	// The signal file is the pending nudge marker written by `mail send`.
+	if (signal) {
+		const signalPath = join(pendingNudgeDir(cwd), `${agent}.json`);
+		try {
+			await access(signalPath);
+		} catch {
+			// No signal file — no new mail. Exit immediately (zero cost).
 			return;
 		}
 	}
@@ -711,11 +663,6 @@ async function handleCheck(args: string[], cwd: string): Promise<void> {
 					process.stdout.write(`${formatMessage(msg)}\n\n`);
 				}
 			}
-		}
-
-		// Record this check for debounce tracking (only if debounce is enabled)
-		if (debounceMs !== undefined) {
-			await recordMailCheck(cwd, agent);
 		}
 	} finally {
 		client.close();
@@ -869,7 +816,7 @@ Subcommands:
            Audience: defaults to 'agent' for protocol types, 'both' for semantic types
   check    Check inbox (unread messages)
              [--agent <name>] [--audience <human|agent|both>]
-             [--inject] [--json]
+             [--inject] [--signal] [--json]
   list     List messages with filters
              [--from <name>] [--to <name>] [--agent <name> (alias for --to)]
              [--audience <human|agent|both>] [--unread] [--json]

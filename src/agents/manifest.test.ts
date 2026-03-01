@@ -520,7 +520,7 @@ describe("resolveModel", () => {
 				maxDepth: 2,
 			},
 			worktrees: { baseDir: ".legio/worktrees" },
-			beads: { enabled: false },
+			taskTracker: { backend: "auto" as const, enabled: false },
 			mulch: { enabled: false, domains: [], primeFormat: "markdown" },
 			merge: { aiResolveEnabled: false, reimagineEnabled: false },
 			watchdog: {

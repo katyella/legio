@@ -546,8 +546,90 @@ describe("mailCommand", () => {
 		});
 	});
 
-	describe("mail check debounce", () => {
-		test("mail check without --debounce flag always executes", async () => {
+	describe("mail check --signal", () => {
+		test("--signal skips DB query when no signal file exists", async () => {
+			output = "";
+			await mailCommand(["check", "--inject", "--agent", "builder-1", "--signal"]);
+			// No signal file = no output, no DB query
+			expect(output).toBe("");
+		});
+
+		test("--signal queries DB and injects when signal file exists", async () => {
+			// Write a signal file for builder-1
+			const nudgeDir = join(tempDir, ".legio", "pending-nudges");
+			await mkdir(nudgeDir, { recursive: true });
+			await writeFile(
+				join(nudgeDir, "builder-1.json"),
+				JSON.stringify({
+					from: "orchestrator",
+					reason: "status",
+					subject: "Build task",
+					messageId: "test-msg-1",
+					createdAt: new Date().toISOString(),
+				}),
+			);
+
+			output = "";
+			await mailCommand(["check", "--inject", "--agent", "builder-1", "--signal"]);
+			// Should inject the message AND show priority banner
+			expect(output).toContain("Build task");
+			expect(output).toContain("PRIORITY");
+		});
+
+		test("--signal clears signal file after check", async () => {
+			// Write a signal file
+			const nudgeDir = join(tempDir, ".legio", "pending-nudges");
+			await mkdir(nudgeDir, { recursive: true });
+			const signalPath = join(nudgeDir, "builder-1.json");
+			await writeFile(
+				signalPath,
+				JSON.stringify({
+					from: "orchestrator",
+					reason: "status",
+					subject: "Build task",
+					messageId: "test-msg-1",
+					createdAt: new Date().toISOString(),
+				}),
+			);
+
+			await mailCommand(["check", "--inject", "--agent", "builder-1", "--signal"]);
+
+			// Signal file should be cleared by readAndClearPendingNudge
+			await expect(access(signalPath)).rejects.toThrow();
+		});
+
+		test("--signal without --inject still respects signal gating", async () => {
+			// No signal file — should skip
+			output = "";
+			await mailCommand(["check", "--agent", "builder-1", "--signal"]);
+			expect(output).toBe("");
+
+			// With signal file — should show messages
+			const nudgeDir = join(tempDir, ".legio", "pending-nudges");
+			await mkdir(nudgeDir, { recursive: true });
+			await writeFile(
+				join(nudgeDir, "builder-1.json"),
+				JSON.stringify({
+					from: "orchestrator",
+					reason: "status",
+					subject: "Build task",
+					messageId: "test-msg-1",
+					createdAt: new Date().toISOString(),
+				}),
+			);
+
+			output = "";
+			await mailCommand(["check", "--agent", "builder-1", "--signal"]);
+			expect(output).toContain("Build task");
+		});
+
+		test("--debounce flag emits deprecation warning", async () => {
+			stderrOutput = "";
+			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
+			expect(stderrOutput).toContain("--debounce is deprecated");
+		});
+
+		test("without --signal flag always executes (backward compat)", async () => {
 			// Send first message
 			const store = createMailStore(join(tempDir, ".legio", "mail.db"));
 			const client = createMailClient(store);
@@ -559,227 +641,10 @@ describe("mailCommand", () => {
 			});
 			client.close();
 
-			// First check
+			// Check without --signal flag — always queries DB
 			output = "";
 			await mailCommand(["check", "--inject", "--agent", "test-agent"]);
-			const firstOutput = output;
-
-			// Send second message
-			const store2 = createMailStore(join(tempDir, ".legio", "mail.db"));
-			const client2 = createMailClient(store2);
-			client2.send({
-				from: "orchestrator",
-				to: "test-agent",
-				subject: "Message 2",
-				body: "Second message",
-			});
-			client2.close();
-
-			// Second check immediately after
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "test-agent"]);
-			const secondOutput = output;
-
-			// Both should execute (no debouncing without flag)
-			expect(firstOutput).toContain("Message 1");
-			expect(secondOutput).toContain("Message 2");
-		});
-
-		test("mail check with --debounce skips second check within window", async () => {
-			// First check with debounce (large window to survive concurrency)
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
-			expect(output).toContain("Build task");
-
-			// Second check immediately (within debounce window)
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
-			// Should be skipped silently
-			expect(output).toBe("");
-		});
-
-		test("mail check with --debounce allows check after window expires", async () => {
-			// Send first message
-			const store = createMailStore(join(tempDir, ".legio", "mail.db"));
-			const client = createMailClient(store);
-			client.send({
-				from: "orchestrator",
-				to: "debounce-test",
-				subject: "First",
-				body: "First check",
-			});
-			client.close();
-
-			// First check with debounce
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "debounce-test", "--debounce", "100"]);
-			expect(output).toContain("First check");
-
-			// Wait for debounce window to expire
-			await new Promise((resolve) => setTimeout(resolve, 150));
-
-			// Send second message
-			const store2 = createMailStore(join(tempDir, ".legio", "mail.db"));
-			const client2 = createMailClient(store2);
-			client2.send({
-				from: "orchestrator",
-				to: "debounce-test",
-				subject: "Second",
-				body: "Second check",
-			});
-			client2.close();
-
-			// Second check after debounce window
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "debounce-test", "--debounce", "100"]);
-			expect(output).toContain("Second check");
-		});
-
-		test("mail check with --debounce 0 disables debouncing", async () => {
-			// Send first message
-			const store = createMailStore(join(tempDir, ".legio", "mail.db"));
-			const client = createMailClient(store);
-			client.send({
-				from: "orchestrator",
-				to: "zero-debounce",
-				subject: "Msg 1",
-				body: "Message one",
-			});
-			client.close();
-
-			// First check with --debounce 0
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "zero-debounce", "--debounce", "0"]);
-			expect(output).toContain("Message one");
-
-			// Send second message immediately
-			const store2 = createMailStore(join(tempDir, ".legio", "mail.db"));
-			const client2 = createMailClient(store2);
-			client2.send({
-				from: "orchestrator",
-				to: "zero-debounce",
-				subject: "Msg 2",
-				body: "Message two",
-			});
-			client2.close();
-
-			// Second check immediately (should work with debounce 0)
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "zero-debounce", "--debounce", "0"]);
-			expect(output).toContain("Message two");
-		});
-
-		test("mail check debounce is per-agent", async () => {
-			// Check for builder-1 with debounce (large window to survive concurrency)
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
-			expect(output).toContain("Build task");
-
-			// Check for scout-1 immediately (different agent, should NOT be debounced)
-			output = "";
-			await mailCommand(["check", "--agent", "scout-1", "--debounce", "10000"]);
-			expect(output).toContain("Explore API");
-
-			// Check for builder-1 again (should be debounced)
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "10000"]);
-			expect(output).toBe("");
-		});
-
-		test("mail check --debounce with invalid value throws ValidationError", async () => {
-			try {
-				await mailCommand(["check", "--agent", "builder-1", "--debounce", "invalid"]);
-				expect(true).toBe(false); // Should not reach here
-			} catch (err) {
-				expect(err).toBeInstanceOf(Error);
-				if (err instanceof Error) {
-					expect(err.message).toContain("must be a non-negative integer");
-				}
-			}
-		});
-
-		test("mail check --debounce with negative value throws ValidationError", async () => {
-			try {
-				await mailCommand(["check", "--agent", "builder-1", "--debounce", "-100"]);
-				expect(true).toBe(false);
-			} catch (err) {
-				expect(err).toBeInstanceOf(Error);
-				if (err instanceof Error) {
-					expect(err.message).toContain("must be a non-negative integer");
-				}
-			}
-		});
-
-		test("mail check --inject with --debounce skips check within window", async () => {
-			// First inject check with debounce
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "builder-1", "--debounce", "500"]);
-			expect(output).toContain("Build task");
-
-			// Second inject check immediately (should be debounced)
-			output = "";
-			await mailCommand(["check", "--inject", "--agent", "builder-1", "--debounce", "500"]);
-			expect(output).toBe("");
-		});
-
-		test("mail check debounce state persists across invocations", async () => {
-			// First check
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
-			expect(output).toContain("Build task");
-
-			// Verify state file was created
-			const statePath = join(tempDir, ".legio", "mail-check-state.json");
-			{
-				let _e = false;
-				try {
-					await access(statePath);
-					_e = true;
-				} catch {}
-				expect(_e).toBe(true);
-			}
-
-			const state = JSON.parse(await readFile(statePath, "utf-8")) as Record<string, number>;
-			expect(state["builder-1"]).toBeTruthy();
-			expect(typeof state["builder-1"]).toBe("number");
-		});
-
-		test("corrupted debounce state file is handled gracefully", async () => {
-			// Write corrupted state file
-			const statePath = join(tempDir, ".legio", "mail-check-state.json");
-			await writeFile(statePath, "not valid json");
-
-			// Should not throw, should treat as fresh state
-			output = "";
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
-			expect(output).toContain("Build task");
-
-			// State should be corrected
-			const state = JSON.parse(await readFile(statePath, "utf-8")) as Record<string, number>;
-			expect(state["builder-1"]).toBeTruthy();
-		});
-
-		test("mail check debounce only records timestamp when flag is provided", async () => {
-			const statePath = join(tempDir, ".legio", "mail-check-state.json");
-
-			// Check without debounce flag
-			await mailCommand(["check", "--agent", "builder-1"]);
-
-			// State file should not be created
-			await expect(access(statePath)).rejects.toThrow();
-
-			// Check with debounce flag
-			await mailCommand(["check", "--agent", "builder-1", "--debounce", "500"]);
-
-			// Now state file should exist
-			{
-				let _e = false;
-				try {
-					await access(statePath);
-					_e = true;
-				} catch {}
-				expect(_e).toBe(true);
-			}
+			expect(output).toContain("Message 1");
 		});
 	});
 

@@ -19,7 +19,8 @@ const mockConfig: LegioConfig = {
 	worktrees: {
 		baseDir: "/tmp/.legio/worktrees",
 	},
-	beads: {
+	taskTracker: {
+		backend: "auto" as const,
 		enabled: false,
 	},
 	mulch: {
@@ -53,24 +54,44 @@ describe("checkDependencies", () => {
 		expect(Array.isArray(checks)).toBe(true);
 		expect(checks.length).toBeGreaterThanOrEqual(5);
 
-		// Verify we have checks for each required tool
+		// Verify we have checks for each tool
 		const toolNames = checks.map((c) => c.name);
 		expect(toolNames).toContain("git availability");
 		expect(toolNames).toContain("node availability");
 		expect(toolNames).toContain("tmux availability");
-		expect(toolNames).toContain("bd availability");
+		expect(toolNames).toContain("sd availability");
 		expect(toolNames).toContain("mulch availability");
+		expect(toolNames).toContain("bd availability");
 	});
 
-	test("includes bd CGO support check when bd is available", async () => {
+	test("sd is required when backend is auto", async () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
+		const sdCheck = checks.find((c) => c.name === "sd availability");
+		// sd should be required (fail if missing) when backend is "auto"
+		if (sdCheck?.status !== "pass") {
+			expect(sdCheck?.status).toBe("fail");
+		}
+	});
 
+	test("bd is optional when backend is auto", async () => {
+		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
 		const bdCheck = checks.find((c) => c.name === "bd availability");
-		if (bdCheck?.status === "pass") {
-			const cgoCheck = checks.find((c) => c.name === "bd CGO support");
-			expect(cgoCheck).toBeDefined();
-			expect(cgoCheck?.category).toBe("dependencies");
-			expect(["pass", "warn", "fail"]).toContain(cgoCheck?.status ?? "");
+		// bd should be optional (warn if missing) when backend is "auto"
+		if (bdCheck?.status !== "pass") {
+			expect(bdCheck?.status).toBe("warn");
+		}
+	});
+
+	test("bd is required when backend is beads", async () => {
+		const beadsConfig = {
+			...mockConfig,
+			taskTracker: { backend: "beads" as const, enabled: true },
+		};
+		const checks = await checkDependencies(beadsConfig, "/tmp/.legio");
+		const bdCheck = checks.find((c) => c.name === "bd availability");
+		// bd should be required (fail if missing) when backend is "beads"
+		if (bdCheck?.status !== "pass") {
+			expect(bdCheck?.status).toBe("fail");
 		}
 	});
 

@@ -194,7 +194,7 @@ target-project/
 ### Dependencies
 
 
-- External tools (`bd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports
+- External tools (`bd`, `sd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports
 - Dev dependencies are limited to types and tooling
 
 ### File Organization

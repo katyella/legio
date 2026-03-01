@@ -564,10 +564,12 @@ export async function cleanCommand(args: string[]): Promise<void> {
 		result.specsCleared = await clearDirectory(join(legioDir, "specs"));
 	}
 
-	// 8. Delete nudge state + pending nudge markers + current-run.txt
+	// 8. Delete nudge state + pending nudge markers + agent-busy markers + current-run.txt
 	if (all) {
 		result.nudgeStateCleared = await deleteFile(join(legioDir, "nudge-state.json"));
+		await deleteFile(join(legioDir, "mail-check-state.json")); // legacy debounce state
 		await clearDirectory(join(legioDir, "pending-nudges"));
+		await clearDirectory(join(legioDir, "agent-busy"));
 		result.currentRunCleared = await deleteFile(join(legioDir, "current-run.txt"));
 	}
 

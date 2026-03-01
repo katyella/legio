@@ -157,7 +157,7 @@ async function startSupervisor(args: string[]): Promise<void> {
 	const projectRoot = config.project.root;
 
 	// Validate task exists and is workable (open or in_progress)
-	const tracker = createTrackerClient(config.taskTracker?.backend ?? "auto", projectRoot);
+	const tracker = createTrackerClient(config.taskTracker.backend, projectRoot);
 	const task = await tracker.show(flags.task);
 	if (task.status !== "open" && task.status !== "in_progress") {
 		throw new ValidationError(`Task ${flags.task} is not workable (status: ${task.status})`, {

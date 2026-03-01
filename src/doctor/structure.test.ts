@@ -37,7 +37,8 @@ describe("checkStructure", () => {
 			worktrees: {
 				baseDir: ".legio/worktrees",
 			},
-			beads: {
+			taskTracker: {
+				backend: "auto" as const,
 				enabled: true,
 			},
 			mulch: {

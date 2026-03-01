@@ -37,7 +37,7 @@ export interface LegioConfig {
 	beads?: {
 		enabled: boolean;
 	};
-	taskTracker?: {
+	taskTracker: {
 		backend: "auto" | "seeds" | "beads";
 		enabled: boolean;
 	};

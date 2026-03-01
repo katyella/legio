@@ -23,7 +23,7 @@ describe("checkDatabases", () => {
 				maxDepth: 2,
 			},
 			worktrees: { baseDir: "" },
-			beads: { enabled: true },
+			taskTracker: { backend: "auto" as const, enabled: true },
 			mulch: { enabled: true, domains: [], primeFormat: "markdown" },
 			merge: { aiResolveEnabled: false, reimagineEnabled: false },
 			watchdog: {

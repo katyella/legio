@@ -5,7 +5,7 @@ import { html, useEffect, useRef, useState } from "../lib/preact-setup.js";
 
 function stripAnsi(str) {
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape strip
-	return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, "");
+	return str.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "");
 }
 
 function diffCapture(baselineText, currentText) {

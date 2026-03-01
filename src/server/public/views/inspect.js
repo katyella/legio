@@ -53,7 +53,7 @@ function formatTimestamp(iso) {
 // Strip ANSI escape sequences from terminal output before display
 function stripAnsi(str) {
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escape sequences requires matching control chars
-	return str.replace(/\x1b\[[0-9;]*[mGKHF]/g, "");
+	return str.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "");
 }
 
 // ── State badge config ─────────────────────────────────────────────────────

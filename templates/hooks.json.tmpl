@@ -79,16 +79,7 @@
 					},
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 500"
-					}
-				]
-			},
-			{
-				"matcher": "",
-				"hooks": [
-					{
-						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --debounce 30000"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --signal"
 					}
 				]
 			},
@@ -97,7 +88,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bgit\\s+commit\\b'; then mulch diff HEAD~1; fi;"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bgit\\s+commit\\b'; then git rev-parse HEAD~1 >/dev/null 2>&1 && mulch diff HEAD~1; fi;"
 					}
 				]
 			}

@@ -68,15 +68,22 @@ legio down
 
 ## How It Works
 
-CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator. A persistent coordinator manages task decomposition and dispatch, while a mechanical watchdog daemon monitors agent health.
+<p align="center">
+  <img src="assets/architecture.png" alt="Legio architecture — agent pipeline from chat to main branch" width="800">
+  <br>
+  <em>The full pipeline: Chat → Gateway → Task Board → Coordinator → Workers → Mail → Merge → Main Branch</em>
+</p>
 
-```
-Coordinator (persistent orchestrator at project root)
-  --> Lead (team lead, decomposes tasks, depth 1)
-        --> Workers: Scout, Builder, Reviewer, Merger (depth 2)
-```
+CLAUDE.md + hooks + the `legio` CLI turn your Claude Code session into a multi-agent orchestrator:
 
-**Agent types:** Coordinator, Lead, Gateway, Supervisor, Scout, Builder, Reviewer, Merger, Monitor, CTO — each with defined access levels (read-only vs read-write) and hierarchy constraints. See [docs/architecture.md](docs/architecture.md) for details.
+1. **You chat** with the Gateway agent, which decomposes your request into issues on the Task Board
+2. The **Coordinator** reads the board and dispatches Team Leads, who spawn specialist workers
+3. Each worker runs in an **isolated git worktree** — no file conflicts between agents
+4. Workers communicate via typed **SQLite mail** (`worker_done`, `merge_ready`, `escalation`)
+5. Completed work flows through the **merge pipeline** (4-tier conflict resolution) back to your main branch
+6. The **Dashboard** gives real-time visibility into the entire fleet
+
+**10 agent types:** Coordinator, Lead, Gateway, Supervisor, Scout, Builder, Reviewer, Merger, Monitor, CTO — each with defined access levels and hierarchy constraints. See [docs/architecture.md](docs/architecture.md) for details.
 
 ## Key Features
 

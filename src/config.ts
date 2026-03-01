@@ -437,6 +437,7 @@ function validateConfig(config: LegioConfig): void {
  * Detection: 'beads' key present and 'taskTracker' key absent.
  * Mutates the parsed config object in place.
  */
+let beadsDeprecationWarned = false;
 function migrateDeprecatedBeadsKey(parsed: Record<string, unknown>): void {
 	const hasBeads = "beads" in parsed;
 	const hasTaskTracker = "taskTracker" in parsed;
@@ -456,7 +457,10 @@ function migrateDeprecatedBeadsKey(parsed: Record<string, unknown>): void {
 		enabled: typeof b.enabled === "boolean" ? b.enabled : true,
 	};
 	delete parsed.beads;
-	process.stderr.write("[legio] DEPRECATED: config 'beads' key → use 'taskTracker'\n");
+	if (!beadsDeprecationWarned) {
+		beadsDeprecationWarned = true;
+		process.stderr.write("[legio] DEPRECATED: config 'beads' key → use 'taskTracker'\n");
+	}
 }
 
 /**

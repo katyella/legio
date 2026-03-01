@@ -530,7 +530,7 @@ export const COMMANDS: readonly CommandDef[] = [
 				flags: [
 					{ name: "--agent", desc: "Agent name", takesValue: true },
 					{ name: "--inject", desc: "Inject messages" },
-					{ name: "--debounce", desc: "Debounce interval in ms", takesValue: true },
+					{ name: "--signal", desc: "Signal-gated check (skip if no pending nudge)" },
 					{ name: "--json", desc: "JSON output" },
 				],
 			},

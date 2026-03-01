@@ -135,7 +135,7 @@ describe("deployHooks", () => {
 		expect(parsed.hooks.Stop).toBeInstanceOf(Array);
 	});
 
-	test("PostToolUse hook includes debounced mail check entry", async () => {
+	test("PostToolUse hook includes signal-gated mail check entry", async () => {
 		const worktreePath = join(tempDir, "worktree");
 
 		await deployHooks(worktreePath, "mail-check-agent");
@@ -144,18 +144,18 @@ describe("deployHooks", () => {
 		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const postToolUse = parsed.hooks.PostToolUse;
-		// PostToolUse should have 3 entries: logger, mail check, mulch diff
-		expect(postToolUse).toHaveLength(3);
-		// First entry is the logging hook
+		// PostToolUse should have 2 entries: combined logger+mail check, mulch diff
+		expect(postToolUse).toHaveLength(2);
+		// First entry has both the logging hook and signal-gated mail check
 		expect(postToolUse[0].hooks[0].command).toContain("legio log tool-end");
-		// Second entry is the debounced mail check
-		expect(postToolUse[1].hooks[0].command).toContain("legio mail check --inject");
-		expect(postToolUse[1].hooks[0].command).toContain("mail-check-agent");
-		expect(postToolUse[1].hooks[0].command).toContain("--debounce 30000");
-		expect(postToolUse[1].hooks[0].command).toContain("LEGIO_AGENT_NAME");
-		// Third entry is mulch diff after commit
-		expect(postToolUse[2].matcher).toBe("Bash");
-		expect(postToolUse[2].hooks[0].command).toContain("mulch diff HEAD~1");
+		expect(postToolUse[0].hooks[1].command).toContain("legio mail check --inject");
+		expect(postToolUse[0].hooks[1].command).toContain("mail-check-agent");
+		expect(postToolUse[0].hooks[1].command).toContain("--signal");
+		expect(postToolUse[0].hooks[1].command).toContain("LEGIO_AGENT_NAME");
+		// Second entry is mulch diff after commit (with HEAD~1 guard)
+		expect(postToolUse[1].matcher).toBe("Bash");
+		expect(postToolUse[1].hooks[0].command).toContain("mulch diff HEAD~1");
+		expect(postToolUse[1].hooks[0].command).toContain("git rev-parse HEAD~1");
 	});
 
 	test("output contains PreCompact hook", async () => {
@@ -263,10 +263,10 @@ describe("deployHooks", () => {
 		expect(postToolUse.hooks[0].command).not.toContain("read -r INPUT");
 	});
 
-	test("PostToolUse hook includes mail check with debounce", async () => {
-		const worktreePath = join(tempDir, "mail-debounce-wt");
+	test("PostToolUse hook includes signal-gated mail check", async () => {
+		const worktreePath = join(tempDir, "mail-signal-wt");
 
-		await deployHooks(worktreePath, "mail-debounce-agent");
+		await deployHooks(worktreePath, "mail-signal-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
 		const content = await readFile(outputPath, "utf-8");
@@ -276,11 +276,12 @@ describe("deployHooks", () => {
 		// Should have 2 hooks: tool-end logging + mail check
 		expect(postToolUse.hooks).toHaveLength(2);
 
-		// Second hook should be mail check with debounce
+		// Second hook should be signal-gated mail check
 		expect(postToolUse.hooks[1].command).toContain("legio mail check");
 		expect(postToolUse.hooks[1].command).toContain("--inject");
-		expect(postToolUse.hooks[1].command).toContain("--agent mail-debounce-agent");
-		expect(postToolUse.hooks[1].command).toContain("--debounce 500");
+		expect(postToolUse.hooks[1].command).toContain("--agent mail-signal-agent");
+		expect(postToolUse.hooks[1].command).toContain("--signal");
+		expect(postToolUse.hooks[1].command).not.toContain("--debounce");
 		expect(postToolUse.hooks[1].command).toContain("LEGIO_AGENT_NAME");
 	});
 

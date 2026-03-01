@@ -1,16 +1,18 @@
 /**
- * Tests for the tracker factory and adapters.
+ * Tests for the tracker factory, adapters, and normalizeIssue logic.
  *
  * Uses real temp directories (createTempGitRepo pattern).
- * Does NOT test the seeds adapter with a real sd CLI (it may not be installed).
+ * Does NOT test the seeds/beads adapters with real CLIs (they may not be installed).
+ * DOES test normalizeIssue which is pure logic requiring no CLI.
  */
 
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupTempDir, createTempGitRepo } from "../test-helpers.ts";
 import { createBeadsTrackerClient } from "./beads.ts";
 import { createTrackerClient, resolveBackend } from "./factory.ts";
+import { normalizeIssue } from "./seeds.ts";
 
 describe("resolveBackend", () => {
 	let tmpDir: string;
@@ -84,7 +86,6 @@ describe("createTrackerClient", () => {
 
 	it("auto-detects beads when .beads/ exists", async () => {
 		await mkdir(join(tmpDir, ".beads"), { recursive: true });
-		// Should not throw — just verify we get a client back
 		const client = createTrackerClient("auto", tmpDir);
 		expect(typeof client.ready).toBe("function");
 	});
@@ -93,6 +94,120 @@ describe("createTrackerClient", () => {
 		await mkdir(join(tmpDir, ".seeds"), { recursive: true });
 		const client = createTrackerClient("auto", tmpDir);
 		expect(typeof client.ready).toBe("function");
+	});
+});
+
+describe("normalizeIssue", () => {
+	it("maps snake_case fields to camelCase", () => {
+		const result = normalizeIssue({
+			id: "test-1",
+			title: "Test issue",
+			status: "open",
+			priority: 2,
+			issue_type: "task",
+			owner: "alice",
+			blocked_by: ["test-0"],
+			closed_at: "2026-01-01T00:00:00Z",
+			close_reason: "done",
+			created_at: "2025-12-01T00:00:00Z",
+		});
+
+		expect(result.id).toBe("test-1");
+		expect(result.title).toBe("Test issue");
+		expect(result.status).toBe("open");
+		expect(result.priority).toBe(2);
+		expect(result.type).toBe("task");
+		expect(result.assignee).toBe("alice");
+		expect(result.blockedBy).toEqual(["test-0"]);
+		expect(result.closedAt).toBe("2026-01-01T00:00:00Z");
+		expect(result.closeReason).toBe("done");
+		expect(result.createdAt).toBe("2025-12-01T00:00:00Z");
+	});
+
+	it("prefers issue_type over type", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+			issue_type: "bug",
+			type: "task",
+		});
+		expect(result.type).toBe("bug");
+	});
+
+	it("falls back to type when issue_type is absent", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+			type: "feature",
+		});
+		expect(result.type).toBe("feature");
+	});
+
+	it("defaults type to 'unknown' when both are absent", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+		});
+		expect(result.type).toBe("unknown");
+	});
+
+	it("prefers owner over assignee", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+			owner: "bob",
+			assignee: "alice",
+		});
+		expect(result.assignee).toBe("bob");
+	});
+
+	it("falls back to assignee when owner is absent", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+			assignee: "alice",
+		});
+		expect(result.assignee).toBe("alice");
+	});
+
+	it("prefers blocked_by over blockedBy", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "T",
+			status: "open",
+			priority: 1,
+			blocked_by: ["a"],
+			blockedBy: ["b"],
+		});
+		expect(result.blockedBy).toEqual(["a"]);
+	});
+
+	it("handles minimal input with only required fields", () => {
+		const result = normalizeIssue({
+			id: "t-1",
+			title: "Minimal",
+			status: "open",
+			priority: 3,
+		});
+		expect(result.id).toBe("t-1");
+		expect(result.type).toBe("unknown");
+		expect(result.assignee).toBeUndefined();
+		expect(result.blockedBy).toBeUndefined();
+		expect(result.closedAt).toBeUndefined();
+		expect(result.closeReason).toBeUndefined();
+		expect(result.createdAt).toBeUndefined();
+		expect(result.description).toBeUndefined();
+		expect(result.blocks).toBeUndefined();
 	});
 });
 
@@ -118,15 +233,13 @@ describe("createBeadsTrackerClient", () => {
 		expect(typeof client.sync).toBe("function");
 	});
 
-	it("ready() delegates to bd ready and throws when bd is not available", async () => {
-		// bd is not installed in test env in a .beads dir, so this should throw
+	it("ready() throws when bd is not available", async () => {
 		const client = createBeadsTrackerClient(tmpDir);
 		await expect(client.ready()).rejects.toThrow();
 	});
 
-	it("sync() throws AgentError when bd is not available", async () => {
+	it("sync() throws when bd is not available", async () => {
 		const client = createBeadsTrackerClient(tmpDir);
-		// bd sync should fail when bd is not installed or no .beads dir
 		await expect(client.sync()).rejects.toThrow();
 	});
 
@@ -143,10 +256,7 @@ describe("createBeadsTrackerClient", () => {
 
 describe("tracker module exports", () => {
 	it("types.ts exports TrackerIssue, TrackerBackend, TrackerClient", async () => {
-		// Type-level test: ensure named imports resolve
 		const mod = await import("./types.ts");
-		// The module exports are all types (interfaces/type aliases), so no runtime values.
-		// Just verify the module loads without error.
 		expect(mod).toBeDefined();
 	});
 
@@ -165,12 +275,9 @@ describe("tracker module exports", () => {
 		const mod = await import("./seeds.ts");
 		expect(typeof mod.createSeedsTrackerClient).toBe("function");
 	});
-});
 
-describe("rm cleanup", () => {
-	it("temp dirs are removed after tests run", async () => {
-		const dir = await createTempGitRepo();
-		await rm(dir, { recursive: true, force: true });
-		// No assertion needed — just verify rm doesn't throw
+	it("exec.ts exports runTrackerCommand", async () => {
+		const mod = await import("./exec.ts");
+		expect(typeof mod.runTrackerCommand).toBe("function");
 	});
 });

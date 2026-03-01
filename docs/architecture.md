@@ -2,6 +2,12 @@
 
 Technical details on how Legio is built and organized.
 
+<p align="center">
+  <img src="../assets/architecture.png" alt="Legio architecture — agent pipeline from chat to main branch" width="800">
+  <br>
+  <em>Human → Gateway → Task Board → Coordinator → Team Leads → Workers (in isolated worktrees) → Mail → Merge Pipeline → Main Branch</em>
+</p>
+
 ## Tech Stack
 
 - **Runtime**: Node/tsx (TypeScript directly, no build step)
@@ -39,7 +45,7 @@ The orchestrator only passes WHAT. The base definition already has HOW.
 
 ## Key Architecture
 
-- **Messaging**: Custom SQLite mail system with typed protocol — 8 message types (`worker_done`, `merge_ready`, `dispatch`, `escalation`, etc.) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
+- **Messaging**: Custom SQLite mail system with typed protocol — 12 message types: 4 semantic (`status`, `question`, `result`, `error`) + 8 protocol (`worker_done`, `merge_ready`, `merged`, `merge_failed`, `escalation`, `health_check`, `dispatch`, `assign`) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
 - **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
 - **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
 - **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
@@ -47,6 +53,7 @@ The orchestrator only passes WHAT. The base definition already has HOW.
 - **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
 - **Task Groups**: Batch coordination with auto-close when all member issues complete
 - **Session Lifecycle**: Checkpoint save/restore for compaction survivability, handoff orchestration for crash recovery
+- **Task Tracker**: Pluggable task tracking abstraction — supports beads (`bd`) and seeds backends, configured per-project
 - **Token Instrumentation**: Session metrics extracted from Claude Code transcript JSONL files
 
 ## Web UI Views
@@ -71,7 +78,7 @@ legio/
     types.ts                      Shared types and interfaces
     config.ts                     Config loader + validation
     errors.ts                     Custom error types
-    commands/                     One file per CLI subcommand (34 commands)
+    commands/                     One file per CLI subcommand (35 commands)
       up.ts                       Bootstrap full stack
       down.ts                     Shutdown full stack
       server.ts                   Web UI server lifecycle
@@ -105,6 +112,7 @@ legio/
       replay.ts                   Interleaved event replay
       costs.ts                    Token/cost analysis
       metrics.ts                  Session metrics
+      stop.ts                     Stop active agent sessions
       completions.ts              Shell completion generation (bash/zsh/fish)
     server/                       Web UI server
       routes.ts                   REST API routes
@@ -129,6 +137,7 @@ legio/
     metrics/                      SQLite metrics + transcript parsing
     doctor/                       Health check modules (9 checks)
     insights/                     Session insight analyzer for auto-expertise
+    tracker/                      Task tracker abstraction (beads + seeds backends)
     beads/                        bd CLI wrapper + molecules
     mulch/                        mulch CLI wrapper
     e2e/                          End-to-end lifecycle tests

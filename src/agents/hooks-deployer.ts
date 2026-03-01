@@ -532,13 +532,21 @@ export async function deployHooks(
 	}
 
 	// Replace all occurrences of {{AGENT_NAME}}
-	let content = template;
-	while (content.includes("{{AGENT_NAME}}")) {
-		content = content.replace("{{AGENT_NAME}}", agentName);
-	}
+	const content = template.replaceAll("{{AGENT_NAME}}", agentName);
 
 	// Parse the base config and merge guards into PreToolUse
-	const config = JSON.parse(content) as { hooks: Record<string, HookEntry[]> };
+	let config: { hooks: Record<string, HookEntry[]> };
+	try {
+		config = JSON.parse(content) as { hooks: Record<string, HookEntry[]> };
+	} catch (err) {
+		throw new AgentError(
+			`Failed to parse hooks template as JSON after substitution: ${templatePath}`,
+			{
+				agentName,
+				cause: err instanceof Error ? err : undefined,
+			},
+		);
+	}
 	const pathGuards = getPathBoundaryGuards();
 	const dangerGuards = getDangerGuards(agentName);
 	const capabilityGuards = getCapabilityGuards(capability);

@@ -79,7 +79,8 @@ describe("checkConsistency", () => {
 			worktrees: {
 				baseDir: join(legioDir, "worktrees"),
 			},
-			beads: {
+			taskTracker: {
+				backend: "auto" as const,
 				enabled: false,
 			},
 			mulch: {

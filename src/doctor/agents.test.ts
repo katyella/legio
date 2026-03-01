@@ -38,7 +38,8 @@ describe("checkAgents", () => {
 			worktrees: {
 				baseDir: ".legio/worktrees",
 			},
-			beads: {
+			taskTracker: {
+				backend: "auto" as const,
 				enabled: true,
 			},
 			mulch: {

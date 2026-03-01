@@ -33,8 +33,8 @@ describe("loadConfig", () => {
 		expect(config.project.canonicalBranch).toBe("main");
 		expect(config.agents.maxConcurrent).toBe(25);
 		expect(config.agents.maxDepth).toBe(2);
-		expect(config.taskTracker?.enabled).toBe(true);
-		expect(config.taskTracker?.backend).toBe("auto");
+		expect(config.taskTracker.enabled).toBe(true);
+		expect(config.taskTracker.backend).toBe("auto");
 		expect(config.mulch.enabled).toBe(true);
 		expect(config.mulch.primeFormat).toBe("markdown");
 		expect(config.logging.verbose).toBe(false);
@@ -62,7 +62,7 @@ agents:
 		expect(config.agents.maxConcurrent).toBe(10);
 		// Non-overridden values keep defaults
 		expect(config.agents.maxDepth).toBe(2);
-		expect(config.taskTracker?.enabled).toBe(true);
+		expect(config.taskTracker.enabled).toBe(true);
 	});
 
 	test("always sets project.root to the actual projectRoot", async () => {
@@ -91,8 +91,8 @@ logging:
 
 		const config = await loadConfig(tempDir);
 
-		expect(config.taskTracker?.enabled).toBe(false);
-		expect(config.taskTracker?.backend).toBe("beads");
+		expect(config.taskTracker.enabled).toBe(false);
+		expect(config.taskTracker.backend).toBe("beads");
 		expect(config.mulch.enabled).toBe(true);
 		expect(config.logging.verbose).toBe(true);
 		expect(config.logging.redactSecrets).toBe(false);
@@ -235,8 +235,8 @@ beads:
 `);
 
 		const config = await loadConfig(tempDir);
-		expect(config.taskTracker?.enabled).toBe(false);
-		expect(config.taskTracker?.backend).toBe("auto");
+		expect(config.taskTracker.enabled).toBe(false);
+		expect(config.taskTracker.backend).toBe("auto");
 	});
 
 	test("new-style tier keys take precedence over deprecated keys", async () => {

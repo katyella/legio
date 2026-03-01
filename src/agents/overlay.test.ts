@@ -287,7 +287,7 @@ describe("generateOverlay", () => {
 		});
 		const output = await generateOverlay(config);
 
-		expect(output).toContain("bd close legio-task1");
+		expect(output).toContain("close legio-task1");
 		expect(output).toContain("legio mail send --to lead-alpha");
 	});
 

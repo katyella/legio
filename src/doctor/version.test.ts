@@ -19,7 +19,8 @@ const mockConfig: LegioConfig = {
 	worktrees: {
 		baseDir: "/tmp/.legio/worktrees",
 	},
-	beads: {
+	taskTracker: {
+		backend: "auto" as const,
 		enabled: false,
 	},
 	mulch: {

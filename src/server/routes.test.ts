@@ -34,47 +34,51 @@ vi.stubGlobal("Bun", {
 	},
 });
 
-// Mock the beads client so strategy tests can run without `bd` on PATH.
+// Mock the tracker factory so tests can run without `bd`/`sd` on PATH.
 // list/ready return [] (keeps existing /api/issues tests passing).
 // show throws (existing /api/issues/:id test expects 404 on error).
 // create returns a predictable issue ID for strategy approve tests.
 // list returns a closed and a blocked issue fixture when all=true to verify all-statuses behavior.
-vi.mock("../beads/client.ts", () => ({
-	createBeadsClient: () => ({
-		ready: async () => [],
-		list: async (options?: { status?: string; limit?: number; all?: boolean }) => {
-			// Return closed and blocked issue fixtures when all is true
-			if (options?.all) {
-				return [
-					{
-						id: "bead-closed-001",
-						title: "Closed issue",
-						status: "closed",
-						priority: 3,
-						type: "task",
-						closedAt: "2026-01-01T00:00:00.000Z",
-						closeReason: "Done",
-					},
-					{
-						id: "bead-blocked-001",
-						title: "Blocked issue",
-						status: "blocked",
-						priority: 2,
-						type: "task",
-						dependency_count: 1,
-					},
-				];
-			}
-			return [];
-		},
-		show: async (id: string) => {
-			throw new Error(`bd not available: ${id}`);
-		},
-		create: async () => "bead-test-001",
-		claim: async () => {},
-		close: async () => {},
-	}),
-}));
+vi.mock("../tracker/factory.ts", async (importOriginal) => {
+	const original = await importOriginal<typeof import("../tracker/factory.ts")>();
+	return {
+		...original,
+		createTrackerClient: () => ({
+			ready: async () => [],
+			list: async (options?: { status?: string; limit?: number; all?: boolean }) => {
+				// Return closed and blocked issue fixtures when all is true
+				if (options?.all) {
+					return [
+						{
+							id: "bead-closed-001",
+							title: "Closed issue",
+							status: "closed",
+							priority: 3,
+							type: "task",
+							closedAt: "2026-01-01T00:00:00.000Z",
+							closeReason: "Done",
+						},
+						{
+							id: "bead-blocked-001",
+							title: "Blocked issue",
+							status: "blocked",
+							priority: 2,
+							type: "task",
+						},
+					];
+				}
+				return [];
+			},
+			show: async (id: string) => {
+				throw new Error(`tracker not available: ${id}`);
+			},
+			create: async () => "bead-test-001",
+			claim: async () => {},
+			close: async () => {},
+			sync: async () => {},
+		}),
+	};
+});
 
 // Mock tmux so tests don't interfere with real developer tmux sessions.
 // isSessionAlive defaults to true so that tests which seed an active session

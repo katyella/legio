@@ -11,6 +11,9 @@ import { createBeadsTrackerClient } from "./beads.ts";
 import { createSeedsTrackerClient } from "./seeds.ts";
 import type { TrackerBackend, TrackerClient } from "./types.ts";
 
+// Re-export types for convenience
+export type { TrackerBackend, TrackerClient, TrackerIssue } from "./types.ts";
+
 /**
  * Auto-detect which tracker backend to use.
  * Checks .seeds/ first, then .beads/. Defaults to seeds.
@@ -37,4 +40,20 @@ export function createTrackerClient(backend: TrackerBackend, cwd: string): Track
 		case "beads":
 			return createBeadsTrackerClient(cwd);
 	}
+}
+
+/**
+ * Return the CLI tool name for a resolved backend.
+ * Used by the overlay generator to inject {{TRACKER_CLI}} into agent definitions.
+ */
+export function trackerCliName(backend: "seeds" | "beads"): string {
+	return backend === "seeds" ? "sd" : "bd";
+}
+
+/**
+ * Return the human-readable tracker name for a resolved backend.
+ * Used by the overlay generator to inject {{TRACKER_NAME}} into agent definitions.
+ */
+export function trackerDisplayName(backend: "seeds" | "beads"): string {
+	return backend === "seeds" ? "seeds" : "beads";
 }

@@ -308,6 +308,15 @@ export async function slingCommand(args: string[]): Promise<void> {
 		throw new ValidationError("--name is required for sling", { field: "name" });
 	}
 
+	// Validate agent name format: lowercase alphanumeric, hyphens, underscores
+	const AGENT_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,62}$/;
+	if (!AGENT_NAME_RE.test(name)) {
+		throw new ValidationError(
+			`Invalid agent name "${name}". Must match ${AGENT_NAME_RE.source} (lowercase alphanumeric, hyphens, underscores, 1-63 chars, starts with alphanumeric).`,
+			{ field: "name", value: name },
+		);
+	}
+
 	if (Number.isNaN(depth) || depth < 0) {
 		throw new ValidationError("--depth must be a non-negative integer", {
 			field: "depth",
@@ -449,8 +458,8 @@ export async function slingCommand(args: string[]): Promise<void> {
 		checkDuplicateLead(activeSessions, taskId, capability, name);
 
 		// 6. Validate task exists and is in a workable state (if tracker enabled)
-		const tracker = createTrackerClient(config.taskTracker?.backend ?? "auto", config.project.root);
-		if (config.taskTracker?.enabled ?? true) {
+		const tracker = createTrackerClient(config.taskTracker.backend, config.project.root);
+		if (config.taskTracker.enabled) {
 			let issue: TrackerIssue;
 			try {
 				issue = await tracker.show(taskId);
@@ -581,7 +590,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		await deployHooks(worktreePath, name, capability);
 
 		// 10. Claim task issue
-		if (config.taskTracker?.enabled ?? true) {
+		if (config.taskTracker.enabled) {
 			try {
 				await tracker.claim(taskId);
 			} catch {
@@ -603,7 +612,16 @@ export async function slingCommand(args: string[]): Promise<void> {
 			});
 		}
 
-		// 11b. Write dispatch mail BEFORE creating the tmux session so the mail
+		// 11b. Clean up stale busy marker for the agent name (if any).
+		// A prior crashed session may have left behind agent-busy/{name}.
+		try {
+			const { unlink } = await import("node:fs/promises");
+			await unlink(join(legioDir, "agent-busy", name));
+		} catch {
+			// No stale marker — expected for fresh agents
+		}
+
+		// 11c. Write dispatch mail BEFORE creating the tmux session so the mail
 		// exists when the agent's SessionStart hook fires `legio mail check`.
 		// Without this, there is a race: the agent boots, checks mail, finds nothing,
 		// and idles without an assignment.
