@@ -289,7 +289,14 @@ async function handleSend(args: string[], cwd: string): Promise<void> {
 	}
 
 	const type = rawType as MailMessage["type"];
-	const priority = rawPriority as MailMessage["priority"];
+	let priority = rawPriority as MailMessage["priority"];
+
+	// escalation and dispatch default to high priority when no explicit --priority was given
+	const HIGH_PRIORITY_DEFAULT_TYPES = new Set(["escalation", "dispatch"]);
+	const explicitPriority = getFlag(args, "--priority") !== undefined;
+	if (!explicitPriority && HIGH_PRIORITY_DEFAULT_TYPES.has(type)) {
+		priority = "high";
+	}
 
 	// Parse --audience flag (optional, auto-derived from type if not specified)
 	const rawAudience = getFlag(args, "--audience");

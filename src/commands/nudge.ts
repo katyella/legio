@@ -110,6 +110,21 @@ async function resolveTargetSession(
 		return await loadOrchestratorTmuxSession(projectRoot);
 	}
 
+	// Fallback for regular agents: try the conventional tmux session name
+	// legio-{projectName}-{agentName} even if no DB record exists.
+	// Handles the case where an agent is running but not yet registered in SessionStore.
+	try {
+		const { loadConfig } = await import("../config.ts");
+		const config = await loadConfig(projectRoot);
+		const fallbackSession = `legio-${config.project.name}-${agentName}`;
+		const alive = await isSessionAlive(fallbackSession);
+		if (alive) {
+			return fallbackSession;
+		}
+	} catch {
+		// Fallback is non-fatal — proceed to return null
+	}
+
 	return null;
 }
 
