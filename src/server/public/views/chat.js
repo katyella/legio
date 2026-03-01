@@ -138,6 +138,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	const issues = appState.issues || [];
 
 	// UI state — local to this component, persisted across re-renders
+	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [selectedTask, setSelectedTask] = useState(null);
 	const [selectedAgent, setSelectedAgent] = useState(null);
 	const [expandedTasks, setExpandedTasks] = useState(() => new Set());
@@ -344,6 +345,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		setSelectedTask(taskId);
 		setSelectedAgent(null);
 		setSelectedConversation(null);
+		setSidebarOpen(false);
 		// Auto-expand task on click (not for general section)
 		if (taskId && taskId !== "__general__") {
 			setExpandedTasks((prev) => {
@@ -371,12 +373,14 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		e.stopPropagation();
 		setSelectedAgent(agentName);
 		setSelectedConversation(null);
+		setSidebarOpen(false);
 	}, []);
 
 	const handleAllMessagesClick = useCallback(() => {
 		setSelectedTask(null);
 		setSelectedAgent(null);
 		setSelectedConversation(null);
+		setSidebarOpen(false);
 	}, []);
 
 	const handleThreadToggle = useCallback((threadId) => {
@@ -395,6 +399,7 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 		setSelectedConversation(conv);
 		setSelectedTask(null);
 		setSelectedAgent(null);
+		setSidebarOpen(false);
 	}, []);
 
 	const handleSend = useCallback(async () => {
@@ -602,11 +607,11 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 	}
 
 	return html`
-		<div class="flex h-full">
+		<div class="flex flex-col md:flex-row h-full">
 
 			<!-- Sidebar -->
 			<div
-				class="w-64 bg-[#0f0f0f] border-r border-[#2a2a2a] overflow-y-auto flex-shrink-0"
+				class={`w-full md:w-64 bg-[#0f0f0f] border-r border-[#2a2a2a] border-b md:border-b-0 overflow-y-auto flex-shrink-0${sidebarOpen ? '' : ' hidden md:block'}`}
 			>
 				<!-- All Messages item -->
 				<div
@@ -793,6 +798,17 @@ export function ChatView({ state: propState, onSendMessage: propOnSendMessage })
 
 				<!-- Header -->
 				<div class="px-4 py-3 border-b border-[#2a2a2a] flex items-center gap-2 flex-wrap">
+					<button
+						class="md:hidden flex-shrink-0 text-[#999] hover:text-[#e5e5e5] p-1"
+						onClick=${() => setSidebarOpen((o) => !o)}
+						aria-label="Toggle sidebar"
+					>
+						<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+							<rect x="1" y="3" width="16" height="2"/>
+							<rect x="1" y="8" width="16" height="2"/>
+							<rect x="1" y="13" width="16" height="2"/>
+						</svg>
+					</button>
 					${
 						selectedConversation
 							? html`

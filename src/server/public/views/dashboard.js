@@ -609,7 +609,7 @@ function CoordinatorBar() {
 	const gwStatusText = gwIsRunning ? "Running" : gwIsStopped ? "Stopped" : "Unknown";
 
 	return html`
-		<div class="flex items-center gap-3 px-3 py-2 bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0">
+		<div class="flex flex-wrap items-center gap-3 px-3 py-2 bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0">
 			<div class="flex items-center gap-2">
 				<span class="text-xs text-[#666] uppercase tracking-wide">Coordinator</span>
 				<div class="flex items-center gap-1">
@@ -760,17 +760,16 @@ export function DashboardView() {
 	return html`
 		<div class="flex flex-col h-full bg-[#0f0f0f] min-h-0">
 			<${CoordinatorBar} />
-			<div class="flex flex-1 min-h-0">
+			<div class="flex flex-col md:flex-row flex-1 min-h-0">
 				<!-- Coordinator Chat (left, ~58%) -->
 				<div
-					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a]"
-					style="flex: 58 1 0%"
+					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a] border-b md:border-b-0 h-[60vh] md:h-auto md:flex-[58_1_0%]"
 				>
 					<${GatewayChat} gwRunning=${gwRunning} />
 				</div>
 
 				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MailFeed -->
-				<div class="flex flex-col min-h-0 overflow-hidden" style="flex: 42 1 0%">
+				<div class="flex flex-col min-h-0 overflow-hidden md:flex-[42_1_0%]">
 					<${MetricsStrip} agents=${agents} status=${status} />
 					<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
 					<${MailFeed} mail=${mail} />

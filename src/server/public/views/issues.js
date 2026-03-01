@@ -178,7 +178,7 @@ function SkeletonCard() {
 
 function SkeletonColumn({ title, borderClass, count }) {
 	return html`
-		<div class="flex-1 min-w-[240px] flex flex-col">
+		<div class="flex-1 min-w-full md:min-w-[240px] flex flex-col">
 			<div class=${`border-t-2 ${borderClass} bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm px-3 py-2 mb-2 flex items-center gap-2`}>
 				<span class="text-[#e5e5e5] text-sm font-medium">${title}</span>
 				<span class="bg-[#2a2a2a] text-[#999] text-xs rounded-full px-2">—</span>
@@ -194,7 +194,7 @@ function SkeletonColumn({ title, borderClass, count }) {
 
 function Column({ title, issues, borderClass }) {
 	return html`
-		<div class="flex-1 min-w-[240px] flex flex-col">
+		<div class="flex-1 min-w-full md:min-w-[240px] flex flex-col">
 			<div class=${`border-t-2 ${borderClass} bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm px-3 py-2 mb-2 flex items-center gap-2`}>
 				<span class="text-[#e5e5e5] text-sm font-medium">${title}</span>
 				<span class="bg-[#2a2a2a] text-[#999] text-xs rounded-full px-2">${issues.length}</span>
@@ -273,7 +273,7 @@ export function IssuesView() {
 						100% { opacity: 0.3; }
 					}
 				</style>
-				<div class="flex gap-4 overflow-x-auto pb-4">
+				<div class="flex flex-col md:flex-row gap-4 overflow-x-auto pb-4">
 					<${SkeletonColumn} title="Open" borderClass="border-blue-500" count=${3} />
 					<${SkeletonColumn} title="In Progress" borderClass="border-yellow-500" count=${2} />
 					<${SkeletonColumn} title="Blocked" borderClass="border-red-500" count=${1} />
@@ -309,7 +309,7 @@ export function IssuesView() {
 				/>
 			</div>
 			<!-- Priority filter bar -->
-			<div class="flex items-center gap-2 mb-4">
+			<div class="flex flex-wrap items-center gap-2 mb-4">
 				${filterButtons.map((p) => {
 					const active = priorityFilter === p;
 					const label = p == null ? "All" : `P${p}`;
@@ -342,7 +342,7 @@ export function IssuesView() {
 			</div>
 
 			<!-- Kanban board -->
-			<div class="flex gap-4 overflow-x-auto pb-4">
+			<div class="flex flex-col md:flex-row gap-4 overflow-x-auto pb-4">
 				<${Column} title="Open" issues=${open} borderClass="border-blue-500" />
 				<${Column} title="In Progress" issues=${inProgress} borderClass="border-yellow-500" />
 				<${Column} title="Blocked" issues=${blocked} borderClass="border-red-500" />
@@ -395,7 +395,7 @@ function renderColumnHtml(title, issues, borderClass) {
 			? `<div class="text-[#999] text-sm text-center py-4">No issues</div>`
 			: issues.map(renderIssueCardHtml).join("");
 	return `
-		<div class="flex-1 min-w-[240px]">
+		<div class="flex-1 min-w-full md:min-w-[240px]">
 			<div class="border-t-2 ${borderClass} bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm px-3 py-2 mb-2 flex items-center gap-2">
 				<span class="text-[#e5e5e5] text-sm font-medium">${escapeHtml(title)}</span>
 				<span class="bg-[#2a2a2a] text-[#999] text-xs rounded-full px-2">${issues.length}</span>
@@ -452,8 +452,8 @@ window.renderIssues = (appState, el) => {
 
 	el.innerHTML = `
 		<div class="p-4">
-			<div class="flex items-center gap-2 mb-4">${filterBtnsHtml}${closedToggleHtml}</div>
-			<div class="flex gap-4 overflow-x-auto pb-4">${columnsHtml}</div>
+			<div class="flex flex-wrap items-center gap-2 mb-4">${filterBtnsHtml}${closedToggleHtml}</div>
+			<div class="flex flex-col md:flex-row gap-4 overflow-x-auto pb-4">${columnsHtml}</div>
 		</div>`;
 
 	// Wire up filter button click handlers
