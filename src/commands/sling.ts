@@ -709,6 +709,11 @@ export async function slingCommand(args: string[]): Promise<void> {
 
 		for (let attempt = 0; attempt < maxBeaconAttempts; attempt++) {
 			await sendKeys(tmuxSessionName, beacon);
+			// Follow-up Enter after a short delay to ensure submission.
+			// Claude Code's TUI may consume the first Enter during re-render/focus
+			// events, leaving text visible but unsubmitted (legio-t62v).
+			await new Promise<void>((resolve) => setTimeout(resolve, 500));
+			await sendKeys(tmuxSessionName, "");
 
 			// Wait for the TUI to process the submission
 			const verifyDelay = 1000 + attempt * 1000; // 1s, 2s, 3s
@@ -722,9 +727,10 @@ export async function slingCommand(args: string[]): Promise<void> {
 			const beaconTag = `[LEGIO] ${name}`;
 			const hasAgentActivity =
 				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
-				paneContent.includes("Claude") || // Agent response header
 				paneContent.includes("Reading") || // Tool usage
-				paneContent.includes("Searching"); // Tool usage
+				paneContent.includes("Searching") || // Tool usage
+				paneContent.includes("Editing") || // Tool usage
+				paneContent.includes("Running"); // Tool usage
 			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
 
 			if (!beaconStillInInput) {
