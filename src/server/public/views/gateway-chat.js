@@ -28,7 +28,7 @@ export function GatewayChat({ gwRunning }) {
 	const [sendError, setSendError] = useState("");
 	const [pendingMessages, setPendingMessages] = useState([]);
 	const [historyMessages, setHistoryMessages] = useState([]);
-	const [thinking, setThinking] = useState(false);
+	const [terminalActivity, setTerminalActivity] = useState("idle");
 	const [dropdown, setDropdown] = useState({
 		visible: false,
 		items: [],
@@ -40,15 +40,13 @@ export function GatewayChat({ gwRunning }) {
 	const prevFromAgentCountRef = useRef(0);
 	const inputRef = useRef(null);
 	const pendingCursorRef = useRef(null);
-	const thinkingTimeoutRef = useRef(null);
-	const thinkingCountRef = useRef(0);
 
 	const inputClass =
 		"bg-[#1a1a1a] border border-[#2a2a2a] rounded px-2 py-1 text-sm text-[#e5e5e5]" +
 		" placeholder-[#666] outline-none focus:border-[#E64415]";
 
 	// Load gateway chat history on mount and poll for updates
-	// Poll faster (2000ms) when thinking so we catch replies quickly
+	// Poll faster (2000ms) when active so we catch replies quickly
 	useEffect(() => {
 		let cancelled = false;
 
@@ -68,12 +66,12 @@ export function GatewayChat({ gwRunning }) {
 		}
 
 		fetchHistory();
-		const interval = setInterval(fetchHistory, thinking ? 2000 : 5000);
+		const interval = setInterval(fetchHistory, terminalActivity === "active" ? 2000 : 5000);
 		return () => {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, [thinking]);
+	}, [terminalActivity]);
 
 	// Subscribe to WebSocket mail_new events via appState.mail signal for instant updates
 	useEffect(() => {
@@ -107,12 +105,12 @@ export function GatewayChat({ gwRunning }) {
 			}
 		}
 		syncTranscript();
-		const interval = setInterval(syncTranscript, thinking ? 2000 : 10000);
+		const interval = setInterval(syncTranscript, terminalActivity === "active" ? 2000 : 10000);
 		return () => {
 			cancelled = true;
 			clearInterval(interval);
 		};
-	}, [thinking]);
+	}, [terminalActivity]);
 
 	// Consume pendingChatContext from issue click-through
 	useEffect(() => {
@@ -123,14 +121,13 @@ export function GatewayChat({ gwRunning }) {
 		inputRef.current?.focus();
 	}, [appState.pendingChatContext.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	// Count non-human responses in history — detect new agent replies to clear thinking
+	// Count non-human responses in history — detect new agent replies
 	const fromAgentCount = historyMessages.filter((m) => m.from !== "human").length;
 
 	useEffect(() => {
 		if (fromAgentCount > prevFromAgentCountRef.current) {
-			// Decrement thinking counter; clear indicator only when all sends have been replied to
-			thinkingCountRef.current = Math.max(0, thinkingCountRef.current - 1);
-			if (thinkingCountRef.current === 0) setThinking(false);
+			// Agent replied — transition activity to stale (state machine in TerminalPanel takes over)
+			setTerminalActivity("stale");
 			// Deduplicate pending messages that now appear in history
 			setPendingMessages((prev) =>
 				prev.filter(
@@ -164,22 +161,6 @@ export function GatewayChat({ gwRunning }) {
 		);
 	}, [historyMessages]);
 
-	// Auto-clear thinking after 60 seconds to prevent it from getting stuck forever
-	useEffect(() => {
-		if (thinking) {
-			thinkingTimeoutRef.current = setTimeout(() => {
-				thinkingCountRef.current = 0;
-				setThinking(false);
-			}, 60000);
-		}
-		return () => {
-			if (thinkingTimeoutRef.current) {
-				clearTimeout(thinkingTimeoutRef.current);
-				thinkingTimeoutRef.current = null;
-			}
-		};
-	}, [thinking]);
-
 	// Merge history + pending, deduplicate by id, sort oldest first
 	const seenIds = new Set();
 	const allMessages = [];
@@ -200,7 +181,7 @@ export function GatewayChat({ gwRunning }) {
 				feed.scrollTop = feed.scrollHeight;
 			});
 		}
-	}, [allMessages.length, thinking]);
+	}, [allMessages.length, terminalActivity]);
 
 	// Restore cursor position after programmatic input update (e.g., @-mention insertion)
 	useEffect(() => {
@@ -241,8 +222,7 @@ export function GatewayChat({ gwRunning }) {
 				inputRef.current.style.height = "auto";
 			}
 			inputRef.current?.focus();
-			thinkingCountRef.current += 1;
-			setThinking(true);
+			setTerminalActivity("active");
 			await postJson("/api/gateway/chat", { text });
 			// Do NOT remove pending here — let the historyMessages useEffect deduplicate
 			// once the history poll confirms the message, preventing a visible flash/gap.
@@ -438,7 +418,7 @@ export function GatewayChat({ gwRunning }) {
 							})
 				}
 				${
-					thinking
+					terminalActivity === "active"
 						? html`
 						<div class="flex justify-start">
 							<div class="max-w-[85%] rounded px-3 py-2 text-sm bg-[#1a1a1a] text-[#e5e5e5] border border-[#2a2a2a]">
@@ -457,7 +437,7 @@ export function GatewayChat({ gwRunning }) {
 			</div>
 
 			<!-- Terminal panel (collapsible, collapsed by default) -->
-			<${TerminalPanel} chatTarget="gateway" thinking=${thinking} />
+			<${TerminalPanel} chatTarget="gateway" activity=${terminalActivity} />
 
 			<!-- Input area (always visible) -->
 			<div class="border-t border-[#2a2a2a] p-3 shrink-0">
