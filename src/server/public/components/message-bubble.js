@@ -6,6 +6,16 @@ import { renderMarkdown } from "../lib/markdown.js";
 import { html } from "../lib/preact-setup.js";
 import { agentColor, timeAgo } from "../lib/utils.js";
 
+function addStatusPrefixes(htmlStr) {
+	return htmlStr
+		.replace(/\[DONE\]/g, '<span class="text-green-400 font-semibold">[DONE]</span>')
+		.replace(/\[ERROR\]/g, '<span class="text-red-400 font-semibold">[ERROR]</span>')
+		.replace(/\[INFO\]/g, '<span class="text-blue-400 font-semibold">[INFO]</span>')
+		.replace(/\[WARN\]/g, '<span class="text-yellow-400 font-semibold">[WARN]</span>')
+		.replace(/\[PENDING\]/g, '<span class="text-[#999] font-semibold">[PENDING]</span>')
+		.replace(/\[MERGED\]/g, '<span class="text-purple-400 font-semibold">[MERGED]</span>');
+}
+
 /**
  * MessageBubble — renders a single mail message as a conversational bubble.
  *
@@ -64,7 +74,7 @@ export function MessageBubble({
 			</div>`
 			}
 			<div class="text-sm text-[#e5e5e5] break-words chat-markdown"
-			dangerouslySetInnerHTML=${{ __html: renderMarkdown(msg.body) }}></div>
+			dangerouslySetInnerHTML=${{ __html: addStatusPrefixes(renderMarkdown(msg.body)) }}></div>
 		</div>
 	`;
 }
