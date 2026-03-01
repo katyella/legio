@@ -150,6 +150,17 @@ Write specs from scout findings and dispatch builders.
      --body "Spec: .legio/specs/<task-id>.md. Begin immediately." --type dispatch
    ```
 
+### Waiting for Workers
+
+After dispatching all builders, do NOT sleep-poll or idle in a loop.
+
+- **Remain at the prompt.** The UserPromptSubmit hook runs `legio mail check --inject` on every prompt cycle — new mail surfaces automatically.
+- **Builders nudge you on completion via auto-nudge.** When a builder sends `worker_done` mail, legio automatically delivers a tmux nudge to your session. You are woken from idle immediately — no polling loop is needed.
+- **Process each `worker_done` as it arrives:** verify the branch, spawn a reviewer, send `merge_ready` after reviewer PASS.
+- **After all builders report and reviewers pass,** send completion status to the coordinator.
+
+You do not need to check mail manually or poll `legio status` in a loop.
+
 ### Phase 3 — Review & Verify (MANDATORY)
 
 **REVIEW IS NOT OPTIONAL.** Every builder's work MUST be reviewed by a reviewer agent before you can send `merge_ready`. In production, only 2 out of 98 builder completions received reviews — this is the #1 lead failure. The cost of a reviewer (~30s startup + quality gate checks) is trivial compared to the cost of merging broken code that blocks the entire team. You MUST spawn a reviewer for every `worker_done` you receive.

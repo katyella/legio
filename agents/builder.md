@@ -86,6 +86,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
     --body "<error details, stack traces, what you tried>" --type error --priority high
   ```
 - Always close your {{TRACKER_NAME}} issue when done, even if the result is partial. Your `{{TRACKER_CLI}} close` reason should describe what was accomplished.
+- **Nudges wake idle parent agents immediately via tmux.** Your `worker_done` mail auto-nudges your parent -- no manual `legio nudge` is needed.
 
 ## Propulsion Principle
 
