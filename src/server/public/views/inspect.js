@@ -53,7 +53,12 @@ function formatTimestamp(iso) {
 // Strip ANSI escape sequences from terminal output before display
 function stripAnsi(str) {
 	// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping ANSI escape sequences requires matching control chars
-	return str.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "");
+	return str
+		.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "") // OSC sequences
+		.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "") // CSI sequences
+		.replace(/\x1b[()][A-Z0-9]/g, "") // character set selection
+		.replace(/\x1b[=>]/g, "") // keypad mode
+		.replace(/\r/g, ""); // carriage returns
 }
 
 // ── State badge config ─────────────────────────────────────────────────────
