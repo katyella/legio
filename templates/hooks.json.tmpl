@@ -60,6 +60,15 @@
 				]
 			},
 			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bsleep\\b'; then echo '{\"decision\":\"block\",\"reason\":\"sleep is blocked in legio agents \xe2\x80\x94 mail delivery is automatic via hooks, no polling needed\"}'; exit 0; fi;"
+					}
+				]
+			},
+			{
 				"matcher": "",
 				"hooks": [
 					{
