@@ -22,7 +22,14 @@ import { loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
-import { createSession, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
+import {
+	capturePaneContent,
+	createSession,
+	isSessionAlive,
+	killSession,
+	sendKeys,
+	waitForTuiReady,
+} from "../worktree/tmux.ts";
 
 /** Default gateway agent name. */
 const GATEWAY_NAME = "gateway";
@@ -59,6 +66,11 @@ export interface GatewayDeps {
 		isSessionAlive: (name: string) => Promise<boolean>;
 		killSession: (name: string) => Promise<void>;
 		sendKeys: (name: string, keys: string) => Promise<void>;
+		waitForTuiReady?: (
+			sessionName: string,
+			opts?: { timeout?: number; interval?: number },
+		) => Promise<void>;
+		capturePaneContent?: (name: string) => Promise<string>;
 	};
 	_sleep?: (ms: number) => Promise<void>;
 }
@@ -107,7 +119,14 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
  * 10. Send beacon after delay, optionally attach
  */
 async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<void> {
-	const tmux = deps._tmux ?? { createSession, isSessionAlive, killSession, sendKeys };
+	const tmux = deps._tmux ?? {
+		createSession,
+		isSessionAlive,
+		killSession,
+		sendKeys,
+		waitForTuiReady,
+		capturePaneContent,
+	};
 	const sleep =
 		deps._sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
@@ -226,15 +245,62 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 			process.stdout.write(`  PID:     ${pid}\n`);
 		}
 
-		// Send beacon after TUI initialization delay
+		// Send beacon after TUI initialization.
+		// Wait for Claude Code's TUI to render before sending beacon.
+		// Falls back to sleep(3_000) when waitForTuiReady is not in the DI mock.
 		const isFirstRun = !existingIdentity;
-		await sleep(3_000);
+		if (tmux.waitForTuiReady) {
+			await tmux.waitForTuiReady(tmuxSession);
+		} else {
+			await sleep(3_000);
+		}
 		const beacon = buildGatewayBeacon(isFirstRun);
-		await tmux.sendKeys(tmuxSession, beacon);
 
-		// Follow-up Enter to ensure submission (same pattern as sling.ts)
-		await sleep(500);
-		await tmux.sendKeys(tmuxSession, "");
+		// Send beacon with delivery verification.
+		// After sending the beacon text, verify the agent actually received it by
+		// checking the pane content. If the beacon text is still visible in the pane
+		// (not consumed by the TUI), retry up to 3 times with increasing delays.
+		const capture = tmux.capturePaneContent ?? capturePaneContent;
+		const maxBeaconAttempts = 3;
+		let beaconDelivered = false;
+
+		for (let attempt = 0; attempt < maxBeaconAttempts; attempt++) {
+			await tmux.sendKeys(tmuxSession, beacon);
+
+			// Wait for the TUI to process the submission
+			const verifyDelay = 1000 + attempt * 1000; // 1s, 2s, 3s
+			await sleep(verifyDelay);
+
+			// Check if the beacon was consumed: if the pane shows agent activity
+			// (spinner, tool calls, thinking indicators) the beacon was delivered.
+			// If the raw beacon text is still sitting in the input area, it wasn't
+			// submitted — retry.
+			const paneContent = await capture(tmuxSession);
+			const beaconTag = `[LEGIO] ${GATEWAY_NAME}`;
+			const hasAgentActivity =
+				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
+				paneContent.includes("Claude") || // Agent response header
+				paneContent.includes("Reading") || // Tool usage
+				paneContent.includes("Searching"); // Tool usage
+			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
+
+			if (!beaconStillInInput) {
+				beaconDelivered = true;
+				break;
+			}
+
+			// Beacon text still in input — send a follow-up Enter to submit it
+			process.stderr.write(
+				`⚠️  Beacon attempt ${attempt + 1}/${maxBeaconAttempts} not consumed — retrying\n`,
+			);
+			await tmux.sendKeys(tmuxSession, "");
+		}
+
+		if (!beaconDelivered) {
+			process.stderr.write(
+				`⚠️  Warning: Beacon for "${GATEWAY_NAME}" may not have been delivered after ${maxBeaconAttempts} attempts. Check agent manually.\n`,
+			);
+		}
 
 		if (shouldAttach) {
 			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
