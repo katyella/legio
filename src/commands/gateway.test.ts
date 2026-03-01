@@ -687,7 +687,7 @@ describe("buildGatewayBeacon", () => {
 		const beacon = buildGatewayBeacon();
 		expect(beacon).toContain("mulch prime");
 		expect(beacon).toContain("legio mail check --agent gateway");
-		expect(beacon).toContain("respond to user");
+		expect(beacon).toContain("respond to user via BOTH terminal AND mail");
 	});
 
 	test("parts are joined with em-dash separator", () => {

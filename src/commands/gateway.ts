@@ -86,7 +86,7 @@ export function buildGatewayBeacon(isFirstRun = false): string {
 		"Depth: 0 | Role: planning companion",
 		"READONLY: No Write/Edit",
 		"ISSUES: Use bd create",
-		`Startup: run mulch prime, check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user`,
+		`Startup: run mulch prime, check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user via BOTH terminal AND mail (legio mail send --to human --subject "chat" --body "..." --type status --agent ${GATEWAY_NAME}) so replies appear in dashboard chat`,
 	];
 	if (isFirstRun) {
 		parts.push("FIRST_RUN: true — Follow the First Run workflow in your agent definition");
