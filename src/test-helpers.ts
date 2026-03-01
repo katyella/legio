@@ -30,6 +30,10 @@ async function getTemplateRepo(): Promise<string> {
 
 	const dir = await mkdtemp(join(tmpdir(), "legio-template-"));
 	await runGitInDir(dir, ["init", "-b", "main"]);
+	// Bake identity into the template so clones inherit it without extra
+	// per-repo `git config` subprocess calls.
+	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
+	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	await writeFile(join(dir, ".gitkeep"), "");
 	await runGitInDir(dir, ["add", ".gitkeep"]);
 	await runGitInDir(dir, ["commit", "-m", "initial commit"]);
@@ -51,12 +55,8 @@ export async function createTempGitRepo(): Promise<string> {
 	const template = await getTemplateRepo();
 	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
 	// Clone into the empty dir. Avoid --local (hardlinks trigger EFAULT in Bun's rm).
+	// Git identity is inherited from the template repo's config.
 	await runGitInDir(".", ["clone", template, dir]);
-	// Set git identity at repo level so code that doesn't use GIT_TEST_ENV
-	// (e.g., resolver's runGit) can still commit. Locally this is covered by
-	// ~/.gitconfig, but CI runners have no global git identity.
-	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
-	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	return dir;
 }
 
@@ -74,8 +74,6 @@ export async function cloneFixtureRepo(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
 	// Avoid --local (hardlinks trigger EFAULT in Bun's rm).
 	await runGitInDir(".", ["clone", fixturePath, dir]);
-	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
-	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	return dir;
 }
 

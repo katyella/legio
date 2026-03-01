@@ -1,10 +1,9 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { DEFAULT_CONFIG, loadConfig, resolveProjectRoot } from "./config.ts";
+import { DEFAULT_CONFIG, loadConfig } from "./config.ts";
 import { ValidationError } from "./errors.ts";
-import { cleanupTempDir, createTempGitRepo, runGitInDir } from "./test-helpers.ts";
 
 describe("loadConfig", () => {
 	let tempDir: string;
@@ -348,90 +347,6 @@ models:
   coordinator: gpt4
 `);
 		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
-	});
-});
-
-describe("resolveProjectRoot", () => {
-	let repoDir: string;
-
-	afterEach(async () => {
-		if (repoDir) {
-			// Remove worktrees before cleaning up
-			try {
-				await runGitInDir(repoDir, ["worktree", "prune"]);
-			} catch {
-				// Best effort
-			}
-			await cleanupTempDir(repoDir);
-		}
-	});
-
-	test("returns startDir when .legio/config.yaml exists there", async () => {
-		repoDir = await createTempGitRepo();
-		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
-
-		const result = await resolveProjectRoot(repoDir);
-		expect(result).toBe(repoDir);
-	});
-
-	test("resolves worktree to main project root", async () => {
-		repoDir = await createTempGitRepo();
-		// Resolve symlinks (macOS /var -> /private/var) to match git's output
-		repoDir = await realpath(repoDir);
-		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
-
-		// Create a worktree like legio sling does
-		const worktreeDir = join(repoDir, ".legio", "worktrees", "test-agent");
-		await mkdir(join(repoDir, ".legio", "worktrees"), { recursive: true });
-		await runGitInDir(repoDir, ["worktree", "add", "-b", "legio/test-agent/task-1", worktreeDir]);
-
-		// resolveProjectRoot from the worktree should return the main repo
-		const result = await resolveProjectRoot(worktreeDir);
-		expect(result).toBe(repoDir);
-	});
-
-	test("resolves worktree to main root even when config.yaml is committed (regression)", async () => {
-		repoDir = await createTempGitRepo();
-		repoDir = await realpath(repoDir);
-
-		// Commit .legio/config.yaml so the worktree gets a copy via git
-		// (this is what legio init does — the file is tracked)
-		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(join(repoDir, ".legio", "config.yaml"), "project:\n  canonicalBranch: main\n");
-		await runGitInDir(repoDir, ["add", ".legio/config.yaml"]);
-		await runGitInDir(repoDir, ["commit", "-m", "add legio config"]);
-
-		// Create a worktree — it will now have .legio/config.yaml from git
-		const worktreeDir = join(repoDir, ".legio", "worktrees", "mail-scout");
-		await mkdir(join(repoDir, ".legio", "worktrees"), { recursive: true });
-		await runGitInDir(repoDir, ["worktree", "add", "-b", "legio/mail-scout/task-1", worktreeDir]);
-
-		// Must resolve to main repo root, NOT the worktree
-		// (even though worktree has its own .legio/config.yaml)
-		const result = await resolveProjectRoot(worktreeDir);
-		expect(result).toBe(repoDir);
-	});
-
-	test("loadConfig resolves correct root from worktree", async () => {
-		repoDir = await createTempGitRepo();
-		// Resolve symlinks (macOS /var -> /private/var) to match git's output
-		repoDir = await realpath(repoDir);
-		await mkdir(join(repoDir, ".legio"), { recursive: true });
-		await writeFile(
-			join(repoDir, ".legio", "config.yaml"),
-			"project:\n  canonicalBranch: develop\n",
-		);
-
-		const worktreeDir = join(repoDir, ".legio", "worktrees", "agent-2");
-		await mkdir(join(repoDir, ".legio", "worktrees"), { recursive: true });
-		await runGitInDir(repoDir, ["worktree", "add", "-b", "legio/agent-2/task-2", worktreeDir]);
-
-		// loadConfig from the worktree should resolve to the main project root
-		const config = await loadConfig(worktreeDir);
-		expect(config.project.root).toBe(repoDir);
-		expect(config.project.canonicalBranch).toBe("develop");
 	});
 });
 

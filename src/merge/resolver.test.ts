@@ -102,10 +102,15 @@ function makeTestEntry(overrides?: Partial<MergeEntry>): MergeEntry {
 /**
  * Set up a clean merge scenario: feature branch adds a new file with no conflict.
  */
-async function setupCleanMerge(dir: string, baseBranch: string): Promise<void> {
-	await commitFile(dir, "src/main-file.ts", "main content\n");
-	await runGitInDir(dir, ["checkout", "-b", "feature-branch"]);
-	await commitFile(dir, "src/feature-file.ts", "feature content\n");
+async function setupCleanMerge(
+	dir: string,
+	baseBranch: string,
+	branchName = "feature-branch",
+	filePrefix = "src",
+): Promise<void> {
+	await commitFile(dir, `${filePrefix}/main-file.ts`, "main content\n");
+	await runGitInDir(dir, ["checkout", "-b", branchName]);
+	await commitFile(dir, `${filePrefix}/feature-file.ts`, "feature content\n");
 	await runGitInDir(dir, ["checkout", baseBranch]);
 }
 
@@ -114,12 +119,17 @@ async function setupCleanMerge(dir: string, baseBranch: string): Promise<void> {
  * branches. Both sides must diverge from the common ancestor to produce
  * conflict markers.
  */
-async function setupContentConflict(dir: string, baseBranch: string): Promise<void> {
-	await commitFile(dir, "src/test.ts", "original content\n");
-	await runGitInDir(dir, ["checkout", "-b", "feature-branch"]);
-	await commitFile(dir, "src/test.ts", "feature content\n");
+async function setupContentConflict(
+	dir: string,
+	baseBranch: string,
+	branchName = "feature-branch",
+	filePath = "src/test.ts",
+): Promise<void> {
+	await commitFile(dir, filePath, "original content\n");
+	await runGitInDir(dir, ["checkout", "-b", branchName]);
+	await commitFile(dir, filePath, "feature content\n");
 	await runGitInDir(dir, ["checkout", baseBranch]);
-	await commitFile(dir, "src/test.ts", "main modified content\n");
+	await commitFile(dir, filePath, "main modified content\n");
 }
 
 /**
@@ -132,13 +142,14 @@ async function setupDeleteModifyConflict(
 	dir: string,
 	baseBranch: string,
 	branchName = "feature-branch",
+	filePath = "src/test.ts",
 ): Promise<void> {
-	await commitFile(dir, "src/test.ts", "original content\n");
+	await commitFile(dir, filePath, "original content\n");
 	await runGitInDir(dir, ["checkout", "-b", branchName]);
-	await commitFile(dir, "src/test.ts", "modified by agent\n");
+	await commitFile(dir, filePath, "modified by agent\n");
 	await runGitInDir(dir, ["checkout", baseBranch]);
-	await runGitInDir(dir, ["rm", "src/test.ts"]);
-	await runGitInDir(dir, ["commit", "-m", "delete src/test.ts"]);
+	await runGitInDir(dir, ["rm", filePath]);
+	await runGitInDir(dir, ["commit", "-m", `delete ${filePath}`]);
 }
 
 /**
@@ -147,14 +158,19 @@ async function setupDeleteModifyConflict(
  * and set entry.filesModified to a different file that exists on both branches
  * (so git show works for both in reimagine).
  */
-async function setupReimagineScenario(dir: string, baseBranch: string): Promise<void> {
-	await commitFile(dir, "src/conflict-file.ts", "original content\n");
-	await commitFile(dir, "src/reimagine-target.ts", "main version of target\n");
-	await runGitInDir(dir, ["checkout", "-b", "feature-branch"]);
-	await commitFile(dir, "src/conflict-file.ts", "modified by agent\n");
-	await commitFile(dir, "src/reimagine-target.ts", "feature version of target\n");
+async function setupReimagineScenario(
+	dir: string,
+	baseBranch: string,
+	branchName = "feature-branch",
+	filePrefix = "src",
+): Promise<void> {
+	await commitFile(dir, `${filePrefix}/conflict-file.ts`, "original content\n");
+	await commitFile(dir, `${filePrefix}/reimagine-target.ts`, "main version of target\n");
+	await runGitInDir(dir, ["checkout", "-b", branchName]);
+	await commitFile(dir, `${filePrefix}/conflict-file.ts`, "modified by agent\n");
+	await commitFile(dir, `${filePrefix}/reimagine-target.ts`, "feature version of target\n");
 	await runGitInDir(dir, ["checkout", baseBranch]);
-	await runGitInDir(dir, ["rm", "src/conflict-file.ts"]);
+	await runGitInDir(dir, ["rm", `${filePrefix}/conflict-file.ts`]);
 	await runGitInDir(dir, ["commit", "-m", "delete conflict file"]);
 }
 
@@ -482,55 +498,74 @@ describe("createMergeResolver", () => {
 	});
 
 	describe("All tiers fail", () => {
+		// Shared repo for failure tests — merge always aborts and leaves repo clean
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			await setupDeleteModifyConflict(repoDir, defaultBranch);
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("returns failed status and repo is clean when all tiers fail", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/test.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			expect(result.success).toBe(false);
+			expect(result.entry.status).toBe("failed");
+			expect(result.entry.resolvedTier).toBeNull();
+			expect(result.errorMessage).not.toBeNull();
+			expect(result.errorMessage).toContain("failed");
 
-				expect(result.success).toBe(false);
-				expect(result.entry.status).toBe("failed");
-				expect(result.entry.resolvedTier).toBeNull();
-				expect(result.errorMessage).not.toBeNull();
-				expect(result.errorMessage).toContain("failed");
-
-				// Verify the repo is in a clean state (merge was aborted)
-				const status = await runGitInDir(repoDir, ["status", "--porcelain"]);
-				expect(status.trim()).toBe("");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// Verify the repo is in a clean state (merge was aborted)
+			const status = await runGitInDir(repoDir, ["status", "--porcelain"]);
+			expect(status.trim()).toBe("");
 		});
 	});
 
 	describe("result shape", () => {
-		let repoDir: string;
-		let defaultBranch: string;
+		let successRepoDir: string;
+		let failRepoDir: string;
+		let successBranch: string;
+		let failBranch: string;
 
-		beforeEach(async () => {
-			repoDir = await createTempGitRepo();
-			defaultBranch = await getDefaultBranch(repoDir);
+		beforeAll(async () => {
+			[successRepoDir, failRepoDir] = await Promise.all([
+				createTempGitRepo(),
+				createTempGitRepo(),
+			]);
+			[successBranch, failBranch] = await Promise.all([
+				getDefaultBranch(successRepoDir),
+				getDefaultBranch(failRepoDir),
+			]);
+			await Promise.all([
+				setupCleanMerge(successRepoDir, successBranch),
+				setupDeleteModifyConflict(failRepoDir, failBranch, "legio/my-agent/bead-xyz"),
+			]);
 		});
 
-		afterEach(async () => {
-			await cleanupTempDir(repoDir);
+		afterAll(async () => {
+			await Promise.all([
+				cleanupTempDir(successRepoDir),
+				cleanupTempDir(failRepoDir),
+			]);
 		});
 
 		test("successful result has correct MergeResult shape", async () => {
-			await setupCleanMerge(repoDir, defaultBranch);
-
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
@@ -541,8 +576,8 @@ describe("createMergeResolver", () => {
 					branchName: "feature-branch",
 					filesModified: ["src/feature-file.ts"],
 				}),
-				defaultBranch,
-				repoDir,
+				successBranch,
+				successRepoDir,
 			);
 
 			expect(result).toHaveProperty("entry");
@@ -553,8 +588,6 @@ describe("createMergeResolver", () => {
 		});
 
 		test("failed result preserves original entry fields", async () => {
-			await setupDeleteModifyConflict(repoDir, defaultBranch, "legio/my-agent/bead-xyz");
-
 			const entry = makeTestEntry({
 				branchName: "legio/my-agent/bead-xyz",
 				beadId: "bead-xyz",
@@ -567,7 +600,7 @@ describe("createMergeResolver", () => {
 				reimagineEnabled: false,
 			});
 
-			const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			const result = await resolver.resolve(entry, failBranch, failRepoDir);
 
 			expect(result.entry.branchName).toBe("legio/my-agent/bead-xyz");
 			expect(result.entry.beadId).toBe("bead-xyz");
@@ -576,61 +609,60 @@ describe("createMergeResolver", () => {
 	});
 
 	describe("checkout skip when already on canonical branch", () => {
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			// Create two feature branches for the two tests
+			await setupCleanMerge(repoDir, defaultBranch, "feat-on-canonical", "co1");
+			await setupCleanMerge(repoDir, defaultBranch, "feat-from-other", "co2");
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("succeeds when already on canonical branch (skips checkout)", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupCleanMerge(repoDir, defaultBranch);
+			// Verify we're on the default branch
+			const branch = await runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]);
+			expect(branch.trim()).toBe(defaultBranch);
 
-				// Verify we're on the default branch
-				const branch = await runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]);
-				expect(branch.trim()).toBe(defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "feat-on-canonical",
+				filesModified: ["co1/feature-file.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/feature-file.ts"],
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-				});
-
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("clean-merge");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("clean-merge");
 		});
 
 		test("checks out canonical when on a different branch", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupCleanMerge(repoDir, defaultBranch);
+			// Switch to a different branch
+			await runGitInDir(repoDir, ["checkout", "-b", "some-other-branch"]);
+			const branch = await runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]);
+			expect(branch.trim()).toBe("some-other-branch");
 
-				// Switch to a different branch
-				await runGitInDir(repoDir, ["checkout", "-b", "some-other-branch"]);
-				const branch = await runGitInDir(repoDir, ["symbolic-ref", "--short", "HEAD"]);
-				expect(branch.trim()).toBe("some-other-branch");
+			const entry = makeTestEntry({
+				branchName: "feat-from-other",
+				filesModified: ["co2/feature-file.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/feature-file.ts"],
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-				});
-
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("clean-merge");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("clean-merge");
 		});
 	});
 
@@ -669,380 +701,352 @@ describe("createMergeResolver", () => {
 	});
 
 	describe("Tier 3: AI-resolve prose rejection", () => {
+		// Shared repo — prose rejection fails the merge, abort leaves repo clean
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			await setupDeleteModifyConflict(repoDir, defaultBranch);
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("rejects prose output and falls through to failure", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/test.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: true,
+				reimagineEnabled: false,
+				// Return prose instead of code
+				_spawn: makeSelectiveSpawn(
+					"I need permission to edit the file. Here's the resolved content:\n```\nresolved\n```",
+					"",
+					0,
+				),
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: true,
-					reimagineEnabled: false,
-					// Return prose instead of code
-					_spawn: makeSelectiveSpawn(
-						"I need permission to edit the file. Here's the resolved content:\n```\nresolved\n```",
-						"",
-						0,
-					),
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				// Should fail because prose was rejected
-				expect(result.success).toBe(false);
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// Should fail because prose was rejected
+			expect(result.success).toBe(false);
 		});
 	});
 
 	describe("Conflict pattern recording", { timeout: 15_000 }, () => {
+		// Shared repo with all conflict scenarios set up on separate branches/files.
+		// Each test uses a unique branch so merges don't interfere.
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			// Set up all branches in one repo — unique file paths avoid collisions
+			await setupContentConflict(repoDir, defaultBranch, "rec-compat", "rec/compat.ts");
+			await setupContentConflict(repoDir, defaultBranch, "rec-t2", "rec/t2.ts");
+			await setupDeleteModifyConflict(repoDir, defaultBranch, "rec-fail", "rec/fail.ts");
+			await setupContentConflict(repoDir, defaultBranch, "rec-fire", "rec/fire.ts");
+			await setupDeleteModifyConflict(repoDir, defaultBranch, "rec-ai", "rec/ai.ts");
+			await setupReimagineScenario(repoDir, defaultBranch, "rec-reimagine", "rec/ri");
+			await setupCleanMerge(repoDir, defaultBranch, "rec-clean", "rec/clean");
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("no recording when mulchClient is not provided (backward compatible)", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupContentConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-compat",
+				filesModified: ["rec/compat.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			// No mulchClient passed — should work as before
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+			});
 
-				// No mulchClient passed — should work as before
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("auto-resolve");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("auto-resolve");
 		});
 
 		test("records pattern on tier 2 auto-resolve success", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupContentConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-t2",
+				beadId: "bead-abc-123",
+				agentName: "test-builder",
+				filesModified: ["rec/t2.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					beadId: "bead-abc-123",
-					agentName: "test-builder",
-					filesModified: ["src/test.ts"],
-				});
+			// Create a mock MulchClient with a spy on record
+			const recordCalls: Array<{
+				domain: string;
+				options: {
+					type: string;
+					description?: string;
+					tags?: string[];
+					evidenceBead?: string;
+				};
+			}> = [];
 
-				// Create a mock MulchClient with a spy on record
-				const recordCalls: Array<{
-					domain: string;
-					options: {
+			const mockMulchClient = createMockMulchClient(async (domain, options) => {
+				recordCalls.push({
+					domain,
+					options: options as {
 						type: string;
 						description?: string;
 						tags?: string[];
 						evidenceBead?: string;
-					};
-				}> = [];
-
-				const mockMulchClient = createMockMulchClient(async (domain, options) => {
-					recordCalls.push({
-						domain,
-						options: options as {
-							type: string;
-							description?: string;
-							tags?: string[];
-							evidenceBead?: string;
-						},
-					});
+					},
 				});
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+			});
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("auto-resolve");
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("auto-resolve");
 
-				// Verify record was called
-				expect(recordCalls.length).toBe(1);
-				const call = recordCalls[0];
-				expect(call?.domain).toBe("architecture");
-				expect(call?.options.type).toBe("pattern");
-				expect(call?.options.tags).toContain("merge-conflict");
-				expect(call?.options.evidenceBead).toBe("bead-abc-123");
+			// Verify record was called
+			expect(recordCalls.length).toBe(1);
+			const call = recordCalls[0];
+			expect(call?.domain).toBe("architecture");
+			expect(call?.options.type).toBe("pattern");
+			expect(call?.options.tags).toContain("merge-conflict");
+			expect(call?.options.evidenceBead).toBe("bead-abc-123");
 
-				// Verify description contains key details
-				const desc = call?.options.description ?? "";
-				expect(desc).toContain("resolved");
-				expect(desc).toContain("auto-resolve");
-				expect(desc).toContain("feature-branch");
-				expect(desc).toContain("test-builder");
-				expect(desc).toContain("src/test.ts");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// Verify description contains key details
+			const desc = call?.options.description ?? "";
+			expect(desc).toContain("resolved");
+			expect(desc).toContain("auto-resolve");
+			expect(desc).toContain("rec-t2");
+			expect(desc).toContain("test-builder");
+			expect(desc).toContain("rec/t2.ts");
 		});
 
 		test("records pattern on total failure", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-fail",
+				beadId: "bead-fail-456",
+				agentName: "test-agent",
+				filesModified: ["rec/fail.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					beadId: "bead-fail-456",
-					agentName: "test-agent",
-					filesModified: ["src/test.ts"],
-				});
+			const recordCalls: Array<{
+				domain: string;
+				options: {
+					type: string;
+					description?: string;
+					tags?: string[];
+					evidenceBead?: string;
+				};
+			}> = [];
 
-				const recordCalls: Array<{
-					domain: string;
-					options: {
+			const mockMulchClient = createMockMulchClient(async (domain, options) => {
+				recordCalls.push({
+					domain,
+					options: options as {
 						type: string;
 						description?: string;
 						tags?: string[];
 						evidenceBead?: string;
-					};
-				}> = [];
-
-				const mockMulchClient = createMockMulchClient(async (domain, options) => {
-					recordCalls.push({
-						domain,
-						options: options as {
-							type: string;
-							description?: string;
-							tags?: string[];
-							evidenceBead?: string;
-						},
-					});
+					},
 				});
+			});
 
-				// AI and reimagine disabled — will fail at tier 2
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-				});
+			// AI and reimagine disabled — will fail at tier 2
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+			});
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				expect(result.success).toBe(false);
+			expect(result.success).toBe(false);
 
-				// Verify record was called for failure
-				expect(recordCalls.length).toBe(1);
-				const call = recordCalls[0];
-				expect(call?.domain).toBe("architecture");
-				expect(call?.options.type).toBe("pattern");
-				expect(call?.options.evidenceBead).toBe("bead-fail-456");
+			// Verify record was called for failure
+			expect(recordCalls.length).toBe(1);
+			const call = recordCalls[0];
+			expect(call?.domain).toBe("architecture");
+			expect(call?.options.type).toBe("pattern");
+			expect(call?.options.evidenceBead).toBe("bead-fail-456");
 
-				// Verify description contains "failed" not "resolved"
-				const desc = call?.options.description ?? "";
-				expect(desc).toContain("failed");
-				expect(desc).not.toContain("resolved");
-				expect(desc).toContain("auto-resolve"); // last attempted tier
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// Verify description contains "failed" not "resolved"
+			const desc = call?.options.description ?? "";
+			expect(desc).toContain("failed");
+			expect(desc).not.toContain("resolved");
+			expect(desc).toContain("auto-resolve"); // last attempted tier
 		});
 
 		test("recording failure does not affect merge result (fire-and-forget)", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupContentConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-fire",
+				filesModified: ["rec/fire.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			// Mock mulchClient whose record rejects
+			const mockMulchClient = createMockMulchClient(async () => {
+				throw new Error("Mulch recording failed!");
+			});
 
-				// Mock mulchClient whose record rejects
-				const mockMulchClient = createMockMulchClient(async () => {
-					throw new Error("Mulch recording failed!");
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-				});
+			// Should still succeed despite recording failure (fire-and-forget)
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				// Should still succeed despite recording failure (fire-and-forget)
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("auto-resolve");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("auto-resolve");
 		});
 
 		test("records pattern on tier 3 ai-resolve success", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-ai",
+				beadId: "bead-ai-789",
+				filesModified: ["rec/ai.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					beadId: "bead-ai-789",
-					filesModified: ["src/test.ts"],
-				});
+			const recordCalls: Array<{
+				domain: string;
+				options: {
+					type: string;
+					description?: string;
+					tags?: string[];
+					evidenceBead?: string;
+				};
+			}> = [];
 
-				const recordCalls: Array<{
-					domain: string;
-					options: {
+			const mockMulchClient = createMockMulchClient(async (domain, options) => {
+				recordCalls.push({
+					domain,
+					options: options as {
 						type: string;
 						description?: string;
 						tags?: string[];
 						evidenceBead?: string;
-					};
-				}> = [];
-
-				const mockMulchClient = createMockMulchClient(async (domain, options) => {
-					recordCalls.push({
-						domain,
-						options: options as {
-							type: string;
-							description?: string;
-							tags?: string[];
-							evidenceBead?: string;
-						},
-					});
+					},
 				});
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: true,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-					_spawn: makeSelectiveSpawn("resolved content from AI\n", "", 0),
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: true,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+				_spawn: makeSelectiveSpawn("resolved content from AI\n", "", 0),
+			});
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("ai-resolve");
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("ai-resolve");
 
-				// Verify record was called
-				expect(recordCalls.length).toBe(1);
-				const call = recordCalls[0];
-				expect(call?.domain).toBe("architecture");
-				expect(call?.options.evidenceBead).toBe("bead-ai-789");
+			// Verify record was called
+			expect(recordCalls.length).toBe(1);
+			const call = recordCalls[0];
+			expect(call?.domain).toBe("architecture");
+			expect(call?.options.evidenceBead).toBe("bead-ai-789");
 
-				const desc = call?.options.description ?? "";
-				expect(desc).toContain("resolved");
-				expect(desc).toContain("ai-resolve");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			const desc = call?.options.description ?? "";
+			expect(desc).toContain("resolved");
+			expect(desc).toContain("ai-resolve");
 		});
 
 		test("records pattern on tier 4 reimagine success", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupReimagineScenario(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-reimagine",
+				beadId: "bead-reimagine-xyz",
+				filesModified: ["rec/ri/reimagine-target.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					beadId: "bead-reimagine-xyz",
-					filesModified: ["src/reimagine-target.ts"],
-				});
+			const recordCalls: Array<{
+				domain: string;
+				options: {
+					type: string;
+					description?: string;
+					tags?: string[];
+					evidenceBead?: string;
+				};
+			}> = [];
 
-				const recordCalls: Array<{
-					domain: string;
-					options: {
+			const mockMulchClient = createMockMulchClient(async (domain, options) => {
+				recordCalls.push({
+					domain,
+					options: options as {
 						type: string;
 						description?: string;
 						tags?: string[];
 						evidenceBead?: string;
-					};
-				}> = [];
-
-				const mockMulchClient = createMockMulchClient(async (domain, options) => {
-					recordCalls.push({
-						domain,
-						options: options as {
-							type: string;
-							description?: string;
-							tags?: string[];
-							evidenceBead?: string;
-						},
-					});
+					},
 				});
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: true,
-					mulchClient: mockMulchClient,
-					_spawn: makeSelectiveSpawn("reimagined content\n", "", 0),
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: true,
+				mulchClient: mockMulchClient,
+				_spawn: makeSelectiveSpawn("reimagined content\n", "", 0),
+			});
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("reimagine");
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("reimagine");
 
-				// Verify record was called
-				expect(recordCalls.length).toBe(1);
-				const call = recordCalls[0];
-				expect(call?.domain).toBe("architecture");
-				expect(call?.options.evidenceBead).toBe("bead-reimagine-xyz");
+			// Verify record was called
+			expect(recordCalls.length).toBe(1);
+			const call = recordCalls[0];
+			expect(call?.domain).toBe("architecture");
+			expect(call?.options.evidenceBead).toBe("bead-reimagine-xyz");
 
-				const desc = call?.options.description ?? "";
-				expect(desc).toContain("resolved");
-				expect(desc).toContain("reimagine");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			const desc = call?.options.description ?? "";
+			expect(desc).toContain("resolved");
+			expect(desc).toContain("reimagine");
 		});
 
 		test("no recording on tier 1 clean merge (no conflict)", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupCleanMerge(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "rec-clean",
+				filesModified: ["rec/clean/feature-file.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/feature-file.ts"],
-				});
+			const recordCalls: Array<unknown> = [];
 
-				const recordCalls: Array<unknown> = [];
+			const mockMulchClient = createMockMulchClient(async (domain, options) => {
+				recordCalls.push({ domain, options });
+			});
 
-				const mockMulchClient = createMockMulchClient(async (domain, options) => {
-					recordCalls.push({ domain, options });
-				});
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+			});
 
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("clean-merge");
 
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("clean-merge");
-
-				// No recording on clean merge (no conflict occurred)
-				expect(recordCalls.length).toBe(0);
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// No recording on clean merge (no conflict occurred)
+			expect(recordCalls.length).toBe(0);
 		});
 	});
 
@@ -1213,86 +1217,97 @@ describe("createMergeResolver", () => {
 	});
 
 	describe("Conflict history tier skipping", () => {
+		// Shared repo — merge fails, abort leaves repo clean
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			await setupDeleteModifyConflict(repoDir, defaultBranch);
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("skips auto-resolve tier when history says it always fails for these files", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/test.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			// Mock mulchClient that returns history showing auto-resolve always fails
+			const mockMulchClient = createMockMulchClient();
+			mockMulchClient.search = async () => {
+				return [
+					"Merge conflict failed at tier auto-resolve. Branch: b1. Agent: a1. Conflicting files: src/test.ts.",
+					"Merge conflict failed at tier auto-resolve. Branch: b2. Agent: a2. Conflicting files: src/test.ts.",
+				].join("\n");
+			};
 
-				// Mock mulchClient that returns history showing auto-resolve always fails
-				const mockMulchClient = createMockMulchClient();
-				mockMulchClient.search = async () => {
-					return [
-						"Merge conflict failed at tier auto-resolve. Branch: b1. Agent: a1. Conflicting files: src/test.ts.",
-						"Merge conflict failed at tier auto-resolve. Branch: b2. Agent: a2. Conflicting files: src/test.ts.",
-					].join("\n");
-				};
+			// AI and reimagine disabled, auto-resolve should be skipped -> fails immediately
+			const resolver = createMergeResolver({
+				aiResolveEnabled: false,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+			});
 
-				// AI and reimagine disabled, auto-resolve should be skipped -> fails immediately
-				const resolver = createMergeResolver({
-					aiResolveEnabled: false,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				// Should fail, and the last tier should NOT be auto-resolve (it was skipped)
-				expect(result.success).toBe(false);
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			// Should fail, and the last tier should NOT be auto-resolve (it was skipped)
+			expect(result.success).toBe(false);
 		});
 	});
 
 	describe("AI-resolve with history context", { timeout: 15_000 }, () => {
+		let repoDir: string;
+		let defaultBranch: string;
+
+		beforeAll(async () => {
+			repoDir = await createTempGitRepo();
+			defaultBranch = await getDefaultBranch(repoDir);
+			await setupDeleteModifyConflict(repoDir, defaultBranch);
+		});
+
+		afterAll(async () => {
+			await cleanupTempDir(repoDir);
+		});
+
 		test("includes historical context in AI prompt when available", async () => {
-			const repoDir = await createTempGitRepo();
-			try {
-				const defaultBranch = await getDefaultBranch(repoDir);
-				await setupDeleteModifyConflict(repoDir, defaultBranch);
+			const entry = makeTestEntry({
+				branchName: "feature-branch",
+				filesModified: ["src/test.ts"],
+			});
 
-				const entry = makeTestEntry({
-					branchName: "feature-branch",
-					filesModified: ["src/test.ts"],
-				});
+			// Mock mulchClient that returns successful resolution history
+			const mockMulchClient = createMockMulchClient();
+			mockMulchClient.search = async () => {
+				return "Merge conflict resolved at tier ai-resolve. Branch: old-branch. Agent: old-agent. Conflicting files: src/test.ts.";
+			};
 
-				// Mock mulchClient that returns successful resolution history
-				const mockMulchClient = createMockMulchClient();
-				mockMulchClient.search = async () => {
-					return "Merge conflict resolved at tier ai-resolve. Branch: old-branch. Agent: old-agent. Conflicting files: src/test.ts.";
-				};
+			// Capture the prompt sent to claude (args[2] is the prompt after "--print" and "-p")
+			let capturedPrompt = "";
+			const resolver = createMergeResolver({
+				aiResolveEnabled: true,
+				reimagineEnabled: false,
+				mulchClient: mockMulchClient,
+				_spawn: (command, args, opts) => {
+					if (command === "claude") {
+						capturedPrompt = args[2] ?? "";
+						return createMockProcess("resolved content\n", "", 0);
+					}
+					return realSpawn(command, args, opts);
+				},
+			});
 
-				// Capture the prompt sent to claude (args[2] is the prompt after "--print" and "-p")
-				let capturedPrompt = "";
-				const resolver = createMergeResolver({
-					aiResolveEnabled: true,
-					reimagineEnabled: false,
-					mulchClient: mockMulchClient,
-					_spawn: (command, args, opts) => {
-						if (command === "claude") {
-							capturedPrompt = args[2] ?? "";
-							return createMockProcess("resolved content\n", "", 0);
-						}
-						return realSpawn(command, args, opts);
-					},
-				});
+			const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-				const result = await resolver.resolve(entry, defaultBranch, repoDir);
-
-				expect(result.success).toBe(true);
-				expect(result.tier).toBe("ai-resolve");
-				// Verify historical context was included in the prompt
-				expect(capturedPrompt).toContain("Historical context");
-				expect(capturedPrompt).toContain("ai-resolve");
-			} finally {
-				await cleanupTempDir(repoDir);
-			}
+			expect(result.success).toBe(true);
+			expect(result.tier).toBe("ai-resolve");
+			// Verify historical context was included in the prompt
+			expect(capturedPrompt).toContain("Historical context");
+			expect(capturedPrompt).toContain("ai-resolve");
 		});
 	});
 });
@@ -1418,35 +1433,40 @@ describe("resolveJsonlConflict", () => {
 		"integration: auto-resolves .jsonl conflicts with union strategy",
 		{ timeout: 15_000 },
 		() => {
+			let repoDir: string;
+			let defaultBranch: string;
+
+			beforeAll(async () => {
+				repoDir = await createTempGitRepo();
+				defaultBranch = await getDefaultBranch(repoDir);
+				await setupJsonlConflict(repoDir, defaultBranch);
+			});
+
+			afterAll(async () => {
+				await cleanupTempDir(repoDir);
+			});
+
 			test("resolver uses union strategy for .jsonl files", async () => {
-				const repoDir = await createTempGitRepo();
-				try {
-					const defaultBranch = await getDefaultBranch(repoDir);
-					await setupJsonlConflict(repoDir, defaultBranch);
+				const entry = makeTestEntry({
+					branchName: "feature-branch",
+					filesModified: ["expertise/data.jsonl"],
+				});
 
-					const entry = makeTestEntry({
-						branchName: "feature-branch",
-						filesModified: ["expertise/data.jsonl"],
-					});
+				const resolver = createMergeResolver({
+					aiResolveEnabled: false,
+					reimagineEnabled: false,
+				});
 
-					const resolver = createMergeResolver({
-						aiResolveEnabled: false,
-						reimagineEnabled: false,
-					});
+				const result = await resolver.resolve(entry, defaultBranch, repoDir);
 
-					const result = await resolver.resolve(entry, defaultBranch, repoDir);
+				expect(result.success).toBe(true);
+				expect(result.tier).toBe("auto-resolve");
 
-					expect(result.success).toBe(true);
-					expect(result.tier).toBe("auto-resolve");
-
-					// Resolved file should contain all three unique records
-					const content = await readFile(join(repoDir, "expertise/data.jsonl"), "utf-8");
-					expect(content).toContain('"mx-001"');
-					expect(content).toContain('"mx-002"');
-					expect(content).toContain('"mx-003"');
-				} finally {
-					await cleanupTempDir(repoDir);
-				}
+				// Resolved file should contain all three unique records
+				const content = await readFile(join(repoDir, "expertise/data.jsonl"), "utf-8");
+				expect(content).toContain('"mx-001"');
+				expect(content).toContain('"mx-002"');
+				expect(content).toContain('"mx-003"');
 			});
 		},
 	);
