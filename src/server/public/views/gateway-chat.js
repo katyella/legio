@@ -414,7 +414,7 @@ export function GatewayChat({ gwRunning }) {
 								>
 									<div class=${bubbleClass}>
 										<div class="flex items-center gap-1 mb-1">
-											<span class=${"text-xs text-[#999]"}>
+											<span class="text-xs text-[#999]">
 												${isFromUser ? "You" : msg.from || "unknown"}
 											</span>
 											<span class="text-xs text-[#555]">
