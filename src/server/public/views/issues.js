@@ -74,7 +74,7 @@ function DispatchableCard({ issue }) {
 	const [closing, setClosing] = useState(false);
 	const [closeError, setCloseError] = useState(null);
 
-	const isDispatchable = issue.status === "open" || issue.status === "in_progress";
+	const isDispatchable = issue.status === "open";
 
 	const handleDispatch = useCallback(
 		async (e) => {
