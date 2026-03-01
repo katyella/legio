@@ -104,6 +104,37 @@ async function tryStartCoordinator(root: string): Promise<void> {
 	});
 	startProc.unref();
 	process.stdout.write("[legio] Coordinator started\n");
+
+	// Verify coordinator comes up: poll status up to 5 times at 3s intervals
+	const MAX_POLLS = 5;
+	const POLL_INTERVAL_MS = 3_000;
+	for (let i = 0; i < MAX_POLLS; i++) {
+		await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+		const pollProc = spawn("legio", ["coordinator", "status", "--json"], {
+			cwd: root,
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		const pollChunks: Buffer[] = [];
+		pollProc.stdout?.on("data", (chunk: Buffer) => pollChunks.push(chunk));
+		const pollCode = await new Promise<number>((resolve) => {
+			pollProc.on("close", (code) => resolve(code ?? 1));
+		});
+		if (pollCode === 0) {
+			try {
+				const pollStatus = JSON.parse(Buffer.concat(pollChunks).toString()) as {
+					running?: boolean;
+					state?: string;
+				};
+				if (pollStatus.running && pollStatus.state !== "booting") {
+					process.stdout.write("[legio] Coordinator verified running\n");
+					return;
+				}
+			} catch {
+				// Cannot parse — keep polling
+			}
+		}
+	}
+	process.stderr.write("[legio] Warning: coordinator still booting after verification checks\n");
 }
 
 /**

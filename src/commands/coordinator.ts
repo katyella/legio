@@ -22,7 +22,7 @@ import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { HeadlessCoordinator } from "../server/headless.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import { createRunStore } from "../sessions/store.ts";
+import { createRunStore, type SessionStore } from "../sessions/store.ts";
 import type { AgentSession, HeadlessCoordinatorConfig } from "../types.ts";
 import { isProcessRunning } from "../watchdog/health.ts";
 import {
@@ -310,6 +310,46 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
 	return isTTY;
 }
 
+/**
+ * Verify that the coordinator beacon was delivered by polling the session state.
+ * If the session remains in "booting" after 10 seconds, retries the beacon once.
+ * Logs a warning if delivery cannot be confirmed.
+ *
+ * Must be awaited before the SessionStore is closed (called inside the try block).
+ */
+async function verifyBeaconDelivery(
+	store: SessionStore,
+	tmux: NonNullable<CoordinatorDeps["_tmux"]>,
+	tmuxSession: string,
+	beacon: string,
+	sleep: (ms: number) => Promise<void>,
+): Promise<void> {
+	const MAX_CHECKS = 5;
+	const INTERVAL_MS = 2_000;
+
+	for (let i = 0; i < MAX_CHECKS; i++) {
+		await sleep(INTERVAL_MS);
+		const session = store.getByName(COORDINATOR_NAME);
+		if (session && session.state !== "booting") {
+			// Beacon confirmed — coordinator transitioned out of booting
+			return;
+		}
+	}
+
+	// Still booting after MAX_CHECKS — retry beacon once
+	process.stderr.write("[legio] Beacon delivery unconfirmed — retrying beacon\n");
+	await tmux.sendKeys(tmuxSession, beacon);
+	await sleep(500);
+	await tmux.sendKeys(tmuxSession, "");
+
+	// One final check after retry
+	await sleep(INTERVAL_MS);
+	const finalSession = store.getByName(COORDINATOR_NAME);
+	if (!finalSession || finalSession.state === "booting") {
+		process.stderr.write("[legio] Warning: coordinator beacon delivery could not be confirmed\n");
+	}
+}
+
 async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Promise<void> {
 	const tmux = deps._tmux ?? {
 		createSession,
@@ -559,6 +599,10 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// Follow-up Enter to ensure submission (same pattern as sling.ts)
 		await sleep(500);
 		await tmux.sendKeys(tmuxSession, "");
+
+		// Verify beacon delivery: poll store until state transitions out of booting.
+		// Must complete before the finally block closes the store.
+		await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
 
 		// Auto-start watchdog if --watchdog flag is present
 		if (watchdogFlag) {
