@@ -93,7 +93,7 @@ function MetricsStrip({ agents, status }) {
 			<div class="border-b border-[#2a2a2a] px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-gray-400">
 				Metrics
 			</div>
-			<div class="flex flex-wrap gap-4 px-3 py-2">
+			<div class="flex flex-wrap gap-x-3 gap-y-1 px-3 py-2">
 				${stats.map(
 					({ label, value }) => html`
 						<span key=${label} class="text-xs text-gray-400">
@@ -352,7 +352,7 @@ function AgentRoster({ agents, mail, events }) {
 								<div
 									key=${agent.agentName}
 									class="mb-1 rounded border border-[#2a2a2a] bg-[#1a1a1a] overflow-hidden"
-									style=${{ marginLeft: `${depth * 16}px` }}
+									style=${{ marginLeft: `${Math.min(depth * 12, 36)}px` }}
 								>
 									<!-- Row -->
 									<div
@@ -609,54 +609,50 @@ function CoordinatorBar() {
 	const gwStatusText = gwIsRunning ? "Running" : gwIsStopped ? "Stopped" : "Unknown";
 
 	return html`
-		<div class="flex flex-wrap items-center gap-3 px-3 py-2 bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0">
-			<div class="flex items-center gap-2">
-				<span class="text-xs text-[#666] uppercase tracking-wide">Coordinator</span>
-				<div class="flex items-center gap-1">
-					<div class="w-2 h-2 rounded-full ${dotColor}"></div>
+		<div class="bg-[#1a1a1a] border-b border-[#2a2a2a] shrink-0 px-3 py-2">
+			<div class="flex flex-wrap gap-x-4 gap-y-1.5 items-center">
+				<!-- Coordinator group -->
+				<div class="flex items-center gap-2">
+					<span class="text-xs text-[#666] uppercase tracking-wide whitespace-nowrap">Coordinator</span>
+					<div class="w-2 h-2 rounded-full shrink-0 ${dotColor}"></div>
 					<span class="text-sm text-[#e5e5e5]">${statusText}</span>
+					<button
+						onClick=${handleStart}
+						disabled=${loading || isRunning}
+						class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none"
+					>
+						${loading && !isRunning ? "\u2026" : "Start"}
+					</button>
+					<button
+						onClick=${handleStop}
+						disabled=${loading || isStopped || isUnknown}
+						class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none"
+					>
+						${loading && isRunning ? "\u2026" : "Stop"}
+					</button>
 				</div>
-			</div>
-			<div class="flex items-center gap-2">
-				<button
-					onClick=${handleStart}
-					disabled=${loading || isRunning}
-					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
-				>
-					${loading && !isRunning ? "\u2026" : "Start"}
-				</button>
-				<button
-					onClick=${handleStop}
-					disabled=${loading || isStopped || isUnknown}
-					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
-				>
-					${loading && isRunning ? "\u2026" : "Stop"}
-				</button>
-			</div>
-			<div class="border-l border-[#2a2a2a] pl-3 ml-1 flex items-center gap-2">
-				<span class="text-xs text-[#666] uppercase tracking-wide">Gateway</span>
-				<div class="flex items-center gap-1">
-					<div class="w-2 h-2 rounded-full ${gwDotColor}"></div>
+				<!-- Gateway group -->
+				<div class="flex items-center gap-2">
+					<span class="text-xs text-[#666] uppercase tracking-wide whitespace-nowrap">Gateway</span>
+					<div class="w-2 h-2 rounded-full shrink-0 ${gwDotColor}"></div>
 					<span class="text-sm text-[#e5e5e5]">${gwStatusText}</span>
+					<button
+						onClick=${handleGwStart}
+						disabled=${gwLoading || gwIsRunning}
+						class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none"
+					>
+						${gwLoading && !gwIsRunning ? "\u2026" : "Start"}
+					</button>
+					<button
+						onClick=${handleGwStop}
+						disabled=${gwLoading || gwIsStopped || gwIsUnknown}
+						class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-xs px-2 py-0.5 rounded cursor-pointer border-none"
+					>
+						${gwLoading && gwIsRunning ? "\u2026" : "Stop"}
+					</button>
 				</div>
 			</div>
-			<div class="flex items-center gap-2">
-				<button
-					onClick=${handleGwStart}
-					disabled=${gwLoading || gwIsRunning}
-					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
-				>
-					${gwLoading && !gwIsRunning ? "\u2026" : "Start"}
-				</button>
-				<button
-					onClick=${handleGwStop}
-					disabled=${gwLoading || gwIsStopped || gwIsUnknown}
-					class="bg-[#E64415] hover:bg-[#cc3d12] disabled:opacity-50 text-white text-sm px-3 py-1 rounded cursor-pointer border-none"
-				>
-					${gwLoading && gwIsRunning ? "\u2026" : "Stop"}
-				</button>
-			</div>
-			${error ? html`<span class="text-xs text-red-400">${error}</span>` : null}
+			${error ? html`<div class="text-xs text-red-400 mt-1">${error}</div>` : null}
 		</div>
 	`;
 }
@@ -754,22 +750,56 @@ export function DashboardView() {
 		};
 	}, []);
 
+	const [mobileTab, setMobileTab] = useState("chat");
 	const agents = appState.agents.value;
 	const status = appState.status.value;
 
 	return html`
 		<div class="flex flex-col h-full bg-[#0f0f0f] min-h-0">
 			<${CoordinatorBar} />
+			<!-- Mobile tab bar (hidden on md+) -->
+			<div class="flex border-b border-[#2a2a2a] bg-[#1a1a1a] shrink-0 md:hidden">
+				<button
+					onClick=${() => setMobileTab("chat")}
+					class=${
+						"flex-1 py-2 text-sm font-medium border-b-2 " +
+						(mobileTab === "chat"
+							? "text-white border-[#E64415]"
+							: "text-[#888] border-transparent")
+					}
+				>
+					Chat
+				</button>
+				<button
+					onClick=${() => setMobileTab("status")}
+					class=${
+						"flex-1 py-2 text-sm font-medium border-b-2 " +
+						(mobileTab === "status"
+							? "text-white border-[#E64415]"
+							: "text-[#888] border-transparent")
+					}
+				>
+					Status
+				</button>
+			</div>
 			<div class="flex flex-col md:flex-row flex-1 min-h-0">
-				<!-- Coordinator Chat (left, ~58%) -->
+				<!-- Chat panel: full height on mobile (when chat tab active), left ~58% on md+ -->
 				<div
-					class="flex flex-col min-h-0 overflow-hidden border-r border-[#2a2a2a] border-b md:border-b-0 h-[60vh] md:h-auto md:flex-[58_1_0%]"
+					class=${
+						"flex-col min-h-0 overflow-hidden md:border-r border-[#2a2a2a] md:flex-[58_1_0%] flex-1 " +
+						(mobileTab === "chat" ? "flex" : "hidden md:flex")
+					}
 				>
 					<${GatewayChat} gwRunning=${gwRunning} />
 				</div>
 
-				<!-- Sidebar (right, ~42%): MetricsStrip + AgentRoster + MailFeed -->
-				<div class="flex flex-col min-h-0 overflow-hidden md:flex-[42_1_0%]">
+				<!-- Sidebar: MetricsStrip + AgentRoster + MailFeed — right ~42% on md+ -->
+				<div
+					class=${
+						"flex-col min-h-0 overflow-hidden md:flex-[42_1_0%] flex-1 " +
+						(mobileTab === "status" ? "flex" : "hidden md:flex")
+					}
+				>
 					<${MetricsStrip} agents=${agents} status=${status} />
 					<${AgentRoster} agents=${agents} mail=${mail} events=${activityEvents} />
 					<${MailFeed} mail=${mail} />

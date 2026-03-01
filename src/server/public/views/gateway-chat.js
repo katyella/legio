@@ -494,10 +494,10 @@ export function GatewayChat({ gwRunning }) {
 						`
 							: null
 					}
-					<div class="flex gap-2">
-						<input
+					<div class="flex gap-2 items-end">
+						<textarea
 							ref=${inputRef}
-							type="text"
+							rows="1"
 							placeholder=${
 								gwRunning ? "Send command to gateway\u2026" : "Start gateway to chat\u2026"
 							}
@@ -505,8 +505,8 @@ export function GatewayChat({ gwRunning }) {
 							onInput=${handleInput}
 							onKeyDown=${handleKeyDown}
 							disabled=${sending || !gwRunning}
-							class=${`${inputClass} flex-1 min-w-0`}
-						/>
+							class=${`${inputClass} flex-1 min-w-0 resize-none overflow-hidden`}
+						></textarea>
 						<button
 							onClick=${handleSend}
 							disabled=${sending || !input.trim() || !gwRunning}

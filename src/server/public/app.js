@@ -84,7 +84,7 @@ function Layout({ view, param }) {
 
 	return html`
 		<div class="flex flex-col h-screen bg-[#0f0f0f]">
-			<nav class="flex items-center justify-between px-4 border-b border-[#2a2a2a] bg-[#1a1a1a] shrink-0">
+			<nav class="flex items-center justify-between px-2 sm:px-4 border-b border-[#2a2a2a] bg-[#1a1a1a] shrink-0">
 				<div class="flex items-center">
 					${NAV_LINKS.map((link) => {
 						const isActive = link.view === view;
@@ -93,7 +93,7 @@ function Layout({ view, param }) {
 								key=${link.view}
 								href=${link.href}
 								class=${
-									"px-4 py-3 text-sm font-medium transition-colors border-b-2 " +
+									"px-3 sm:px-4 py-3 text-sm font-medium transition-colors border-b-2 " +
 									(isActive
 										? "text-white border-[#E64415]"
 										: "text-[#888] border-transparent hover:text-[#ccc]")
@@ -104,7 +104,7 @@ function Layout({ view, param }) {
 						`;
 					})}
 				</div>
-				<div class="flex items-center gap-3 pr-2">
+				<div class="flex items-center gap-2 pr-1 shrink-0">
 					<span
 						class=${`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-[#444]"}`}
 						title=${connected ? "WebSocket connected" : "WebSocket disconnected"}
