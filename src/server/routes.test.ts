@@ -410,11 +410,23 @@ describe("GET /api/agents", () => {
 		expect(body).toEqual([]);
 	});
 
-	it("returns seeded agent sessions", async () => {
+	it("returns only active agents when no current run", async () => {
 		seedSessionDb(join(legioDir, "sessions.db"));
 		const res = await dispatch("/api/agents");
 		expect(res.status).toBe(200);
+		const body = (await json(res)) as Array<{ state: string }>;
+		// No current-run.txt → falls back to active agents only
+		expect(body.length).toBe(1);
+		expect(body[0]?.state).toBe("working");
+	});
+
+	it("returns all agents in current run when current-run.txt exists", async () => {
+		seedSessionDb(join(legioDir, "sessions.db"));
+		await writeFile(join(legioDir, "current-run.txt"), "run-001\n");
+		const res = await dispatch("/api/agents");
+		expect(res.status).toBe(200);
 		const body = (await json(res)) as unknown[];
+		// current-run.txt has run-001, both sessions belong to run-001
 		expect(body.length).toBe(2);
 	});
 });

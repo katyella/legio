@@ -1245,7 +1245,20 @@ export async function handleApiRequest(
 		}
 		const { store } = openSessionStore(legioDir);
 		try {
-			return jsonResponse(store.getAll());
+			// Scope to current run if one exists, otherwise show only active agents
+			// (avoids flooding the dashboard with completed agents from old runs)
+			const runIdPath = join(legioDir, "current-run.txt");
+			let runId: string | null = null;
+			try {
+				const text = await readFile(runIdPath, "utf-8");
+				runId = text.trim() || null;
+			} catch {
+				// No current run file
+			}
+			if (runId) {
+				return jsonResponse(store.getByRunIncludeOrphans(runId));
+			}
+			return jsonResponse(store.getActive());
 		} finally {
 			store.close();
 		}
