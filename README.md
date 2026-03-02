@@ -116,7 +116,10 @@ npm link
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 - git
 - tmux
-- [bd (beads)](https://github.com/steveyegge/beads) — issue tracking CLI
+
+### Optional
+
+- [bd (beads)](https://github.com/steveyegge/beads) or [sd (seeds)](https://github.com/jayminwest/seeds) — issue tracking CLI
 - [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI (`npm install -g @os-eco/mulch-cli`)
 
 ## Documentation
