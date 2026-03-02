@@ -504,6 +504,24 @@ describe("startGateway", () => {
 		// The new session should have a different ID than the dead one
 		expect(newSession?.id).not.toBe("session-dead-gateway");
 	});
+
+	test("sends greeting mail to human after beacon delivery", async () => {
+		const { deps } = makeDeps();
+		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
+		// Verify mail.db has the greeting
+		const { createMailStore } = await import("../mail/store.ts");
+		const mailDb = createMailStore(join(legioDir, "mail.db"));
+		try {
+			const msgs = mailDb.getAll({ from: "gateway", to: "human" });
+			expect(msgs).toHaveLength(1);
+			expect(msgs[0]?.subject).toBe("Gateway online");
+			expect(msgs[0]?.body).toContain("online and ready");
+			expect(msgs[0]?.type).toBe("status");
+			expect(msgs[0]?.audience).toBe("human");
+		} finally {
+			mailDb.close();
+		}
+	});
 });
 
 describe("stopGateway", () => {

@@ -297,6 +297,26 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 			await tmux.sendKeys(tmuxSession, "");
 		}
 
+		if (beaconDelivered) {
+			const { createMailStore } = await import("../mail/store.ts");
+			const mailDb = createMailStore(join(legioDir, "mail.db"));
+			try {
+				mailDb.insert({
+					id: "",
+					from: GATEWAY_NAME,
+					to: "human",
+					subject: "Gateway online",
+					body: "Gateway is online and ready. Send a message to start chatting.",
+					type: "status",
+					priority: "normal",
+					threadId: null,
+					audience: "human",
+				});
+			} finally {
+				mailDb.close();
+			}
+		}
+
 		if (!beaconDelivered) {
 			process.stderr.write(
 				`[legio] Warning: gateway beacon may not have been delivered after ${maxVerifyChecks} checks\n`,
