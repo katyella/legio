@@ -66,7 +66,7 @@ The core coordination protocol flows through these message types: (1) `dispatch`
 ```
 legio/                        # This repo (the legio tool itself)
   src/
-    index.ts                      # CLI entry point (command router, 35 commands)
+    index.ts                      # CLI entry point (command router, 34 commands)
     types.ts                      # ALL shared types and interfaces
     config.ts                     # Config loader + defaults + validation
     errors.ts                     # Custom error types (extend LegioError)

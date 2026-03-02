@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-02
+
 ### Added
 - Task tracker abstraction layer (`src/tracker/`) with factory, types, and adapters for beads and seeds backends — agent definitions are now tracker-agnostic via `{{TRACKER_CLI}}` and `{{TRACKER_NAME}}` template variables
 - Gateway greeting mail — gateway sends an introductory message to the human after beacon delivery, visible in the dashboard chat
@@ -38,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issues view sort order uses `closed_at` for closed column
 - Test isolation — replaced `vi.mock` module-level mocking with DI pattern to prevent cross-file leaks
 - Test performance — shared repos across tests, removed redundant git-wrapper tests, replaced `process.chdir` with `vi.spyOn(process, "cwd")`
+- CI: set git identity in cloned test repos so merge-resolver tests pass on runners without global git config
 - 13 agent definition documentation fixes (CLAUDE.md accuracy, agent roles, capability sections)
 
 ## [0.1.3] - 2026-02-27
@@ -179,7 +182,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/katyella/legio/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/katyella/legio/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/katyella/legio/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/katyella/legio/compare/v0.1.0...v0.1.1
