@@ -213,7 +213,7 @@ legio mail reply <message-id> --body "Forwarded to coordinator: <one-line summar
 
 ### Response Format
 
-All gateway replies to human messages must use `legio mail reply` (not `legio mail send --to human`), so responses thread correctly in the unified chat history. The coordinator responds with `audience:'both'` (the audience field controls which chat histories display the message: human, agent, or both), so coordinator responses appear in the same unified history automatically.
+All gateway replies to human messages must use `legio mail reply` (not `legio mail send --to human`), so responses thread correctly in the unified chat history. The coordinator responds with `audience:both` (a mail routing field that makes the message visible in both agent context and the human-facing chat UI), so coordinator responses appear in the same unified history automatically.
 
 ### Scope
 

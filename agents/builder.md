@@ -125,7 +125,7 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
    ```
    This automatically nudges your parent lead via tmux — no manual `legio nudge` is needed. The parent is woken from idle immediately.
 5. Run `{{TRACKER_CLI}} close <task-id> --reason "<summary of implementation>"`.
-8. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
+6. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
 
 ## Overlay
 
