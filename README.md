@@ -119,8 +119,11 @@ npm link
 
 ### Optional
 
-- [bd (beads)](https://github.com/steveyegge/beads) or [sd (seeds)](https://github.com/jayminwest/seeds) — issue tracking CLI
+- [sd (seeds)](https://github.com/jayminwest/seeds) — issue tracking CLI (`npm install -g @os-eco/seeds-cli`)
 - [mulch](https://github.com/jayminwest/mulch) — structured expertise management CLI (`npm install -g @os-eco/mulch-cli`)
+- [bd (beads)](https://github.com/steveyegge/beads) — legacy issue tracker (alternative to seeds)
+
+> **Note:** Install seeds and mulch with `npm install -g`, not `bun install -g`. Bun-installed binaries require bun at runtime; npm-installed ones work with Node 22+.
 
 ## Documentation
 

@@ -8,11 +8,9 @@ import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
  * bd is checked as optional (legacy tracker backend).
  */
 export const checkDependencies: DoctorCheckFn = async (
-	config: LegioConfig,
+	_config: LegioConfig,
 	_legioDir,
 ): Promise<DoctorCheck[]> => {
-	const backend = config.taskTracker.backend;
-
 	const requiredTools = [
 		{ name: "git", versionFlag: "--version", required: true },
 		{ name: "node", versionFlag: "--version", required: true },
@@ -21,13 +19,15 @@ export const checkDependencies: DoctorCheckFn = async (
 			name: "sd",
 			versionFlag: "--version",
 			required: false,
-			installHint: "npm install -g @os-eco/seeds-cli — https://github.com/jayminwest/seeds",
+			installHint:
+				"npm install -g @os-eco/seeds-cli (use npm, not bun) — https://github.com/jayminwest/seeds",
 		},
 		{
 			name: "mulch",
 			versionFlag: "--version",
 			required: false,
-			installHint: "npm install -g @os-eco/mulch-cli — https://github.com/jayminwest/mulch",
+			installHint:
+				"npm install -g @os-eco/mulch-cli (use npm, not bun) — https://github.com/jayminwest/mulch",
 		},
 		{
 			name: "bd",
