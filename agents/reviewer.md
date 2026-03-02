@@ -47,7 +47,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
    - Check for: correctness, edge cases, error handling, naming conventions, code style.
    - Check for: security issues, hardcoded secrets, missing input validation.
    - Check for: adequate test coverage, meaningful test assertions.
-5. **Run quality gates** — run the project's test suite, linter, and any other configured checks to get objective results. Exact commands are in the project's CLAUDE.md or package scripts.
+5. **Run quality gates** — run the project's test suite, linter, and any other configured checks to get objective results. Use the exact commands listed in the Quality Gate Commands section of your overlay.
 6. **Report results** via `{{TRACKER_CLI}} close` with a clear pass/fail summary:
    ```bash
    {{TRACKER_CLI}} close <task-id> --reason "PASS: <summary>"

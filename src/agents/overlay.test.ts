@@ -256,26 +256,28 @@ describe("generateOverlay", () => {
 		expect(output).not.toContain("npm run test:unit");
 	});
 
-	test("scout capability gets read-only completion section instead of quality gates", async () => {
+	test("scout capability gets quality gate commands and read-only completion section", async () => {
 		const config = makeConfig({ capability: "scout", agentName: "my-scout" });
 		const output = await generateOverlay(config);
 
+		expect(output).toContain("Quality Gate Commands");
+		expect(output).toContain("npm test");
+		expect(output).toContain("npm run lint");
 		expect(output).toContain("Completion");
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
-		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm test");
 	});
 
-	test("reviewer capability gets read-only completion section instead of quality gates", async () => {
+	test("reviewer capability gets quality gate commands and read-only completion section", async () => {
 		const config = makeConfig({ capability: "reviewer", agentName: "my-reviewer" });
 		const output = await generateOverlay(config);
 
+		expect(output).toContain("Quality Gate Commands");
+		expect(output).toContain("npm test");
+		expect(output).toContain("npm run lint");
 		expect(output).toContain("Completion");
 		expect(output).toContain("read-only agent");
 		expect(output).toContain("Do NOT commit");
-		expect(output).not.toContain("Quality Gates");
-		expect(output).not.toContain("npm test");
 	});
 
 	test("scout completion section includes bd close and mail send", async () => {

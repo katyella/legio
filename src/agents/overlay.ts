@@ -75,7 +75,20 @@ const FALLBACK_QUALITY_GATES: QualityGates = {
  */
 function formatQualityGates(config: OverlayConfig): string {
 	if (READ_ONLY_CAPABILITIES.has(config.capability)) {
-		return [
+		const gates = config.qualityGates ?? FALLBACK_QUALITY_GATES;
+		const lines = [
+			"## Quality Gate Commands",
+			"",
+			"Use these exact commands when running quality checks (observation only):",
+			"",
+			`- **Test:** \`${gates.test}\``,
+			`- **Lint:** \`${gates.lint}\``,
+		];
+		if (gates.typecheck) {
+			lines.push(`- **Typecheck:** \`${gates.typecheck}\``);
+		}
+		lines.push(
+			"",
 			"## Completion",
 			"",
 			"Before reporting completion:",
@@ -84,8 +97,9 @@ function formatQualityGates(config: OverlayConfig): string {
 			`2. **Close issue:** \`{{TRACKER_CLI}} close ${config.beadId} --reason "summary of findings"\``,
 			`3. **Send results:** \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "done" --body "Summary" --type result --agent ${config.agentName}\``,
 			"",
-			"You are a read-only agent. Do NOT commit, modify files, or run quality gates.",
-		].join("\n");
+			"You are a read-only agent. Do NOT commit or modify files.",
+		);
+		return lines.join("\n");
 	}
 
 	const gates = config.qualityGates ?? FALLBACK_QUALITY_GATES;
