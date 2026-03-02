@@ -810,19 +810,32 @@ export async function runMailTick(
 	const nudgeFn = options._nudge ?? nudgeAgent;
 	const isIdleFn = options._isAgentIdle ?? isAgentIdle;
 	const writePendingNudgeFn = options._writePendingNudge ?? writePendingNudge;
+	// Agents with recent activity have hooks that deliver mail — tmux nudges
+	// are noisy and redundant for them. Only nudge truly idle agents.
+	const activityThresholdMs = 30_000;
 
 	// Open mail store
-	let store: MailStore;
-	const useInjectedStore = options._mailStore !== undefined;
-	if (useInjectedStore) {
-		store = options._mailStore as MailStore;
+	let mailStore: MailStore;
+	const useInjectedMailStore = options._mailStore !== undefined;
+	if (useInjectedMailStore) {
+		mailStore = options._mailStore as MailStore;
 	} else {
 		const dbPath = join(root, ".legio", "mail.db");
-		store = createMailStore(dbPath);
+		mailStore = createMailStore(dbPath);
+	}
+
+	// Open session store to check lastActivityAt
+	const legioDir = join(root, ".legio");
+	let sessionStore: ReturnType<typeof openSessionStore>["store"] | null = null;
+	try {
+		const { store: ss } = openSessionStore(legioDir);
+		sessionStore = ss;
+	} catch {
+		// Non-fatal: session store unavailable — fall back to file-based idle check
 	}
 
 	try {
-		const agentsWithUnread = store.getAgentsWithUnread();
+		const agentsWithUnread = mailStore.getAgentsWithUnread();
 		const agentSet = new Set(agentsWithUnread);
 
 		// Clear state for agents that no longer have unread mail
@@ -852,7 +865,7 @@ export async function runMailTick(
 			const shouldNudge = agentState.nudgeCount === 0 || timeSinceLastNudge >= reNudgeIntervalMs;
 
 			if (shouldNudge) {
-				// Write pending-nudge marker as fallback (always)
+				// Write pending-nudge marker as fallback (always, regardless of activity)
 				try {
 					await writePendingNudgeFn(root, agentName, {
 						from: "watchman",
@@ -864,21 +877,38 @@ export async function runMailTick(
 					// Non-fatal: pending marker write failure
 				}
 
-				// If agent is idle, also deliver direct tmux nudge
-				try {
-					const idle = await isIdleFn(root, agentName);
-					if (idle) {
-						await nudgeFn(
-							root,
-							agentName,
-							"[watchman] You have unread mail. Run: legio mail check",
-							true, // force — skip debounce
-						).catch(() => {
-							// Non-fatal: nudge failure
-						});
+				// Check if the agent has recent activity — if so, hooks will deliver
+				// the mail on the next tool call. Skip the tmux nudge to avoid noise.
+				let recentlyActive = false;
+				if (sessionStore) {
+					try {
+						const session = sessionStore.getByName(agentName);
+						if (session?.lastActivity) {
+							const activityAge = now - new Date(session.lastActivity).getTime();
+							recentlyActive = activityAge < activityThresholdMs;
+						}
+					} catch {
+						// Non-fatal: session lookup failure
 					}
-				} catch {
-					// Non-fatal: idle check or nudge failure
+				}
+
+				// Only send tmux nudge if the agent is NOT recently active AND is idle
+				if (!recentlyActive) {
+					try {
+						const idle = await isIdleFn(root, agentName);
+						if (idle) {
+							await nudgeFn(
+								root,
+								agentName,
+								"[watchman] You have unread mail. Run: legio mail check",
+								true, // force — skip debounce
+							).catch(() => {
+								// Non-fatal: nudge failure
+							});
+						}
+					} catch {
+						// Non-fatal: idle check or nudge failure
+					}
 				}
 
 				agentState.lastNudgeAt = now;
@@ -896,8 +926,15 @@ export async function runMailTick(
 			}
 		}
 	} finally {
-		if (!useInjectedStore) {
-			store.close();
+		if (!useInjectedMailStore) {
+			mailStore.close();
+		}
+		if (sessionStore) {
+			try {
+				sessionStore.close();
+			} catch {
+				// Non-fatal
+			}
 		}
 	}
 }

@@ -256,25 +256,26 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		}
 		const beacon = buildGatewayBeacon(isFirstRun);
 
-		// Send beacon with delivery verification.
-		// After sending the beacon text, verify the agent actually received it by
-		// checking the pane content. If the beacon text is still visible in the pane
-		// (not consumed by the TUI), retry up to 3 times with increasing delays.
+		// Send beacon with immediate follow-up Enter (same pattern as coordinator).
+		// The initial sendKeys sends text + Enter, but the TUI may not register the
+		// Enter if its input handler isn't fully ready. The follow-up Enter at 500ms
+		// ensures submission before any SessionStart hook can fire and transition
+		// the session state out of "booting".
+		await tmux.sendKeys(tmuxSession, beacon);
+		await sleep(500);
+		await tmux.sendKeys(tmuxSession, "");
+
+		// Verify delivery: poll pane content for agent activity markers.
+		// If the beacon text is still sitting in the input area after several checks,
+		// send additional Enter nudges.
 		const capture = tmux.capturePaneContent ?? capturePaneContent;
-		const maxBeaconAttempts = 3;
+		const maxVerifyChecks = 5;
+		const verifyIntervalMs = 2_000;
 		let beaconDelivered = false;
 
-		for (let attempt = 0; attempt < maxBeaconAttempts; attempt++) {
-			await tmux.sendKeys(tmuxSession, beacon);
+		for (let check = 0; check < maxVerifyChecks; check++) {
+			await sleep(verifyIntervalMs);
 
-			// Wait for the TUI to process the submission
-			const verifyDelay = 1000 + attempt * 1000; // 1s, 2s, 3s
-			await sleep(verifyDelay);
-
-			// Check if the beacon was consumed: if the pane shows agent activity
-			// (spinner, tool calls, thinking indicators) the beacon was delivered.
-			// If the raw beacon text is still sitting in the input area, it wasn't
-			// submitted — retry.
 			const paneContent = await capture(tmuxSession);
 			const beaconTag = `[LEGIO] ${GATEWAY_NAME}`;
 			const hasAgentActivity =
@@ -289,16 +290,16 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 				break;
 			}
 
-			// Beacon text still in input — send a follow-up Enter to submit it
+			// Still stuck — nudge with another Enter
 			process.stderr.write(
-				`⚠️  Beacon attempt ${attempt + 1}/${maxBeaconAttempts} not consumed — retrying\n`,
+				`[legio] Beacon check ${check + 1}/${maxVerifyChecks}: not consumed — sending Enter\n`,
 			);
 			await tmux.sendKeys(tmuxSession, "");
 		}
 
 		if (!beaconDelivered) {
 			process.stderr.write(
-				`⚠️  Warning: Beacon for "${GATEWAY_NAME}" may not have been delivered after ${maxBeaconAttempts} attempts. Check agent manually.\n`,
+				`[legio] Warning: gateway beacon may not have been delivered after ${maxVerifyChecks} checks\n`,
 			);
 		}
 

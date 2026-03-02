@@ -68,6 +68,8 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 		sendKeys: async (name: string, keys: string): Promise<void> => {
 			calls.sendKeys.push({ name, keys });
 		},
+		waitForTuiReady: async (): Promise<void> => {},
+		capturePaneContent: async (): Promise<string> => "",
 	};
 
 	return { tmux, calls };
