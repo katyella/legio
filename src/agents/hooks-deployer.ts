@@ -535,13 +535,10 @@ export async function deployHooks(
 	try {
 		config = JSON.parse(template) as { hooks: Record<string, HookEntry[]> };
 	} catch (err) {
-		throw new AgentError(
-			`Failed to parse hooks template as JSON: ${templatePath}`,
-			{
-				agentName,
-				cause: err instanceof Error ? err : undefined,
-			},
-		);
+		throw new AgentError(`Failed to parse hooks template as JSON: ${templatePath}`, {
+			agentName,
+			cause: err instanceof Error ? err : undefined,
+		});
 	}
 	const pathGuards = getPathBoundaryGuards();
 	const dangerGuards = getDangerGuards(agentName);

@@ -7,7 +7,7 @@
 			"!**/.claude",
 			"!**/.legio",
 			"!**/node_modules",
-			"!src/server/public/**"
+			"!src/server/public"
 		]
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },
