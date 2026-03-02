@@ -19,27 +19,27 @@ export const checkDependencies: DoctorCheckFn = async (
 			name: "bun",
 			versionFlag: "--version",
 			required: false,
-			installHint: "curl -fsSL https://bun.sh/install | bash — required for sd and mulch",
+			installHint: "curl -fsSL https://bun.sh/install | bash — required runtime for sd and mulch",
 		},
 		{
 			name: "sd",
 			versionFlag: "--version",
 			required: false,
 			installHint:
-				"bun install -g @os-eco/seeds-cli (requires Bun) — https://github.com/jayminwest/seeds",
+				"bun install -g @os-eco/seeds-cli — issue tracker for agent task dispatch (requires Bun)",
 		},
 		{
 			name: "mulch",
 			versionFlag: "--version",
 			required: false,
 			installHint:
-				"bun install -g @os-eco/mulch-cli (requires Bun) — https://github.com/jayminwest/mulch",
+				"bun install -g @os-eco/mulch-cli — structured expertise/memory across sessions (requires Bun)",
 		},
 		{
 			name: "bd",
 			versionFlag: "--version",
 			required: false,
-			installHint: "https://github.com/steveyegge/beads",
+			installHint: "https://github.com/steveyegge/beads — legacy issue tracker (alternative to sd)",
 		},
 	];
 
