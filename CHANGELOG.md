@@ -80,7 +80,7 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - Mulch domain inference for automatic expertise priming at spawn time
 
 #### Coordination
-- `legio coordinator` — persistent orchestrator with `start`/`stop`/`status`, auto-starts watchdog/monitor
+- `legio coordinator` — persistent orchestrator with `start`/`stop`/`status`, auto-starts watchman/monitor
 - `legio supervisor` — per-project team lead management
 - `legio gateway` — planning companion and human interface agent
 - `legio monitor` — Tier 2 continuous fleet patrol
@@ -126,7 +126,7 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 #### Infrastructure
 - `legio hooks install` — orchestrator hooks management
 - `legio worktree` — git worktree lifecycle (list/clean)
-- `legio watch` — watchdog daemon (Tier 0 mechanical monitoring, Tier 1 AI triage)
+- `legio watchman` — unified watchman daemon (health monitoring, mail delivery, beacon management)
 - `legio clean` — worktree/session/artifact cleanup
 - `legio log` — hook event logging (NDJSON + human-readable)
 - `legio server` — web UI server with daemon mode

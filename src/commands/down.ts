@@ -87,7 +87,7 @@ export async function downCommand(args: string[], deps: DownDeps = {}): Promise<
 	let gatewayStopped = false;
 	let serverStopped = false;
 
-	// 1. Stop coordinator (if running) — also stops watchdog + monitor
+	// 1. Stop coordinator (if running) — also stops watchman + monitor
 	const coordStop = await run(["legio", "coordinator", "stop"], { cwd: projectRoot });
 	if (coordStop.exitCode === 0) {
 		coordinatorStopped = true;

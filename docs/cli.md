@@ -67,7 +67,7 @@ legio server status                 Show server state
 ```
 legio coordinator start             Start persistent coordinator agent
   --attach / --no-attach                 TTY-aware tmux attach (default: auto)
-  --watchdog                             Auto-start watchdog daemon with coordinator
+  --watchman                              Auto-start watchman daemon with coordinator
   --monitor                              Auto-start Tier 2 monitor agent
 legio coordinator stop              Stop coordinator
 legio coordinator status            Show coordinator state
@@ -190,7 +190,9 @@ legio worktree list                 List worktrees with status
 legio worktree clean                Remove completed worktrees
   --completed  --all
 
-legio watch                         Start watchdog daemon (Tier 0)
+legio watchman start                Start watchman daemon (unified: health + mail + beacon)
+legio watchman stop                 Stop watchman daemon
+legio watchman status               Show watchman daemon state
   --interval <ms>  --background
 
 legio doctor                        Run health checks on legio setup

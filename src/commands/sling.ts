@@ -667,7 +667,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 		// 13. Update the placeholder session with PID from tmux.
 		// The session was registered in step 7b immediately after worktree creation
 		// to close the race window. Now we update it with the actual PID so the
-		// watchdog and status commands can track the process.
+		// watchman and status commands can track the process.
 		session.pid = pid;
 		session.lastActivity = new Date().toISOString();
 		store.upsert(session);

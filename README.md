@@ -21,7 +21,7 @@ Legio changes that. It spawns specialized agents in isolated git worktrees, coor
 - **Structured coordination** — typed SQLite mail system with protocol-level message types, not ad-hoc prompts
 - **Automatic merge pipeline** — FIFO queue with 4-tier conflict resolution
 - **Real-time visibility** — browser dashboard shows every agent's status, cost, and output live
-- **Tiered health monitoring** — mechanical watchdog catches stalls and crashes before you do
+- **Tiered health monitoring** — mechanical watchman catches stalls and crashes before you do
 
 > **Heads up:** Multi-agent swarms burn through tokens fast — a single session can push the limits of a 20x Max Claude subscription.
 

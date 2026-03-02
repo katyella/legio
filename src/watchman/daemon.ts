@@ -38,7 +38,7 @@ import { evaluateHealth, transitionState } from "./health.ts";
  * @param root - Project root directory
  * @param session - The agent session that failed
  * @param reason - Human-readable failure reason
- * @param tier - Which watchdog tier detected the failure (0 or 1)
+ * @param tier - Which watchman tier detected the failure (0 or 1)
  * @param triageSuggestion - Optional triage verdict from Tier 1 AI analysis
  */
 async function recordFailure(
@@ -68,7 +68,7 @@ async function recordFailure(
 			evidenceBead: session.beadId || undefined,
 		});
 	} catch {
-		// Fire-and-forget: recording failures must not break the watchdog
+		// Fire-and-forget: recording failures must not break the watchman
 	}
 }
 
@@ -237,7 +237,7 @@ async function attemptRecovery(options: {
 					"watchman",
 				]);
 			} catch {
-				// Fire-and-forget: mail failure must not break the watchdog
+				// Fire-and-forget: mail failure must not break the watchman
 			}
 		}
 		return { recovered: false };
@@ -277,7 +277,7 @@ async function attemptRecovery(options: {
 				"watchman",
 			]);
 		} catch {
-			// Fire-and-forget: mail failure must not break the watchdog
+			// Fire-and-forget: mail failure must not break the watchman
 		}
 	}
 
@@ -609,7 +609,7 @@ export async function runDaemonTick(options: WatchmanOptions): Promise<void> {
 							"watchman",
 						]);
 					} catch {
-						// Fire-and-forget: mail failure must not break the watchdog
+						// Fire-and-forget: mail failure must not break the watchman
 					}
 					recordEvent(eventStore, {
 						runId,
@@ -755,7 +755,7 @@ export async function runDaemonTick(options: WatchmanOptions): Promise<void> {
 								"watchman",
 							]);
 						} catch {
-							// Fire-and-forget: mail failure must not break the watchdog
+							// Fire-and-forget: mail failure must not break the watchman
 						}
 						recordEvent(eventStore, {
 							runId,

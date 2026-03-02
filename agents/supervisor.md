@@ -84,7 +84,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 - `status` -- workers report progress
 - `question` -- workers ask for clarification
 - `error` -- workers report failures
-- `health_check` -- watchdog probes liveness (agentName, checkType)
+- `health_check` -- watchman probes liveness (agentName, checkType)
 
 ### Expertise
 - **Load context:** `mulch prime [domain]` to understand the problem space before decomposing

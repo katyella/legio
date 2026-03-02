@@ -83,7 +83,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 - `merged` -- merger confirms successful merge (branch, taskId, tier)
 - `merge_failed` -- merger reports merge failure (branch, taskId, conflictFiles, errorMessage)
 - `escalation` -- any agent escalates an issue (severity: warning|error|critical, taskId, context)
-- `health_check` -- watchdog probes liveness (agentName, checkType)
+- `health_check` -- watchman probes liveness (agentName, checkType)
 - `dispatch` -- gateway requests a scout for research (spawn scout, have it report findings back to gateway)
 - `status` -- leads report progress; gateway reports new issues created
 - `result` -- leads report completed work streams

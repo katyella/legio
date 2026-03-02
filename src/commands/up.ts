@@ -5,7 +5,7 @@
  * 1. Check git repo
  * 2. Initialize .legio/ if needed (legio init)
  * 3. Start the server in daemon mode (legio server start --daemon)
- *    The server auto-starts the coordinator with watchdog.
+ *    The server auto-starts the coordinator with watchman.
  * 4. Start the gateway (legio gateway start --no-attach)
  * 5. Open the browser (unless --no-open)
  *
@@ -133,7 +133,7 @@ Options:
 
 legio up initializes .legio/ if needed, starts the server in daemon mode,
 starts the gateway, and opens the browser. The server auto-starts the
-coordinator with watchdog. Running legio up when already running is a no-op.`;
+coordinator with watchman. Running legio up when already running is a no-op.`;
 
 /**
  * Entry point for \`legio up [options]\`.

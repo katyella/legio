@@ -48,7 +48,7 @@ The orchestrator only passes WHAT. The base definition already has HOW.
 - **Messaging**: Custom SQLite mail system with typed protocol — 12 message types: 4 semantic (`status`, `question`, `result`, `error`) + 8 protocol (`worker_done`, `merge_ready`, `merged`, `merge_failed`, `escalation`, `health_check`, `dispatch`, `assign`) for structured agent coordination, plus broadcast messaging with group addresses (`@all`, `@builders`, etc.)
 - **Worktrees**: Each agent gets an isolated git worktree — no file conflicts between agents
 - **Merge**: FIFO merge queue (SQLite-backed) with 4-tier conflict resolution
-- **Watchdog**: Tiered health monitoring — Tier 0 mechanical daemon (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
+- **Watchman**: Unified health + mail + beacon daemon — Tier 0 mechanical monitoring (tmux/pid liveness), Tier 1 AI-assisted failure triage, Tier 2 monitor agent for continuous fleet patrol
 - **Web UI**: Browser-based dashboard with real-time WebSocket updates — agent monitoring, mail, terminal access, cost tracking, and setup wizard
 - **Tool Enforcement**: PreToolUse hooks mechanically block file modifications for non-implementation agents and dangerous git operations for all agents
 - **Task Groups**: Batch coordination with auto-close when all member issues complete
@@ -98,7 +98,7 @@ legio/
       prime.ts                    Context priming
       init.ts                     Project initialization
       worktree.ts                 Worktree management
-      watch.ts                    Watchdog daemon
+      watch.ts                    Watchman daemon
       log.ts                      Hook event logging
       logs.ts                     NDJSON log query
       feed.ts                     Unified real-time event stream
@@ -132,7 +132,7 @@ legio/
     worktree/                     Git worktree + tmux management
     mail/                         SQLite mail system (typed protocol, broadcast)
     merge/                        FIFO queue + conflict resolution
-    watchdog/                     Tiered health monitoring (daemon, triage, health)
+    watchman/                     Unified health + mail + beacon daemon (monitoring, triage, health)
     logging/                      Multi-format logger + sanitizer + reporter + color control
     metrics/                      SQLite metrics + transcript parsing
     doctor/                       Health check modules (9 checks)

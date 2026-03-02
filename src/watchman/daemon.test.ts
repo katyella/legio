@@ -888,7 +888,7 @@ describe("mail tick", () => {
 	}
 
 	beforeEach(async () => {
-		tempDir = await mkdtemp(join(tmpdir(), "legio-mailman-test-"));
+		tempDir = await mkdtemp(join(tmpdir(), "legio-watchman-test-"));
 		store = createMailStore(join(tempDir, "mail.db"));
 		nudgeCalls = [];
 		pendingNudgeCalls = [];

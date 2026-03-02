@@ -76,7 +76,7 @@ legio/                        # This repo (the legio tool itself)
       log.ts                      # legio log (hook target)
       logs.ts                     # legio logs (NDJSON log query)
       feed.ts                     # legio feed (unified event stream)
-      watch.ts                    # legio watch (watchdog)
+      watchman.ts                  # legio watchman start/stop/status (unified daemon)
       monitor.ts                  # legio monitor start/stop/status (Tier 2)
       trace.ts                    # legio trace (event timeline)
       errors.ts                   # legio errors (aggregated error view)
@@ -119,8 +119,8 @@ legio/                        # This repo (the legio tool itself)
     merge/
       queue.ts                    # FIFO merge queue
       resolver.ts                 # Tiered conflict resolution (4 tiers)
-    watchdog/
-      daemon.ts                   # Tier 0: mechanical process monitoring
+    watchman/
+      daemon.ts                   # Unified daemon: health + mail + beacon safety net
       triage.ts                   # Tier 1: AI-assisted failure classification
       health.ts                   # Health check definitions + state machine
     logging/
@@ -271,7 +271,7 @@ legio spec write <bead-id>         Write a spec file to .legio/specs/
 legio coordinator <sub>            Persistent coordinator agent
   start                                  Start coordinator (spawns Claude Code at root)
     --attach / --no-attach               Control tmux attach (default: attach on TTY)
-    --watchdog                           Auto-start watchdog daemon
+    --watchman                           Auto-start watchman daemon
     --monitor                            Auto-start Tier 2 monitor agent
   stop                                   Stop coordinator (kills tmux session)
   status                                 Show coordinator state
@@ -435,8 +435,13 @@ legio log <event>                   Log a hook event (called by hooks)
   --agent <name>
   Events: tool-start, tool-end, session-end
 
-legio watch                         Start watchdog daemon (Tier 0)
-  --interval <ms>  --background
+legio watchman <sub>                 Unified daemon — health + mail + beacon (start/stop/status)
+  start                                  Start watchman daemon
+    --interval <ms>                      Health tick interval (default: 30s)
+    --background                         Run as background daemon
+  stop                                   Stop watchman daemon
+  status                                 Show watchman status
+    --json                               JSON output
 
 legio monitor <sub>                Manage Tier 2 monitor agent
   start                                  Start monitor (spawns Claude Code at root)
