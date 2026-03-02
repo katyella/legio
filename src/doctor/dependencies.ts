@@ -20,14 +20,14 @@ export const checkDependencies: DoctorCheckFn = async (
 			versionFlag: "--version",
 			required: false,
 			installHint:
-				"npm install -g @os-eco/seeds-cli (use npm, not bun) — https://github.com/jayminwest/seeds",
+				"bun install -g @os-eco/seeds-cli (requires Bun) — https://github.com/jayminwest/seeds",
 		},
 		{
 			name: "mulch",
 			versionFlag: "--version",
 			required: false,
 			installHint:
-				"npm install -g @os-eco/mulch-cli (use npm, not bun) — https://github.com/jayminwest/mulch",
+				"bun install -g @os-eco/mulch-cli (requires Bun) — https://github.com/jayminwest/mulch",
 		},
 		{
 			name: "bd",
