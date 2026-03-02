@@ -34,7 +34,7 @@ Each agent gets two instruction layers:
 
 The orchestrator (or a team lead) only passes WHAT. The base definition already has HOW.
 
-Agent definitions use template variables that are resolved at spawn time by the overlay generator (`src/agents/overlay.ts`). Key variables include `{{TRACKER_CLI}}` (resolves to `bd` or `sd` depending on the configured issue tracker backend) and `{{TRACKER_NAME}}` (resolves to `beads` or `seeds`). These allow agent definitions to remain tracker-agnostic.
+Agent definitions reference `legio task` directly as the universal task interface. The overlay generator (`src/agents/overlay.ts`) resolves other template variables like `{{CANONICAL_ROOT}}` at spawn time.
 
 ### Hierarchical Delegation
 
@@ -66,7 +66,7 @@ The core coordination protocol flows through these message types: (1) `dispatch`
 ```
 legio/                        # This repo (the legio tool itself)
   src/
-    index.ts                      # CLI entry point (command router, 34 commands)
+    index.ts                      # CLI entry point (command router, 35 commands)
     types.ts                      # ALL shared types and interfaces
     config.ts                     # Config loader + defaults + validation
     errors.ts                     # Custom error types (extend LegioError)
@@ -106,6 +106,7 @@ legio/                        # This repo (the legio tool itself)
       up.ts                       # legio up (start full stack)
       down.ts                     # legio down (stop full stack)
       stop.ts                     # legio stop (stop active agents)
+      task.ts                     # legio task (universal task interface)
     agents/                       # Agent lifecycle management
       manifest.ts                 # Agent registry (load + query capabilities)
       overlay.ts                  # Dynamic CLAUDE.md overlay generator
@@ -124,6 +125,12 @@ legio/                        # This repo (the legio tool itself)
       tool-filter.ts              # Smart arg filtering for event storage
     insights/
       analyzer.ts                 # Session insight analyzer for auto-expertise
+    tracker/
+      types.ts                    # TrackerClient interface + TrackerBackend type
+      factory.ts                  # Backend factory (auto-detect, create client)
+      builtin.ts                  # SQLite TrackerClient adapter (zero dependencies)
+      seeds.ts                    # Seeds (sd) CLI subprocess adapter
+      beads.ts                    # Beads (bd) CLI subprocess adapter
     beads/
       client.ts                   # bd CLI wrapper (--json parsing)
       molecules.ts                # Molecule management helpers
@@ -185,6 +192,7 @@ target-project/
     worktrees/{agent-name}/       # Git worktrees (gitignored)
     specs/{bead-id}.md            # Task specifications
     logs/{agent-name}/{ts}/       # Agent logs (gitignored)
+    tasks.db                      # SQLite builtin task tracker (gitignored, WAL mode)
     mail.db                       # SQLite mail (gitignored, WAL mode)
     sessions.db                   # SQLite sessions + runs (gitignored, WAL mode)
     events.db                     # SQLite events/timelines (gitignored, WAL mode)
@@ -279,6 +287,23 @@ legio prime                         Load context for orchestrator/agent
 legio spec write <bead-id>         Write a spec file to .legio/specs/
   --body <content>                       Spec content (or pipe via stdin)
   --agent <name>                         Agent attribution
+
+legio task <sub>                   Universal task interface (pluggable backends)
+  create <title>                         Create a new task
+    --priority <P1|P2|P3>                Priority level (default: P2)
+    --description <text>                 Task description
+    --type <bug|feature|task>            Task type (default: task)
+  list                                   List tasks
+    --status <status>                    Filter by status (open|in_progress|closed)
+    --all                                Include closed tasks
+    --limit <N>                          Max results
+  show <id>                              Show task details
+  ready                                  List tasks ready for work
+  claim <id>                             Claim a task (set to in_progress)
+  close <id>                             Close a task
+    --reason <text>                      Close reason
+  sync                                   Sync tracker state
+  --json                                 JSON output for all subcommands
 ```
 
 ### Coordination Agents
@@ -474,6 +499,7 @@ legio doctor                        Run health checks on legio setup
 legio clean                         Wipe runtime state (nuclear cleanup)
   --all                                  Wipe everything
   --mail  --sessions  --metrics          Individual DB cleanup
+  --tasks                                Wipe tasks.db (builtin tracker)
   --logs  --worktrees  --branches        Individual resource cleanup
   --agents  --specs                      Individual state cleanup
   --json                                 JSON output
@@ -534,6 +560,17 @@ Shared test utilities live in `src/test-helpers.ts`:
 - `commitFile()` -- Add and commit a file to a test repo
 
 ## Tool Integration
+
+### legio task -- Universal Task Interface
+
+`legio task` is the single task interface for both users and agents. It reads `taskTracker.backend` from `.legio/config.yaml` and delegates to the configured adapter internally. Agents always use `legio task show`, `legio task close`, etc.
+
+Supported backends:
+- **builtin** (default) — Zero-dependency SQLite adapter at `.legio/tasks.db`. No external tools needed.
+- **beads** — Delegates to `bd` CLI (requires beads installed)
+- **seeds** — Delegates to `sd` CLI (requires seeds installed)
+
+Auto-detection: when `taskTracker.backend` is `"auto"` (default), legio checks for `.seeds/` then `.beads/` directories. If neither exists, falls back to `"builtin"`.
 
 ### beads (bd) -- Issue Tracking
 

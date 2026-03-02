@@ -148,6 +148,7 @@ export const COMMANDS: readonly CommandDef[] = [
 			{ name: "--mail", desc: "Clean mail database" },
 			{ name: "--sessions", desc: "Clean sessions database" },
 			{ name: "--metrics", desc: "Clean metrics database" },
+			{ name: "--tasks", desc: "Clean tasks database" },
 			{ name: "--logs", desc: "Clean log files" },
 			{ name: "--worktrees", desc: "Clean worktrees" },
 			{ name: "--branches", desc: "Clean branches" },
@@ -591,6 +592,79 @@ export const COMMANDS: readonly CommandDef[] = [
 		],
 	},
 	{
+		name: "task",
+		desc: "Universal task interface",
+		flags: [
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+		subcommands: [
+			{
+				name: "create",
+				desc: "Create a new task",
+				flags: [
+					{
+						name: "--priority",
+						desc: "Priority level",
+						takesValue: true,
+						values: ["P1", "P2", "P3"],
+					},
+					{ name: "--description", desc: "Task description", takesValue: true },
+					{
+						name: "--type",
+						desc: "Task type",
+						takesValue: true,
+						values: ["bug", "feature", "task"],
+					},
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "list",
+				desc: "List tasks",
+				flags: [
+					{
+						name: "--status",
+						desc: "Filter by status",
+						takesValue: true,
+						values: ["open", "in_progress", "closed"],
+					},
+					{ name: "--all", desc: "Include closed tasks" },
+					{ name: "--limit", desc: "Max results", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "show",
+				desc: "Show task details",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "ready",
+				desc: "List tasks ready for work",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "claim",
+				desc: "Claim a task",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "close",
+				desc: "Close a task",
+				flags: [
+					{ name: "--reason", desc: "Close reason", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "sync",
+				desc: "Sync tracker state",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+		],
+	},
+	{
 		name: "group",
 		desc: "Task groups",
 		flags: [
@@ -699,7 +773,7 @@ export function generateBash(): string {
 		"  local cur prev words cword",
 		"  _init_completion || return",
 		"",
-		"  local commands='init sling prime status dashboard inspect merge nudge clean doctor log logs watchman trace errors feed replay costs metrics spec coordinator supervisor hooks monitor mail group worktree run'",
+		"  local commands='init sling prime status dashboard inspect merge nudge clean doctor log logs watchman trace errors feed replay costs metrics spec coordinator supervisor hooks monitor mail task group worktree run'",
 		"",
 		"  # Top-level completion",
 		"  if [[ $cword -eq 1 ]]; then",

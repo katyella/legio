@@ -1,0 +1,83 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "legio prime --agent orchestrator"
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "legio mail check --inject --agent orchestrator"
+					}
+				]
+			}
+		],
+		"PreToolUse": [
+			{
+				"matcher": "Bash",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bgit\\s+push\\b'; then echo '{\"decision\":\"block\",\"reason\":\"git push is blocked by legio — merge locally, push manually when ready\"}'; exit 0; fi;"
+					}
+				]
+			},
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "read -r INPUT; TOOL_NAME=$(echo \"$INPUT\" | sed 's/.*\"tool_name\": *\"\\([^\"]*\\)\".*/\\1/'); legio log tool-start --agent orchestrator --tool-name \"$TOOL_NAME\""
+					}
+				]
+			}
+		],
+		"PostToolUse": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "read -r INPUT; TOOL_NAME=$(echo \"$INPUT\" | sed 's/.*\"tool_name\": *\"\\([^\"]*\\)\".*/\\1/'); legio log tool-end --agent orchestrator --tool-name \"$TOOL_NAME\""
+					}
+				]
+			}
+		],
+		"Stop": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "legio log session-end --agent orchestrator"
+					},
+					{
+						"type": "command",
+						"command": "mulch learn"
+					}
+				]
+			}
+		],
+		"PreCompact": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "legio prime --agent orchestrator --compact"
+					}
+				]
+			}
+		]
+	}
+}

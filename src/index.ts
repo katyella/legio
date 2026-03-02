@@ -38,6 +38,7 @@ import { specCommand } from "./commands/spec.ts";
 import { statusCommand } from "./commands/status.ts";
 import { stopCommand } from "./commands/stop.ts";
 import { supervisorCommand } from "./commands/supervisor.ts";
+import { taskCommand } from "./commands/task.ts";
 import { traceCommand } from "./commands/trace.ts";
 import { upCommand } from "./commands/up.ts";
 import { watchmanCommand } from "./commands/watchman.ts";
@@ -68,6 +69,7 @@ Commands:
   monitor <sub>           Tier 2 monitor agent (start/stop/status)
   merge                   Merge agent branches into canonical
   nudge <agent> [msg]     Send a text nudge to an agent
+  task <sub>              Universal task interface (create/list/show/ready/claim/close/sync)
   group <sub>             Task groups (create/status/add/remove/list)
   clean                   Wipe runtime state (nuclear cleanup)
   doctor                  Run health checks on legio setup
@@ -114,6 +116,7 @@ const COMMANDS = [
 	"watchman",
 	"merge",
 	"nudge",
+	"task",
 	"group",
 	"worktree",
 	"log",
@@ -259,6 +262,9 @@ async function main(): Promise<void> {
 			break;
 		case "nudge":
 			await nudgeCommand(commandArgs);
+			break;
+		case "task":
+			await taskCommand(commandArgs);
 			break;
 		case "group":
 			await groupCommand(commandArgs);

@@ -456,6 +456,15 @@ function validateConfig(config: LegioConfig): void {
 		});
 	}
 
+	// taskTracker.backend must be one of the valid options
+	const validBackends = ["auto", "seeds", "beads", "builtin"] as const;
+	if (!validBackends.includes(config.taskTracker.backend as (typeof validBackends)[number])) {
+		throw new ValidationError(`taskTracker.backend must be one of: ${validBackends.join(", ")}`, {
+			field: "taskTracker.backend",
+			value: config.taskTracker.backend,
+		});
+	}
+
 	// mulch.primeFormat must be one of the valid options
 	const validFormats = ["markdown", "xml", "json"] as const;
 	if (!validFormats.includes(config.mulch.primeFormat as (typeof validFormats)[number])) {

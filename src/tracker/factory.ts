@@ -8,6 +8,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createBeadsTrackerClient } from "./beads.ts";
+import { createBuiltinTrackerClient } from "./builtin.ts";
 import { createSeedsTrackerClient } from "./seeds.ts";
 import type { TrackerBackend, TrackerClient } from "./types.ts";
 
@@ -16,14 +17,14 @@ export type { TrackerBackend, TrackerClient, TrackerIssue } from "./types.ts";
 
 /**
  * Auto-detect which tracker backend to use.
- * Checks .seeds/ first, then .beads/. Defaults to seeds.
+ * Checks .seeds/ first, then .beads/. Defaults to builtin.
  *
  * @param cwd - Directory to search for tracker markers
  */
-export function resolveBackend(cwd: string): "seeds" | "beads" {
+export function resolveBackend(cwd: string): "seeds" | "beads" | "builtin" {
 	if (existsSync(join(cwd, ".seeds"))) return "seeds";
 	if (existsSync(join(cwd, ".beads"))) return "beads";
-	return "seeds"; // default
+	return "builtin"; // default — zero-dependency SQLite backend
 }
 
 /**
@@ -39,21 +40,7 @@ export function createTrackerClient(backend: TrackerBackend, cwd: string): Track
 			return createSeedsTrackerClient(cwd);
 		case "beads":
 			return createBeadsTrackerClient(cwd);
+		case "builtin":
+			return createBuiltinTrackerClient(join(cwd, ".legio", "tasks.db"));
 	}
-}
-
-/**
- * Return the CLI tool name for a resolved backend.
- * Used by the overlay generator to inject {{TRACKER_CLI}} into agent definitions.
- */
-export function trackerCliName(backend: "seeds" | "beads"): string {
-	return backend === "seeds" ? "sd" : "bd";
-}
-
-/**
- * Return the human-readable tracker name for a resolved backend.
- * Used by the overlay generator to inject {{TRACKER_NAME}} into agent definitions.
- */
-export function trackerDisplayName(backend: "seeds" | "beads"): string {
-	return backend === "seeds" ? "seeds" : "beads";
 }

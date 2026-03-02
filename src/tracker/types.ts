@@ -22,7 +22,7 @@ export interface TrackerIssue {
 }
 
 /** Supported tracker backends. */
-export type TrackerBackend = "auto" | "seeds" | "beads";
+export type TrackerBackend = "auto" | "seeds" | "beads" | "builtin";
 
 /** Pluggable tracker client interface. */
 export interface TrackerClient {

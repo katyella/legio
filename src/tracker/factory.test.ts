@@ -41,8 +41,8 @@ describe("resolveBackend", () => {
 		expect(resolveBackend(tmpDir)).toBe("seeds");
 	});
 
-	it("defaults to 'seeds' when neither directory exists", () => {
-		expect(resolveBackend(tmpDir)).toBe("seeds");
+	it("defaults to 'builtin' when neither directory exists", () => {
+		expect(resolveBackend(tmpDir)).toBe("builtin");
 	});
 });
 
@@ -79,7 +79,23 @@ describe("createTrackerClient", () => {
 		expect(typeof client.sync).toBe("function");
 	});
 
-	it("returns a TrackerClient object for 'auto' backend (no marker dirs)", () => {
+	it("returns a TrackerClient object for 'builtin' backend", async () => {
+		await mkdir(join(tmpDir, ".legio"), { recursive: true });
+		const client = createTrackerClient("builtin", tmpDir);
+		expect(typeof client.ready).toBe("function");
+		expect(typeof client.show).toBe("function");
+		expect(typeof client.create).toBe("function");
+		expect(typeof client.claim).toBe("function");
+		expect(typeof client.close).toBe("function");
+		expect(typeof client.list).toBe("function");
+		expect(typeof client.sync).toBe("function");
+		if ("close" in client && typeof client.close === "function") {
+			// close the DB connection to avoid open handles
+		}
+	});
+
+	it("returns a TrackerClient object for 'auto' backend (no marker dirs)", async () => {
+		await mkdir(join(tmpDir, ".legio"), { recursive: true });
 		const client = createTrackerClient("auto", tmpDir);
 		expect(typeof client.ready).toBe("function");
 	});
@@ -279,5 +295,10 @@ describe("tracker module exports", () => {
 	it("exec.ts exports runTrackerCommand", async () => {
 		const mod = await import("./exec.ts");
 		expect(typeof mod.runTrackerCommand).toBe("function");
+	});
+
+	it("builtin.ts exports createBuiltinTrackerClient", async () => {
+		const mod = await import("./builtin.ts");
+		expect(typeof mod.createBuiltinTrackerClient).toBe("function");
 	});
 });

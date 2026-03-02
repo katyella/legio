@@ -1,0 +1,477 @@
+[
+	{
+		"id": "group-99f2cbb8",
+		"name": "bun-to-node-migration",
+		"memberIssueIds": [
+			"legio-p4n",
+			"legio-vws",
+			"legio-s1c",
+			"legio-aip",
+			"legio-o1y"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-19T15:19:17.069Z",
+		"completedAt": "2026-02-19T18:02:13.255Z"
+	},
+	{
+		"id": "group-7fe176f0",
+		"name": "webui-gateway-batch",
+		"memberIssueIds": [
+			"legio-g7i",
+			"legio-uwf"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-19T19:17:37.153Z",
+		"completedAt": "2026-02-19T19:55:32.318Z"
+	},
+	{
+		"id": "group-2e8fabab",
+		"name": "smooth-install-batch",
+		"memberIssueIds": [
+			"legio-an4",
+			"legio-bn5",
+			"legio-70w"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-19T20:23:02.378Z",
+		"completedAt": "2026-02-19T21:15:21.106Z"
+	},
+	{
+		"id": "group-adbe9c06",
+		"name": "daemon-spawn-fix",
+		"memberIssueIds": [
+			"legio-85n",
+			"legio-k9c"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-19T21:51:59.422Z",
+		"completedAt": "2026-02-20T08:11:48.256Z"
+	},
+	{
+		"id": "group-feea68cf",
+		"name": "server-e2e-fix",
+		"memberIssueIds": [
+			"legio-j8p"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T08:19:42.736Z",
+		"completedAt": "2026-02-20T09:04:24.973Z"
+	},
+	{
+		"id": "group-22c76805",
+		"name": "cto-agent",
+		"memberIssueIds": [
+			"legio-eh0"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T08:22:53.016Z",
+		"completedAt": "2026-02-20T09:04:25.139Z"
+	},
+	{
+		"id": "group-7c08b438",
+		"name": "strategy-ui",
+		"memberIssueIds": [
+			"legio-b21"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T09:10:37.831Z",
+		"completedAt": "2026-02-20T09:44:19.973Z"
+	},
+	{
+		"id": "group-c079a742",
+		"name": "ui-overhaul",
+		"memberIssueIds": [
+			"legio-e8e",
+			"legio-ysm",
+			"legio-c8i"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T09:57:22.677Z",
+		"completedAt": "2026-02-20T10:45:19.540Z"
+	},
+	{
+		"id": "group-e04f9a0e",
+		"name": "chat-boot-status",
+		"memberIssueIds": [
+			"legio-72y",
+			"legio-5mj",
+			"legio-b3h",
+			"legio-tlu",
+			"legio-571"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T11:02:38.801Z",
+		"completedAt": "2026-02-20T16:18:35.362Z"
+	},
+	{
+		"id": "group-5c65f83f",
+		"name": "cto-strategy-batch",
+		"memberIssueIds": [
+			"legio-8po",
+			"legio-428",
+			"legio-0ch",
+			"legio-b4q",
+			"legio-adu"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T13:17:42.757Z",
+		"completedAt": "2026-02-20T18:45:12.043Z"
+	},
+	{
+		"id": "group-5f4ae15a",
+		"name": "chat-redesign-batch",
+		"memberIssueIds": [
+			"legio-vpo",
+			"legio-pqh",
+			"legio-0ii",
+			"legio-duuy",
+			"legio-csfr",
+			"legio-u4mh",
+			"legio-vqmq"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T14:09:24.667Z",
+		"completedAt": "2026-02-20T15:47:24.215Z"
+	},
+	{
+		"id": "group-7a38c73e",
+		"name": "push-and-cost",
+		"memberIssueIds": [
+			"legio-mv4o",
+			"legio-1xyq",
+			"legio-bntt",
+			"legio-adu",
+			"legio-svgz"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T16:45:18.233Z",
+		"completedAt": "2026-02-20T17:40:03.467Z"
+	},
+	{
+		"id": "group-2b1781f9",
+		"name": "web-ui-tier1",
+		"memberIssueIds": [
+			"legio-uu3x",
+			"legio-zqv8"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-20T18:46:53.356Z",
+		"completedAt": "2026-02-20T19:28:31.314Z"
+	},
+	{
+		"id": "group-77558fa2",
+		"name": "dual-channel-mail",
+		"memberIssueIds": [
+			"legio-9c89",
+			"legio-uo0y",
+			"legio-01ny",
+			"legio-vsae"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-21T06:13:39.142Z",
+		"completedAt": "2026-02-21T07:45:02.097Z"
+	},
+	{
+		"id": "group-119a0c88",
+		"name": "ui-bugfix",
+		"memberIssueIds": [
+			"legio-he6j",
+			"legio-sdzy",
+			"legio-8mmz",
+			"legio-wmlw",
+			"legio-6v70",
+			"legio-vv6z",
+			"legio-6eob",
+			"legio-25n0",
+			"legio-b7ue",
+			"legio-l6mc",
+			"legio-34ts"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-21T07:44:05.446Z",
+		"completedAt": "2026-02-21T11:34:00.037Z"
+	},
+	{
+		"id": "group-84d89a72",
+		"name": "upstream-port-v0.5.5-v0.5.9",
+		"memberIssueIds": [
+			"legio-zxdj",
+			"legio-x79b",
+			"legio-iejj",
+			"legio-jphq",
+			"legio-smhz",
+			"legio-laj6",
+			"legio-4jn6",
+			"legio-ra1s",
+			"legio-ug5o",
+			"legio-isc5",
+			"legio-hcz0",
+			"legio-24cl"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-23T08:34:43.642Z",
+		"completedAt": "2026-02-24T15:31:05.846Z"
+	},
+	{
+		"id": "group-952ef073",
+		"name": "unified-chat",
+		"memberIssueIds": [
+			"legio-ppx7",
+			"legio-j2u9"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-23T16:39:16.218Z",
+		"completedAt": "2026-02-23T18:12:01.293Z"
+	},
+	{
+		"id": "group-d6c10a16",
+		"name": "planning-view",
+		"memberIssueIds": [
+			"legio-3maf",
+			"legio-tcv0",
+			"legio-i4ep",
+			"legio-56v8"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-24T07:48:39.710Z",
+		"completedAt": "2026-02-24T15:31:06.872Z"
+	},
+	{
+		"id": "group-57d8de54",
+		"name": "chat-fixes",
+		"memberIssueIds": [
+			"legio-waae",
+			"legio-3aj1",
+			"legio-eq5p"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-24T15:58:04.787Z",
+		"completedAt": "2026-02-25T08:04:53.574Z"
+	},
+	{
+		"id": "group-395e8b53",
+		"name": "ui-fixes-v2",
+		"memberIssueIds": [
+			"legio-d6go",
+			"legio-z6lm",
+			"legio-mhs2"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-25T08:39:01.250Z",
+		"completedAt": "2026-02-25T09:56:42.025Z"
+	},
+	{
+		"id": "group-7e68fd41",
+		"name": "gateway-dashboard-chat",
+		"memberIssueIds": [
+			"legio-rn6s",
+			"legio-akcj",
+			"legio-waqi",
+			"legio-g23z"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-25T09:57:01.817Z",
+		"completedAt": "2026-02-25T10:43:37.349Z"
+	},
+	{
+		"id": "group-926e4bb0",
+		"name": "release-and-cleanup",
+		"memberIssueIds": [
+			"legio-i9bs",
+			"legio-9aw8",
+			"legio-mt84",
+			"legio-twzs",
+			"legio-waem",
+			"legio-b4dw",
+			"legio-7h68",
+			"legio-dmso",
+			"legio-s18f",
+			"legio-x901",
+			"legio-3ny6"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-25T10:59:42.453Z",
+		"completedAt": "2026-02-25T15:01:31.324Z"
+	},
+	{
+		"id": "group-eab92e4c",
+		"name": "batch-agent-defs-ui-up",
+		"memberIssueIds": [
+			"legio-jndy",
+			"legio-z6oj",
+			"legio-lowu",
+			"legio-tqbh"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T12:30:05.405Z",
+		"completedAt": "2026-02-26T12:52:21.683Z"
+	},
+	{
+		"id": "group-6a619b40",
+		"name": "batch-leadfix-tabtitle",
+		"memberIssueIds": [
+			"legio-0uid",
+			"legio-7haz"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T12:53:26.840Z",
+		"completedAt": "2026-02-26T12:58:12.285Z"
+	},
+	{
+		"id": "group-e0f2bc50",
+		"name": "batch-spawn-guards",
+		"memberIssueIds": [
+			"legio-l6o5",
+			"legio-92rc"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T13:01:18.333Z",
+		"completedAt": "2026-02-26T13:23:38.503Z"
+	},
+	{
+		"id": "group-6e5867a6",
+		"name": "batch-skip-review-fixtures",
+		"memberIssueIds": [
+			"legio-u8uz",
+			"legio-i9rc"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T13:24:32.132Z",
+		"completedAt": "2026-02-26T16:51:15.800Z"
+	},
+	{
+		"id": "group-439d4442",
+		"name": "batch-watchdog-sort",
+		"memberIssueIds": [
+			"legio-xhyx",
+			"legio-2eee"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T13:59:01.063Z",
+		"completedAt": "2026-02-26T16:51:16.312Z"
+	},
+	{
+		"id": "group-eac55591",
+		"name": "batch-parallel-skeleton",
+		"memberIssueIds": [
+			"legio-80lb",
+			"legio-4j7x"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T15:02:37.301Z",
+		"completedAt": "2026-02-26T16:51:16.852Z"
+	},
+	{
+		"id": "group-7945072e",
+		"name": "batch-4-dispatch",
+		"memberIssueIds": [
+			"legio-5zdf",
+			"legio-u10k",
+			"legio-w54e",
+			"legio-j4ey"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-26T18:52:09.511Z",
+		"completedAt": "2026-02-27T00:48:47.053Z"
+	},
+	{
+		"id": "group-8d54f08a",
+		"name": "bugfix-batch-1",
+		"memberIssueIds": [
+			"legio-i2ix",
+			"legio-mtkr",
+			"legio-m4nm"
+		],
+		"status": "completed",
+		"createdAt": "2026-02-28T14:17:50.676Z",
+		"completedAt": "2026-02-28T15:14:22.863Z"
+	},
+	{
+		"id": "group-b5c7b3e8",
+		"name": "infra-batch",
+		"memberIssueIds": [
+			"legio-1caa",
+			"legio-4yxa",
+			"legio-hl20"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-01T07:05:20.121Z",
+		"completedAt": "2026-03-01T08:33:10.284Z"
+	},
+	{
+		"id": "group-7eeebffe",
+		"name": "dashboard-batch",
+		"memberIssueIds": [
+			"legio-2p2l",
+			"legio-km8h",
+			"legio-vqhr",
+			"legio-wr8a"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-01T07:05:21.391Z",
+		"completedAt": "2026-03-01T08:33:11.280Z"
+	},
+	{
+		"id": "group-38039ccf",
+		"name": "frontend-dashboard-batch",
+		"memberIssueIds": [
+			"legio-qjt8",
+			"legio-qlhc"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-01T08:44:08.825Z",
+		"completedAt": "2026-03-01T10:39:46.268Z"
+	},
+	{
+		"id": "group-d76b3b70",
+		"name": "mobile-responsive",
+		"memberIssueIds": [
+			"legio-wq5s",
+			"legio-yau5",
+			"legio-3gtp",
+			"legio-r86t",
+			"legio-w1u7"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-01T09:04:33.489Z",
+		"completedAt": "2026-03-01T10:39:47.499Z"
+	},
+	{
+		"id": "group-da1aaa13",
+		"name": "nudge-messaging",
+		"memberIssueIds": [
+			"legio-0eeu",
+			"legio-5s7m",
+			"legio-63y4",
+			"legio-rj1k",
+			"legio-tsgq",
+			"legio-w5zv",
+			"legio-zx8q"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-01T13:12:26.594Z",
+		"completedAt": "2026-03-01T13:26:24.204Z"
+	},
+	{
+		"id": "group-3db9f17d",
+		"name": "dashboard-ux-batch",
+		"memberIssueIds": [
+			"legio-495s",
+			"legio-o0bm"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-02T09:33:59.571Z",
+		"completedAt": "2026-03-02T10:07:21.565Z"
+	},
+	{
+		"id": "group-e9ea674f",
+		"name": "docs-fixes",
+		"memberIssueIds": [
+			"legio-s8ko",
+			"legio-tbp3"
+		],
+		"status": "completed",
+		"createdAt": "2026-03-02T11:04:08.605Z",
+		"completedAt": "2026-03-02T11:33:10.510Z"
+	}
+]

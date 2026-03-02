@@ -38,7 +38,7 @@ export interface LegioConfig {
 		enabled: boolean;
 	};
 	taskTracker: {
-		backend: "auto" | "seeds" | "beads";
+		backend: "auto" | "seeds" | "beads" | "builtin";
 		enabled: boolean;
 	};
 	mulch: {

@@ -154,6 +154,7 @@ interface CleanResult {
 	sessionsCleared: boolean;
 	mergeQueueCleared: boolean;
 	metricsWiped: boolean;
+	tasksWiped: boolean;
 	logsCleared: boolean;
 	agentsCleared: boolean;
 	specsCleared: boolean;
@@ -428,6 +429,7 @@ Flags:
   --mail          Delete mail.db (all messages)
   --sessions      Wipe sessions.db
   --metrics       Delete metrics.db
+  --tasks         Delete tasks.db (builtin task tracker)
   --logs          Remove all agent logs
   --worktrees     Remove all worktrees + kill tmux sessions
   --branches      Delete all legio/* branch refs
@@ -463,16 +465,25 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	const doMail = all || hasFlag(args, "--mail");
 	const doSessions = all || hasFlag(args, "--sessions");
 	const doMetrics = all || hasFlag(args, "--metrics");
+	const doTasks = all || hasFlag(args, "--tasks");
 	const doLogs = all || hasFlag(args, "--logs");
 	const doAgents = all || hasFlag(args, "--agents");
 	const doSpecs = all || hasFlag(args, "--specs");
 
 	const anySelected =
-		doWorktrees || doBranches || doMail || doSessions || doMetrics || doLogs || doAgents || doSpecs;
+		doWorktrees ||
+		doBranches ||
+		doMail ||
+		doSessions ||
+		doMetrics ||
+		doTasks ||
+		doLogs ||
+		doAgents ||
+		doSpecs;
 
 	if (!anySelected) {
 		throw new ValidationError(
-			"No cleanup targets specified. Use --all for full cleanup, or individual flags (--mail, --sessions, --metrics, --logs, --worktrees, --branches, --agents, --specs).",
+			"No cleanup targets specified. Use --all for full cleanup, or individual flags (--mail, --sessions, --metrics, --tasks, --logs, --worktrees, --branches, --agents, --specs).",
 			{ field: "flags" },
 		);
 	}
@@ -490,6 +501,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 		sessionsCleared: false,
 		mergeQueueCleared: false,
 		metricsWiped: false,
+		tasksWiped: false,
 		logsCleared: false,
 		agentsCleared: false,
 		specsCleared: false,
@@ -541,6 +553,9 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	}
 	if (doMetrics) {
 		result.metricsWiped = await wipeSqliteDb(join(legioDir, "metrics.db"));
+	}
+	if (doTasks) {
+		result.tasksWiped = await wipeSqliteDb(join(legioDir, "tasks.db"));
 	}
 
 	// 6. Wipe sessions.db + legacy sessions.json
@@ -622,6 +637,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	}
 	if (result.mailWiped) lines.push("Wiped mail.db");
 	if (result.metricsWiped) lines.push("Wiped metrics.db");
+	if (result.tasksWiped) lines.push("Wiped tasks.db");
 	if (result.sessionsCleared) lines.push("Wiped sessions.db");
 	if (result.mergeQueueCleared) lines.push("Wiped merge-queue.db");
 	if (result.logsCleared) lines.push("Cleared logs/");

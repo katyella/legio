@@ -1,7 +1,6 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { AgentError } from "../errors.ts";
-import { resolveBackend, trackerCliName, trackerDisplayName } from "../tracker/factory.ts";
 import type { OverlayConfig } from "../types.ts";
 
 /**
@@ -94,7 +93,7 @@ function formatQualityGates(config: OverlayConfig): string {
 			"Before reporting completion:",
 			"",
 			`1. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|reference> --description "..."\` — capture reusable knowledge from your work`,
-			`2. **Close issue:** \`{{TRACKER_CLI}} close ${config.beadId} --reason "summary of findings"\``,
+			`2. **Close issue:** \`legio task close ${config.beadId} --reason "summary of findings"\``,
 			`3. **Send results:** \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "done" --body "Summary" --type result --agent ${config.agentName}\``,
 			"",
 			"You are a read-only agent. Do NOT commit or modify files.",
@@ -129,7 +128,7 @@ function formatQualityGates(config: OverlayConfig): string {
 	);
 	nextStep++;
 	steps.push(
-		`${nextStep}. **Close issue:** \`{{TRACKER_CLI}} close ${config.beadId} --reason "summary of changes"\``,
+		`${nextStep}. **Close issue:** \`legio task close ${config.beadId} --reason "summary of changes"\``,
 	);
 
 	return [
@@ -155,7 +154,7 @@ function formatConstraints(config: OverlayConfig): string {
 			"",
 			"- You are **read-only**: do NOT modify, create, or delete any files",
 			"- Do NOT commit, push, or make any git state changes",
-			"- Report completion via `{{TRACKER_CLI}} close` AND `legio mail send --type result`",
+			"- Report completion via `legio task close` AND `legio mail send --type result`",
 			"- If you encounter a blocking issue, send mail with `--priority urgent --type error`",
 		].join("\n");
 	}
@@ -168,7 +167,7 @@ function formatConstraints(config: OverlayConfig): string {
 		"- Only modify files in your File Scope",
 		`- Commit only to your branch: ${config.branchName}`,
 		"- Never push to the canonical branch",
-		"- Report completion via `{{TRACKER_CLI}} close` AND `legio mail send --type result`",
+		"- Report completion via `legio task close` AND `legio mail send --type result`",
 		"- If you encounter a blocking issue, send mail with `--priority urgent --type error`",
 	].join("\n");
 }
@@ -227,11 +226,6 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 		? "Read your task spec at the path above. It contains the full description of\nwhat you need to build or review."
 		: "No task spec was provided. Check your mail or ask your parent agent for details.";
 
-	// Resolve tracker backend for template variables
-	const trackerBackend = resolveBackend(config.worktreePath);
-	const trackerCli = trackerCliName(trackerBackend);
-	const trackerName = trackerDisplayName(trackerBackend);
-
 	const replacements: Record<string, string> = {
 		"{{AGENT_NAME}}": config.agentName,
 		"{{BEAD_ID}}": config.beadId,
@@ -252,8 +246,6 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 		// content (e.g. agents/cto.md), not in the template itself. Only present in `result`
 		// after the base definition is expanded.
 		"{{CANONICAL_ROOT}}": config.canonicalRoot ?? "",
-		"{{TRACKER_CLI}}": trackerCli,
-		"{{TRACKER_NAME}}": trackerName,
 	};
 
 	let result = template;
