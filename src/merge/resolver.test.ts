@@ -750,7 +750,7 @@ describe("createMergeResolver", () => {
 			await setupDeleteModifyConflict(repoDir, defaultBranch, "rec-ai", "rec/ai.ts");
 			await setupReimagineScenario(repoDir, defaultBranch, "rec-reimagine", "rec/ri");
 			await setupCleanMerge(repoDir, defaultBranch, "rec-clean", "rec/clean");
-		});
+		}, 60_000);
 
 		afterAll(async () => {
 			await cleanupTempDir(repoDir);
