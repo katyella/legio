@@ -301,8 +301,63 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		await sleep(500);
 		await tmux.sendKeys(tmuxSession, "");
 
-		// Verify beacon delivery: poll store until state transitions out of booting.
-		await verifyGatewayBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
+		// Verify delivery: poll pane content for agent activity markers.
+		// If the beacon text is still sitting in the input area after several checks,
+		// send additional Enter nudges.
+		const capture = tmux.capturePaneContent ?? capturePaneContent;
+		const maxVerifyChecks = 5;
+		const verifyIntervalMs = 2_000;
+		let beaconDelivered = false;
+
+		for (let check = 0; check < maxVerifyChecks; check++) {
+			await sleep(verifyIntervalMs);
+
+			const paneContent = await capture(tmuxSession);
+			const beaconTag = `[LEGIO] ${GATEWAY_NAME}`;
+			const hasAgentActivity =
+				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
+				paneContent.includes("Claude") || // Agent response header
+				paneContent.includes("Reading") || // Tool usage
+				paneContent.includes("Searching"); // Tool usage
+			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
+
+			if (!beaconStillInInput) {
+				beaconDelivered = true;
+				break;
+			}
+
+			// Still stuck — nudge with another Enter
+			process.stderr.write(
+				`[legio] Beacon check ${check + 1}/${maxVerifyChecks}: not consumed — sending Enter\n`,
+			);
+			await tmux.sendKeys(tmuxSession, "");
+		}
+
+		if (beaconDelivered) {
+			const { createMailStore } = await import("../mail/store.ts");
+			const mailDb = createMailStore(join(legioDir, "mail.db"));
+			try {
+				mailDb.insert({
+					id: "",
+					from: GATEWAY_NAME,
+					to: "human",
+					subject: "Gateway online",
+					body: "Gateway is online and ready. Send a message to start chatting.",
+					type: "status",
+					priority: "normal",
+					threadId: null,
+					audience: "human",
+				});
+			} finally {
+				mailDb.close();
+			}
+		}
+
+		if (!beaconDelivered) {
+			process.stderr.write(
+				`[legio] Warning: gateway beacon may not have been delivered after ${maxVerifyChecks} checks\n`,
+			);
+		}
 
 		if (shouldAttach) {
 			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
