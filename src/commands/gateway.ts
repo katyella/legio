@@ -118,7 +118,7 @@ async function verifyBeaconDelivery(
 	tmuxSession: string,
 	beacon: string,
 	sleep: (ms: number) => Promise<void>,
-): Promise<void> {
+): Promise<boolean> {
 	const MAX_CHECKS = 10;
 	const INTERVAL_MS = 2_000;
 
@@ -127,7 +127,7 @@ async function verifyBeaconDelivery(
 		const session = store.getByName(GATEWAY_NAME);
 		if (session && session.state !== "booting") {
 			// Beacon confirmed — gateway transitioned out of booting
-			return;
+			return true;
 		}
 	}
 
@@ -142,7 +142,9 @@ async function verifyBeaconDelivery(
 	const finalSession = store.getByName(GATEWAY_NAME);
 	if (!finalSession || finalSession.state === "booting") {
 		process.stderr.write("[legio] Warning: gateway beacon delivery could not be confirmed\n");
+		return false;
 	}
+	return true;
 }
 
 /**
@@ -305,25 +307,27 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 
 		// Verify delivery: poll store until state transitions out of booting.
 		// Must complete before the finally block closes the store.
-		await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
+		const confirmed = await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
 
-		// Send greeting mail to human
-		const { createMailStore } = await import("../mail/store.ts");
-		const mailDb = createMailStore(join(legioDir, "mail.db"));
-		try {
-			mailDb.insert({
-				id: "",
-				from: GATEWAY_NAME,
-				to: "human",
-				subject: "Gateway online",
-				body: "Gateway is online and ready. Send a message to start chatting.",
-				type: "status",
-				priority: "normal",
-				threadId: null,
-				audience: "human",
-			});
-		} finally {
-			mailDb.close();
+		// Send greeting mail to human only after confirmed beacon delivery
+		if (confirmed) {
+			const { createMailStore } = await import("../mail/store.ts");
+			const mailDb = createMailStore(join(legioDir, "mail.db"));
+			try {
+				mailDb.insert({
+					id: "",
+					from: GATEWAY_NAME,
+					to: "human",
+					subject: "Gateway online",
+					body: "Gateway is online and ready. Send a message to start chatting.",
+					type: "status",
+					priority: "normal",
+					threadId: null,
+					audience: "human",
+				});
+			} finally {
+				mailDb.close();
+			}
 		}
 
 		if (shouldAttach) {

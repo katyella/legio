@@ -518,8 +518,26 @@ describe("startGateway", () => {
 		expect(enterCalls).toHaveLength(2); // follow-up Enter + retry Enter
 	});
 
-	test("sends greeting mail to human after beacon delivery", async () => {
-		const { deps } = makeDeps();
+	test("sends greeting mail to human after confirmed beacon delivery", async () => {
+		const { tmux } = makeFakeTmux();
+		// Simulate hooks transitioning session out of "booting" after a few sleep calls
+		let sleepCount = 0;
+		const deps: GatewayDeps = {
+			_tmux: tmux,
+			_sleep: async () => {
+				sleepCount++;
+				// After 3 sleeps (waitForTuiReady + follow-up Enter delay + first poll),
+				// transition session to "working" like hooks would
+				if (sleepCount === 3) {
+					const { store } = openSessionStore(legioDir);
+					try {
+						store.updateState("gateway", "working");
+					} finally {
+						store.close();
+					}
+				}
+			},
+		};
 		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
 		// Verify mail.db has the greeting
 		const { createMailStore } = await import("../mail/store.ts");
@@ -531,6 +549,20 @@ describe("startGateway", () => {
 			expect(msgs[0]?.body).toContain("online and ready");
 			expect(msgs[0]?.type).toBe("status");
 			expect(msgs[0]?.audience).toBe("human");
+		} finally {
+			mailDb.close();
+		}
+	});
+
+	test("does not send greeting mail when beacon delivery fails", async () => {
+		const { deps } = makeDeps();
+		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
+		// verifyBeaconDelivery returns false (session stays in "booting"), so no greeting mail
+		const { createMailStore } = await import("../mail/store.ts");
+		const mailDb = createMailStore(join(legioDir, "mail.db"));
+		try {
+			const msgs = mailDb.getAll({ from: "gateway", to: "human" });
+			expect(msgs).toHaveLength(0);
 		} finally {
 			mailDb.close();
 		}

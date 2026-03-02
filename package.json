@@ -1,6 +1,6 @@
 {
 	"name": "@katyella/legio",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"description": "Multi-agent orchestration for Claude Code — spawn worker agents in git worktrees via tmux, coordinate through SQLite mail, merge with tiered conflict resolution",
 	"author": "Matthew Wojtowicz",
 	"license": "MIT",
