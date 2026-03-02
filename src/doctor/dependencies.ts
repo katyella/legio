@@ -16,6 +16,12 @@ export const checkDependencies: DoctorCheckFn = async (
 		{ name: "node", versionFlag: "--version", required: true },
 		{ name: "tmux", versionFlag: "-V", required: true },
 		{
+			name: "bun",
+			versionFlag: "--version",
+			required: false,
+			installHint: "curl -fsSL https://bun.sh/install | bash — required for sd and mulch",
+		},
+		{
 			name: "sd",
 			versionFlag: "--version",
 			required: false,

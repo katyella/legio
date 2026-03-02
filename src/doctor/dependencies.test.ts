@@ -56,21 +56,22 @@ describe("checkDependencies", () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
 
 		expect(Array.isArray(checks)).toBe(true);
-		expect(checks.length).toBeGreaterThanOrEqual(5);
+		expect(checks.length).toBeGreaterThanOrEqual(6);
 
 		// Verify we have checks for each tool
 		const toolNames = checks.map((c) => c.name);
 		expect(toolNames).toContain("git availability");
 		expect(toolNames).toContain("node availability");
 		expect(toolNames).toContain("tmux availability");
+		expect(toolNames).toContain("bun availability");
 		expect(toolNames).toContain("sd availability");
 		expect(toolNames).toContain("mulch availability");
 		expect(toolNames).toContain("bd availability");
 	});
 
-	test("sd, mulch, and bd are all optional (warn if missing)", async () => {
+	test("bun, sd, mulch, and bd are all optional (warn if missing)", async () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
-		for (const name of ["sd", "mulch", "bd"]) {
+		for (const name of ["bun", "sd", "mulch", "bd"]) {
 			const check = checks.find((c) => c.name === `${name} availability`);
 			if (check?.status !== "pass") {
 				expect(check?.status).toBe("warn");
