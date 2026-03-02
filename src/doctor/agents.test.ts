@@ -375,6 +375,51 @@ sessionsCompleted: -5
 		expect(identityCheck?.details?.some((d) => d.includes("sessionsCompleted"))).toBe(true);
 	});
 
+	test("does not flag persistent agent identities as stale", async () => {
+		const manifest = {
+			version: "1.0",
+			agents: {
+				scout: {
+					file: "scout.md",
+					model: "haiku",
+					tools: ["Read"],
+					capabilities: ["explore"],
+					canSpawn: false,
+					constraints: [],
+				},
+			},
+			capabilityIndex: {
+				explore: ["scout"],
+			},
+		};
+
+		await mkdir(join(legioDir, "agent-defs"), { recursive: true });
+		await mkdir(join(legioDir, "agents", "gateway"), { recursive: true });
+		await mkdir(join(legioDir, "agents", "coordinator"), { recursive: true });
+		await writeFile(join(legioDir, "agent-manifest.json"), JSON.stringify(manifest, null, 2));
+		await writeFile(join(legioDir, "agent-defs", "scout.md"), "# Scout");
+
+		const identity = `name: gateway
+capability: gateway
+created: "2024-01-01T00:00:00Z"
+sessionsCompleted: 3
+`;
+		await writeFile(join(legioDir, "agents", "gateway", "identity.yaml"), identity);
+
+		const coordIdentity = `name: coordinator
+capability: coordinator
+created: "2024-01-01T00:00:00Z"
+sessionsCompleted: 10
+`;
+		await writeFile(join(legioDir, "agents", "coordinator", "identity.yaml"), coordIdentity);
+
+		const checks = await checkAgents(mockConfig, legioDir);
+
+		const staleCheck = checks.find((c) => c.name === "Stale identities");
+		// Should not warn — persistent agents are expected to have identity files
+		expect(staleCheck?.status).not.toBe("warn");
+	});
+
 	test("warns about stale identity files", async () => {
 		const manifest = {
 			version: "1.0",

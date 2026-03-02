@@ -399,12 +399,17 @@ describe("buildBeacon", () => {
 		expect(beacon).toContain("Depth: 0 | Parent: none");
 	});
 
+	test("explains what legio is", () => {
+		const beacon = buildBeacon(makeBeaconOpts());
+		expect(beacon).toContain("legio multi-agent orchestration system");
+		expect(beacon).toContain("CLI tool installed on this machine");
+	});
+
 	test("includes startup instructions with agent name and task ID", () => {
 		const opts = makeBeaconOpts({ agentName: "scout-1", taskId: "legio-xyz" });
 		const beacon = buildBeacon(opts);
 
 		expect(beacon).toContain("read .claude/CLAUDE.md");
-		expect(beacon).toContain("mulch prime");
 		expect(beacon).toContain("legio mail check --agent scout-1");
 		expect(beacon).toContain("begin task legio-xyz");
 	});

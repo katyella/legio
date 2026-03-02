@@ -5,6 +5,8 @@ import type { DoctorCheck, DoctorCheckFn } from "./types.ts";
 
 const VALID_MODELS = new Set(["sonnet", "opus", "haiku"]);
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+/** Persistent agents create identity files but are not registered in the agent manifest. */
+const PERSISTENT_AGENTS = new Set(["coordinator", "gateway", "monitor"]);
 
 /**
  * Check if a path exists.
@@ -313,8 +315,8 @@ export const checkAgents: DoctorCheckFn = async (_config, legioDir): Promise<Doc
 
 			identityFileCount++;
 
-			// Check if agent still exists in manifest
-			if (!manifest.agents[agentName]) {
+			// Check if agent still exists in manifest (persistent agents are not manifest-registered)
+			if (!manifest.agents[agentName] && !PERSISTENT_AGENTS.has(agentName)) {
 				staleIdentities.push(agentName);
 				continue;
 			}

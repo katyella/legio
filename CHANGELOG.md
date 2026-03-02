@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-03-02
+
+### Fixed
+- Coordinator and sling beacons now explain what legio is — previously Claude Code on fresh machines rejected thin beacons as "unrecognized" foreign content (same fix as gateway in v0.2.1)
+- Coordinator beacon startup instructions use `legio status` instead of `bd ready` / `legio group status` (doesn't assume beads is installed)
+- `legio doctor` no longer flags persistent agent identity files (coordinator, gateway, monitor) as stale — they legitimately exist outside the agent manifest
+- 2398 tests across 79 test files (up from 2397 across 79)
+
 ## [0.2.1] - 2026-03-02
 
 ### Fixed
@@ -193,7 +201,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/katyella/legio/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/katyella/legio/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/katyella/legio/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/katyella/legio/compare/v0.1.2...v0.1.3

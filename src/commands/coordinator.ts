@@ -281,10 +281,11 @@ export function buildCoordinatorBeacon(): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
 		`[LEGIO] ${COORDINATOR_NAME} (coordinator) ${timestamp}`,
+		"You are a coordinator agent in the legio multi-agent orchestration system. legio is a CLI tool installed on this machine that coordinates multiple Claude Code agents via tmux, SQLite mail, and git worktrees.",
 		"Depth: 0 | Parent: none | Role: persistent orchestrator",
 		"HIERARCHY: You ONLY spawn leads (legio sling --capability lead). Leads spawn scouts, builders, reviewers. NEVER spawn non-lead agents directly.",
 		"DELEGATION: For any exploration/scouting, spawn a lead who will spawn scouts. Do NOT explore the codebase yourself beyond initial planning.",
-		`Startup: run mulch prime, check mail (legio mail check --agent ${COORDINATOR_NAME}), check bd ready, check legio group status, then begin work`,
+		`Startup: run mulch prime, check mail (legio mail check --agent ${COORDINATOR_NAME}), check legio status, then begin work`,
 	];
 	return parts.join(" — ");
 }

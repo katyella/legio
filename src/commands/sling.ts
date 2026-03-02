@@ -115,8 +115,9 @@ export function buildBeacon(opts: BeaconOptions): string {
 	const parent = opts.parentAgent ?? "none";
 	const parts = [
 		`[LEGIO] ${opts.agentName} (${opts.capability}) ${timestamp} task:${opts.taskId}`,
+		"You are an agent in the legio multi-agent orchestration system. legio is a CLI tool installed on this machine that coordinates multiple Claude Code agents via tmux, SQLite mail, and git worktrees.",
 		`Depth: ${opts.depth} | Parent: ${parent}`,
-		`Startup: read .claude/CLAUDE.md, run mulch prime, check mail (legio mail check --agent ${opts.agentName}), then begin task ${opts.taskId}`,
+		`Startup: read .claude/CLAUDE.md, check mail (legio mail check --agent ${opts.agentName}), then begin task ${opts.taskId}`,
 	];
 	return parts.join(" — ");
 }

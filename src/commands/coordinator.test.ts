@@ -875,8 +875,7 @@ describe("buildCoordinatorBeacon", () => {
 		const beacon = buildCoordinatorBeacon();
 		expect(beacon).toContain("mulch prime");
 		expect(beacon).toContain("legio mail check --agent coordinator");
-		expect(beacon).toContain("bd ready");
-		expect(beacon).toContain("legio group status");
+		expect(beacon).toContain("legio status");
 	});
 
 	test("includes hierarchy enforcement instruction", () => {
@@ -891,11 +890,17 @@ describe("buildCoordinatorBeacon", () => {
 		expect(beacon).toContain("spawn a lead who will spawn scouts");
 	});
 
+	test("explains what legio is", () => {
+		const beacon = buildCoordinatorBeacon();
+		expect(beacon).toContain("legio multi-agent orchestration system");
+		expect(beacon).toContain("CLI tool installed on this machine");
+	});
+
 	test("parts are joined with em-dash separator", () => {
 		const beacon = buildCoordinatorBeacon();
-		// Should have exactly 4 " — " separators (5 parts)
+		// Should have exactly 5 " — " separators (6 parts)
 		const dashes = beacon.split(" — ");
-		expect(dashes).toHaveLength(5);
+		expect(dashes).toHaveLength(6);
 	});
 });
 
