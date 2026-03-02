@@ -120,7 +120,7 @@ watchdog:
 
 		const config = await loadConfig(tempDir);
 		expect(config.agents.staggerDelayMs).toBe(5000);
-		expect(config.watchdog.tier0IntervalMs).toBe(60000);
+		expect(config.watchman.tier0IntervalMs).toBe(60000);
 	});
 
 	test("handles quoted string values", async () => {
@@ -204,9 +204,9 @@ watchdog:
 
 		const config = await loadConfig(tempDir);
 		// Local override
-		expect(config.watchdog.tier0Enabled).toBe(true);
+		expect(config.watchman.tier0Enabled).toBe(true);
 		// Non-overridden value from config.yaml preserved
-		expect(config.watchdog.zombieThresholdMs).toBe(120000);
+		expect(config.watchman.zombieThresholdMs).toBe(120000);
 	});
 
 	test("migrates deprecated watchdog tier1/tier2 keys to tier0/tier1", async () => {
@@ -220,10 +220,10 @@ watchdog:
 
 		const config = await loadConfig(tempDir);
 		// Old tier1 (mechanical daemon) → new tier0
-		expect(config.watchdog.tier0Enabled).toBe(true);
-		expect(config.watchdog.tier0IntervalMs).toBe(45000);
+		expect(config.watchman.tier0Enabled).toBe(true);
+		expect(config.watchman.tier0IntervalMs).toBe(45000);
 		// Old tier2 (AI triage) → new tier1
-		expect(config.watchdog.tier1Enabled).toBe(true);
+		expect(config.watchman.tier1Enabled).toBe(true);
 	});
 
 	test("migrates deprecated 'beads' key to taskTracker", async () => {
@@ -249,9 +249,9 @@ watchdog:
 
 		const config = await loadConfig(tempDir);
 		// New keys used directly — no migration needed
-		expect(config.watchdog.tier0Enabled).toBe(false);
-		expect(config.watchdog.tier0IntervalMs).toBe(20000);
-		expect(config.watchdog.tier1Enabled).toBe(true);
+		expect(config.watchman.tier0Enabled).toBe(false);
+		expect(config.watchman.tier0IntervalMs).toBe(20000);
+		expect(config.watchman.tier1Enabled).toBe(true);
 	});
 });
 
@@ -358,7 +358,7 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.taskTracker).toBeDefined();
 		expect(DEFAULT_CONFIG.mulch).toBeDefined();
 		expect(DEFAULT_CONFIG.merge).toBeDefined();
-		expect(DEFAULT_CONFIG.watchdog).toBeDefined();
+		expect(DEFAULT_CONFIG.watchman).toBeDefined();
 		expect(DEFAULT_CONFIG.models).toBeDefined();
 		expect(DEFAULT_CONFIG.logging).toBeDefined();
 	});
@@ -368,8 +368,8 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.agents.maxConcurrent).toBe(25);
 		expect(DEFAULT_CONFIG.agents.maxDepth).toBe(2);
 		expect(DEFAULT_CONFIG.agents.staggerDelayMs).toBe(2_000);
-		expect(DEFAULT_CONFIG.watchdog.tier0IntervalMs).toBe(30_000);
-		expect(DEFAULT_CONFIG.watchdog.zombieThresholdMs).toBe(600_000);
+		expect(DEFAULT_CONFIG.watchman.tier0IntervalMs).toBe(30_000);
+		expect(DEFAULT_CONFIG.watchman.zombieThresholdMs).toBe(600_000);
 	});
 
 	test("agents.maxAgentsPerLead defaults to 5", () => {

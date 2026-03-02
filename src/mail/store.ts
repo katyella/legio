@@ -28,6 +28,8 @@ export interface MailStore {
 	getById(id: string): MailMessage | null;
 	getByThread(threadId: string): MailMessage[];
 	markRead(id: string): void;
+	/** Get distinct agent names that have unread messages. */
+	getAgentsWithUnread(): string[];
 	/** Delete messages matching the given criteria. Returns the number of messages deleted. */
 	purge(options: { all?: boolean; olderThanMs?: number; agent?: string }): number;
 	close(): void;
@@ -243,6 +245,10 @@ export function createMailStore(dbPath: string): MailStore {
 		UPDATE messages SET read = 1 WHERE id = $id
 	`);
 
+	const getAgentsWithUnreadStmt = db.prepare(`
+		SELECT DISTINCT to_agent FROM messages WHERE read = 0
+	`);
+
 	// Dynamic filter queries are built at call time since the WHERE clause varies
 	function buildFilterQuery(filters?: {
 		from?: string;
@@ -346,6 +352,11 @@ export function createMailStore(dbPath: string): MailStore {
 
 		markRead(id: string): void {
 			markReadStmt.run({ id });
+		},
+
+		getAgentsWithUnread(): string[] {
+			const rows = getAgentsWithUnreadStmt.all() as Array<{ to_agent: string }>;
+			return rows.map((r) => r.to_agent);
 		},
 
 		purge(options: { all?: boolean; olderThanMs?: number; agent?: string }): number {

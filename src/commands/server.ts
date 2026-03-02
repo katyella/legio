@@ -10,7 +10,7 @@ import { access, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
-import { isProcessRunning } from "../watchdog/health.ts";
+import { isProcessRunning } from "../watchman/health.ts";
 
 function getFlag(args: string[], flag: string): string | undefined {
 	const idx = args.indexOf(flag);

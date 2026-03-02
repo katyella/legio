@@ -658,6 +658,95 @@ describe("createMailStore", () => {
 		});
 	});
 
+	describe("getAgentsWithUnread", () => {
+		test("returns empty array when no messages", () => {
+			const agents = store.getAgentsWithUnread();
+			expect(agents).toHaveLength(0);
+		});
+
+		test("returns empty array when all messages are read", () => {
+			const msg = store.insert({
+				id: "",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "test",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+			store.markRead(msg.id);
+
+			const agents = store.getAgentsWithUnread();
+			expect(agents).toHaveLength(0);
+		});
+
+		test("returns distinct agent names with unread mail", () => {
+			store.insert({
+				id: "",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "msg1",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+			store.insert({
+				id: "",
+				from: "agent-b",
+				to: "orchestrator",
+				subject: "msg2",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+			store.insert({
+				id: "",
+				from: "agent-a",
+				to: "builder-1",
+				subject: "msg3",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+
+			const agents = store.getAgentsWithUnread();
+			expect(agents).toHaveLength(2);
+			expect(agents.sort()).toEqual(["builder-1", "orchestrator"]);
+		});
+
+		test("does not include agents whose mail is all read", () => {
+			const msg1 = store.insert({
+				id: "",
+				from: "agent-a",
+				to: "orchestrator",
+				subject: "msg1",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+			store.insert({
+				id: "",
+				from: "agent-a",
+				to: "builder-1",
+				subject: "msg2",
+				body: "body",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+			});
+			store.markRead(msg1.id);
+
+			const agents = store.getAgentsWithUnread();
+			expect(agents).toHaveLength(1);
+			expect(agents[0]).toBe("builder-1");
+		});
+	});
+
 	describe("audience column", () => {
 		test("defaults audience to agent when not provided", () => {
 			const msg = store.insert({

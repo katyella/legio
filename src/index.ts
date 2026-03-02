@@ -40,7 +40,7 @@ import { stopCommand } from "./commands/stop.ts";
 import { supervisorCommand } from "./commands/supervisor.ts";
 import { traceCommand } from "./commands/trace.ts";
 import { upCommand } from "./commands/up.ts";
-import { watchCommand } from "./commands/watch.ts";
+import { watchmanCommand } from "./commands/watchman.ts";
 import { worktreeCommand } from "./commands/worktree.ts";
 import { LegioError, WorktreeError } from "./errors.ts";
 import { setQuiet } from "./logging/color.ts";
@@ -74,7 +74,7 @@ Commands:
   worktree <sub>          Manage worktrees (list/clean)
   log <event>             Log a hook event
   logs [options]          Query NDJSON logs across agents
-  watch                   Start watchdog daemon
+  watchman <sub>           Unified daemon — health + mail + beacon (start/stop/status)
   feed [options]          Unified real-time event stream across all agents
   trace <target>         Chronological event timeline for agent/bead
   errors [options]        Aggregated error view across agents
@@ -111,13 +111,13 @@ const COMMANDS = [
 	"hooks",
 	"monitor",
 	"mail",
+	"watchman",
 	"merge",
 	"nudge",
 	"group",
 	"worktree",
 	"log",
 	"logs",
-	"watch",
 	"trace",
 	"feed",
 	"errors",
@@ -251,6 +251,9 @@ async function main(): Promise<void> {
 		case "mail":
 			await mailCommand(commandArgs);
 			break;
+		case "watchman":
+			await watchmanCommand(commandArgs);
+			break;
 		case "merge":
 			await mergeCommand(commandArgs);
 			break;
@@ -268,9 +271,6 @@ async function main(): Promise<void> {
 			break;
 		case "logs":
 			await logsCommand(commandArgs);
-			break;
-		case "watch":
-			await watchCommand(commandArgs);
 			break;
 		case "trace":
 			await traceCommand(commandArgs);

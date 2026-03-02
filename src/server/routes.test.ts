@@ -1981,7 +1981,7 @@ describe("POST /api/coordinator/start", () => {
 		expect(body).toBeDefined();
 	});
 
-	it("passes --watchdog flag when body.watchdog is true", async () => {
+	it("passes --watchman flag when body.watchdog is true", async () => {
 		const res = await dispatchPost("/api/coordinator/start", { watchdog: true });
 		expect([200, 500]).toContain(res.status);
 		const body = (await json(res)) as Record<string, unknown>;

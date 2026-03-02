@@ -42,10 +42,10 @@ interface TmuxCallTracker {
 	sendKeys: Array<{ name: string; keys: string }>;
 }
 
-// --- Fake Watchdog ---
+// --- Fake Watchman ---
 
-/** Track calls to fake watchdog for assertions. */
-interface WatchdogCallTracker {
+/** Track calls to fake watchman for assertions. */
+interface WatchmanCallTracker {
 	start: number;
 	stop: number;
 	isRunning: number;
@@ -99,26 +99,26 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 }
 
 /**
- * Build a fake watchdog DI object with configurable behavior.
- * @param running - Whether the watchdog should report as running
+ * Build a fake watchman DI object with configurable behavior.
+ * @param running - Whether the watchman should report as running
  * @param startSuccess - Whether start() should succeed (return a PID)
  * @param stopSuccess - Whether stop() should succeed (return true)
  */
-function makeFakeWatchdog(
+function makeFakeWatchman(
 	running = false,
 	startSuccess = true,
 	stopSuccess = true,
 ): {
-	watchdog: NonNullable<CoordinatorDeps["_watchdog"]>;
-	calls: WatchdogCallTracker;
+	watchman: NonNullable<CoordinatorDeps["_watchman"]>;
+	calls: WatchmanCallTracker;
 } {
-	const calls: WatchdogCallTracker = {
+	const calls: WatchmanCallTracker = {
 		start: 0,
 		stop: 0,
 		isRunning: 0,
 	};
 
-	const watchdog: NonNullable<CoordinatorDeps["_watchdog"]> = {
+	const watchman: NonNullable<CoordinatorDeps["_watchman"]> = {
 		async start(): Promise<{ pid: number } | null> {
 			calls.start++;
 			return startSuccess ? { pid: 88888 } : null;
@@ -133,7 +133,7 @@ function makeFakeWatchdog(
 		},
 	};
 
-	return { watchdog, calls };
+	return { watchman, calls };
 }
 
 /**
@@ -284,24 +284,24 @@ async function captureStdout(fn: () => Promise<void>): Promise<string> {
 	return chunks.join("");
 }
 
-/** Build default CoordinatorDeps with fake tmux, watchdog, and monitor.
+/** Build default CoordinatorDeps with fake tmux, watchman, and monitor.
  * Always injects fakes for all three to prevent real child_process.spawn(["legio", ...])
  * calls in tests (legio CLI is not available in CI). */
 function makeDeps(
 	sessionAliveMap: Record<string, boolean> = {},
-	watchdogConfig?: { running?: boolean; startSuccess?: boolean; stopSuccess?: boolean },
+	watchmanConfig?: { running?: boolean; startSuccess?: boolean; stopSuccess?: boolean },
 	monitorConfig?: { running?: boolean; startSuccess?: boolean; stopSuccess?: boolean },
 ): {
 	deps: CoordinatorDeps;
 	calls: TmuxCallTracker;
-	watchdogCalls: WatchdogCallTracker;
+	watchmanCalls: WatchmanCallTracker;
 	monitorCalls: MonitorCallTracker;
 } {
 	const { tmux, calls } = makeFakeTmux(sessionAliveMap);
-	const { watchdog, calls: watchdogCalls } = makeFakeWatchdog(
-		watchdogConfig?.running,
-		watchdogConfig?.startSuccess,
-		watchdogConfig?.stopSuccess,
+	const { watchman, calls: watchmanCalls } = makeFakeWatchman(
+		watchmanConfig?.running,
+		watchmanConfig?.startSuccess,
+		watchmanConfig?.stopSuccess,
 	);
 	const { monitor, calls: monitorCalls } = makeFakeMonitor(
 		monitorConfig?.running,
@@ -311,7 +311,7 @@ function makeDeps(
 
 	const deps: CoordinatorDeps = {
 		_tmux: tmux,
-		_watchdog: watchdog,
+		_watchman: watchman,
 		_monitor: monitor,
 		_sleep: () => Promise.resolve(),
 	};
@@ -319,7 +319,7 @@ function makeDeps(
 	return {
 		deps,
 		calls,
-		watchdogCalls,
+		watchmanCalls,
 		monitorCalls,
 	};
 }
@@ -927,167 +927,174 @@ describe("resolveAttach", () => {
 	});
 });
 
-describe("watchdog integration", () => {
-	describe("startCoordinator with --watchdog", () => {
-		test("calls watchdog.start() when --watchdog flag is present", async () => {
-			const { deps, watchdogCalls } = makeDeps({}, { startSuccess: true });
-			await captureStdout(() => coordinatorCommand(["start", "--watchdog", "--json"], deps));
+describe("watchman integration", () => {
+	describe("startCoordinator with --watchman", () => {
+		test("calls watchman.start() when --watchman flag is present", async () => {
+			const { deps, watchmanCalls } = makeDeps({}, { startSuccess: true });
+			await captureStdout(() => coordinatorCommand(["start", "--watchman", "--json"], deps));
 
-			expect(watchdogCalls?.start).toBe(1);
+			expect(watchmanCalls?.start).toBe(1);
 		});
 
-		test("does NOT call watchdog.start() when --watchdog flag is absent", async () => {
-			const { deps, watchdogCalls } = makeDeps({}, { startSuccess: true });
+		test("does NOT call watchman.start() when --watchman flag is absent", async () => {
+			const { deps, watchmanCalls } = makeDeps({}, { startSuccess: true });
 			await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
-			expect(watchdogCalls?.start).toBe(0);
+			expect(watchmanCalls?.start).toBe(0);
 		});
 
-		test("--json output includes watchdog:false (output written before watchdog starts)", async () => {
+		test("--json output includes watchman:false (output written before watchman starts)", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
 			const output = await captureStdout(() =>
-				coordinatorCommand(["start", "--watchdog", "--json"], deps),
+				coordinatorCommand(["start", "--watchman", "--json"], deps),
 			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdog).toBe(false);
+			expect(parsed.watchman).toBe(false);
 		});
 
-		test("--json output includes watchdog:false when --watchdog is present but start fails", async () => {
+		test("--json output includes watchman:false when --watchman is present but start fails", async () => {
 			const { deps } = makeDeps({}, { startSuccess: false });
 			const output = await captureStdout(() =>
-				coordinatorCommand(["start", "--watchdog", "--json"], deps),
+				coordinatorCommand(["start", "--watchman", "--json"], deps),
 			);
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdog).toBe(false);
+			expect(parsed.watchman).toBe(false);
 		});
 
-		test("--json output includes watchdog:false when --watchdog is absent", async () => {
+		test("--json output includes watchman:false when --watchman is absent", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
 			const output = await captureStdout(() => coordinatorCommand(["start", "--json"], deps));
 
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdog).toBe(false);
+			expect(parsed.watchman).toBe(false);
 		});
 
-		test("text output includes watchdog PID when --watchdog succeeds", async () => {
+		test("text output includes watchman PID when --watchman succeeds", async () => {
 			const { deps } = makeDeps({}, { startSuccess: true });
 			const output = await captureStdout(() =>
-				coordinatorCommand(["start", "--watchdog", "--no-attach"], deps),
+				coordinatorCommand(["start", "--watchman", "--no-attach"], deps),
 			);
 
-			expect(output).toContain("Watchdog: started (PID 88888)");
+			expect(output).toContain("Watchman: started (PID 88888)");
+		});
+
+		test("--watchdog flag is accepted as alias for --watchman", async () => {
+			const { deps, watchmanCalls } = makeDeps({}, { startSuccess: true });
+			await captureStdout(() => coordinatorCommand(["start", "--watchdog", "--json"], deps));
+
+			expect(watchmanCalls?.start).toBe(1);
 		});
 	});
 
-	describe("stopCoordinator watchdog cleanup", () => {
-		test("always calls watchdog.stop() when stopping coordinator", async () => {
+	describe("stopCoordinator watchman cleanup", () => {
+		test("always calls watchman.stop() when stopping coordinator", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
-			const { deps, watchdogCalls } = makeDeps(
+			const { deps, watchmanCalls } = makeDeps(
 				{ "legio-test-project-coordinator": true },
 				{ stopSuccess: true },
 			);
 
 			await captureStdout(() => coordinatorCommand(["stop"], deps));
 
-			expect(watchdogCalls?.stop).toBe(1);
+			expect(watchmanCalls?.stop).toBe(1);
 		});
 
-		test("--json output includes watchdogStopped:true when watchdog was running", async () => {
+		test("--json output includes watchmanStopped:true when watchman was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdogStopped).toBe(true);
+			expect(parsed.watchmanStopped).toBe(true);
 		});
 
-		test("--json output includes watchdogStopped:false when no watchdog was running", async () => {
+		test("--json output includes watchmanStopped:false when no watchman was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdogStopped).toBe(false);
+			expect(parsed.watchmanStopped).toBe(false);
 		});
 
-		test("text output shows 'Watchdog stopped' when watchdog was running", async () => {
+		test("text output shows 'Watchman stopped' when watchman was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop"], deps));
-			expect(output).toContain("Watchdog stopped");
+			expect(output).toContain("Watchman stopped");
 		});
 
-		test("text output shows 'No watchdog running' when no watchdog was running", async () => {
+		test("text output shows 'No watchman running' when no watchman was running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { stopSuccess: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["stop"], deps));
-			expect(output).toContain("No watchdog running");
+			expect(output).toContain("No watchman running");
 		});
 	});
 
-	describe("statusCoordinator watchdog state", () => {
-		test("includes watchdogRunning in JSON output when coordinator is running", async () => {
+	describe("statusCoordinator watchman state", () => {
+		test("includes watchmanRunning in JSON output when coordinator is running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { running: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["status", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdogRunning).toBe(true);
+			expect(parsed.watchmanRunning).toBe(true);
 		});
 
-		test("includes watchdogRunning:false in JSON output when watchdog is not running", async () => {
+		test("includes watchmanRunning:false in JSON output when watchman is not running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { running: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["status", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
-			expect(parsed.watchdogRunning).toBe(false);
+			expect(parsed.watchmanRunning).toBe(false);
 		});
 
-		test("text output shows watchdog status when coordinator is running", async () => {
+		test("text output shows watchman status when coordinator is running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { running: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["status"], deps));
-			expect(output).toContain("Watchdog:  running");
+			expect(output).toContain("Watchman:  running");
 		});
 
-		test("text output shows 'not running' when watchdog is not running", async () => {
+		test("text output shows 'not running' when watchman is not running", async () => {
 			const session = makeCoordinatorSession({ state: "working" });
 			saveSessionsToDb([session]);
 			const { deps } = makeDeps({ "legio-test-project-coordinator": true }, { running: false });
 
 			const output = await captureStdout(() => coordinatorCommand(["status"], deps));
-			expect(output).toContain("Watchdog:  not running");
+			expect(output).toContain("Watchman:  not running");
 		});
 
-		test("includes watchdogRunning in JSON output when coordinator is not running", async () => {
+		test("includes watchmanRunning in JSON output when coordinator is not running", async () => {
 			const { deps } = makeDeps({}, { running: true });
 
 			const output = await captureStdout(() => coordinatorCommand(["status", "--json"], deps));
 			const parsed = JSON.parse(output) as Record<string, unknown>;
 			expect(parsed.running).toBe(false);
-			expect(parsed.watchdogRunning).toBe(true);
+			expect(parsed.watchmanRunning).toBe(true);
 		});
 	});
 
 	describe("COORDINATOR_HELP", () => {
-		test("help text includes --watchdog flag", async () => {
+		test("help text includes --watchman flag", async () => {
 			const output = await captureStdout(() => coordinatorCommand(["--help"]));
-			expect(output).toContain("--watchdog");
-			expect(output).toContain("Auto-start watchdog daemon with coordinator");
+			expect(output).toContain("--watchman");
+			expect(output).toContain("Auto-start watchman daemon with coordinator");
 		});
 	});
 });

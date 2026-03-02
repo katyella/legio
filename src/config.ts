@@ -41,13 +41,17 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		aiResolveEnabled: true,
 		reimagineEnabled: false,
 	},
-	watchdog: {
+	watchman: {
 		tier0Enabled: true, // Tier 0: Mechanical daemon
 		tier0IntervalMs: 30_000,
 		tier1Enabled: false, // Tier 1: Triage agent (AI analysis)
 		tier2Enabled: false, // Tier 2: Monitor agent (not yet implemented)
 		zombieThresholdMs: 600_000, // 10 minutes
 		nudgeIntervalMs: 60_000, // 1 minute between progressive nudge stages
+		mailIntervalMs: 5_000,
+		reNudgeIntervalMs: 10_000,
+		warnAfterMs: 60_000,
+		beaconNudgeMs: 20_000,
 	},
 	models: {},
 	logging: {
@@ -283,29 +287,54 @@ function deepMerge(
 }
 
 /**
- * Migrate deprecated watchdog tier key names in a parsed config object.
+ * Migrate deprecated config key names in a parsed config object.
  *
- * Phase 4 renamed the watchdog tiers:
- *   - Old "tier1" (mechanical daemon) → New "tier0"
- *   - Old "tier2" (AI triage)         → New "tier1"
- *
- * Detection heuristic: if `tier0Enabled` is absent but `tier1Enabled` is present,
- * this is an old-style config. A new-style config would have `tier0Enabled`.
- *
- * If old key names are present and new key names are absent, this function
- * copies the values to the new keys, removes the old keys (to prevent collision
- * with the renamed tiers), and logs a deprecation warning.
+ * Handles two migrations:
+ * 1. `watchdog` → `watchman` (unified daemon rename)
+ * 2. `mailman` → folded into `watchman` (unified daemon)
+ * 3. Old tier key names within watchdog/watchman (Phase 4 tier renaming)
  *
  * Mutates the parsed config object in place.
  */
+let watchdogDeprecationWarned = false;
 function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
-	const watchdog = parsed.watchdog;
-	if (watchdog === null || watchdog === undefined || typeof watchdog !== "object") {
+	// Migration 1: `watchdog` → `watchman`
+	if ("watchdog" in parsed && !("watchman" in parsed)) {
+		parsed.watchman = parsed.watchdog;
+		delete parsed.watchdog;
+		if (!watchdogDeprecationWarned) {
+			watchdogDeprecationWarned = true;
+			process.stderr.write("[legio] DEPRECATED: config 'watchdog' key → use 'watchman'\n");
+		}
+	}
+
+	// Migration 2: fold `mailman` into `watchman`
+	if ("mailman" in parsed) {
+		const mailman = parsed.mailman;
+		if (mailman !== null && mailman !== undefined && typeof mailman === "object") {
+			const mm = mailman as Record<string, unknown>;
+			// Ensure watchman section exists
+			if (!parsed.watchman || typeof parsed.watchman !== "object") {
+				parsed.watchman = {};
+			}
+			const wm = parsed.watchman as Record<string, unknown>;
+			// Map mailman fields to watchman fields
+			if ("intervalMs" in mm) wm.mailIntervalMs = mm.intervalMs;
+			if ("reNudgeIntervalMs" in mm) wm.reNudgeIntervalMs = mm.reNudgeIntervalMs;
+			if ("warnAfterMs" in mm) wm.warnAfterMs = mm.warnAfterMs;
+		}
+		delete parsed.mailman;
+		process.stderr.write("[legio] DEPRECATED: config 'mailman' key → folded into 'watchman'\n");
+	}
+
+	const watchman = parsed.watchman;
+	if (watchman === null || watchman === undefined || typeof watchman !== "object") {
 		return;
 	}
 
-	const wd = watchdog as Record<string, unknown>;
+	const wd = watchman as Record<string, unknown>;
 
+	// Migration 3: old tier key names within watchman
 	// Detect old-style config: tier1Enabled present but tier0Enabled absent.
 	// In old naming, tier1 = mechanical daemon. In new naming, tier0 = mechanical daemon.
 	const isOldStyle = "tier1Enabled" in wd && !("tier0Enabled" in wd);
@@ -318,14 +347,14 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	// Old tier1Enabled → new tier0Enabled (mechanical daemon)
 	wd.tier0Enabled = wd.tier1Enabled;
 	wd.tier1Enabled = undefined;
-	process.stderr.write("[legio] DEPRECATED: watchdog.tier1Enabled → use watchdog.tier0Enabled\n");
+	process.stderr.write("[legio] DEPRECATED: watchman.tier1Enabled → use watchman.tier0Enabled\n");
 
 	// Old tier1IntervalMs → new tier0IntervalMs (mechanical daemon)
 	if ("tier1IntervalMs" in wd) {
 		wd.tier0IntervalMs = wd.tier1IntervalMs;
 		wd.tier1IntervalMs = undefined;
 		process.stderr.write(
-			"[legio] DEPRECATED: watchdog.tier1IntervalMs → use watchdog.tier0IntervalMs\n",
+			"[legio] DEPRECATED: watchman.tier1IntervalMs → use watchman.tier0IntervalMs\n",
 		);
 	}
 
@@ -333,7 +362,7 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	if ("tier2Enabled" in wd) {
 		wd.tier1Enabled = wd.tier2Enabled;
 		wd.tier2Enabled = undefined;
-		process.stderr.write("[legio] DEPRECATED: watchdog.tier2Enabled → use watchdog.tier1Enabled\n");
+		process.stderr.write("[legio] DEPRECATED: watchman.tier2Enabled → use watchman.tier1Enabled\n");
 	}
 }
 
@@ -385,25 +414,45 @@ function validateConfig(config: LegioConfig): void {
 		});
 	}
 
-	// watchdog intervals must be positive if enabled
-	if (config.watchdog.tier0Enabled && config.watchdog.tier0IntervalMs <= 0) {
-		throw new ValidationError("watchdog.tier0IntervalMs must be positive when tier0 is enabled", {
-			field: "watchdog.tier0IntervalMs",
-			value: config.watchdog.tier0IntervalMs,
+	// watchman intervals must be positive if enabled
+	if (config.watchman.tier0Enabled && config.watchman.tier0IntervalMs <= 0) {
+		throw new ValidationError("watchman.tier0IntervalMs must be positive when tier0 is enabled", {
+			field: "watchman.tier0IntervalMs",
+			value: config.watchman.tier0IntervalMs,
 		});
 	}
 
-	if (config.watchdog.nudgeIntervalMs <= 0) {
-		throw new ValidationError("watchdog.nudgeIntervalMs must be positive", {
-			field: "watchdog.nudgeIntervalMs",
-			value: config.watchdog.nudgeIntervalMs,
+	if (config.watchman.nudgeIntervalMs <= 0) {
+		throw new ValidationError("watchman.nudgeIntervalMs must be positive", {
+			field: "watchman.nudgeIntervalMs",
+			value: config.watchman.nudgeIntervalMs,
 		});
 	}
 
-	if (config.watchdog.zombieThresholdMs <= 0) {
-		throw new ValidationError("watchdog.zombieThresholdMs must be positive", {
-			field: "watchdog.zombieThresholdMs",
-			value: config.watchdog.zombieThresholdMs,
+	if (config.watchman.zombieThresholdMs <= 0) {
+		throw new ValidationError("watchman.zombieThresholdMs must be positive", {
+			field: "watchman.zombieThresholdMs",
+			value: config.watchman.zombieThresholdMs,
+		});
+	}
+
+	// watchman mail intervals must be positive
+	if (config.watchman.mailIntervalMs <= 0) {
+		throw new ValidationError("watchman.mailIntervalMs must be positive", {
+			field: "watchman.mailIntervalMs",
+			value: config.watchman.mailIntervalMs,
+		});
+	}
+	if (config.watchman.reNudgeIntervalMs <= 0) {
+		throw new ValidationError("watchman.reNudgeIntervalMs must be positive", {
+			field: "watchman.reNudgeIntervalMs",
+			value: config.watchman.reNudgeIntervalMs,
+		});
+	}
+	if (config.watchman.warnAfterMs <= 0) {
+		throw new ValidationError("watchman.warnAfterMs must be positive", {
+			field: "watchman.warnAfterMs",
+			value: config.watchman.warnAfterMs,
 		});
 	}
 

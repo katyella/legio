@@ -3,7 +3,7 @@
  *
  * Single command to cleanly stop the full legio stack:
  * 1. Stop coordinator (if running) via legio coordinator stop
- *    This also stops the watchdog and monitor agents.
+ *    This also stops the watchman and monitor agents.
  * 2. Stop gateway (if running) via legio gateway stop
  * 3. Stop server (if running) via legio server stop
  *
@@ -63,7 +63,7 @@ Options:
   --json         JSON output
   --help, -h     Show this help
 
-legio down stops the coordinator (including watchdog and monitor), the
+legio down stops the coordinator (including watchman and monitor), the
 gateway agent, and the server. Running legio down when nothing is running
 is a safe no-op.`;
 

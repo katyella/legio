@@ -564,7 +564,29 @@ export async function cleanCommand(args: string[]): Promise<void> {
 		result.specsCleared = await clearDirectory(join(legioDir, "specs"));
 	}
 
-	// 8. Delete nudge state + pending nudge markers + agent-busy markers + current-run.txt
+	// 8. Kill watchman daemon and remove PID file
+	if (all) {
+		const watchmanPidPath = join(legioDir, "watchman.pid");
+		if (await fileExists(watchmanPidPath)) {
+			try {
+				const { readFile: readFileFn } = await import("node:fs/promises");
+				const text = await readFileFn(watchmanPidPath, "utf-8");
+				const pid = Number.parseInt(text.trim(), 10);
+				if (!Number.isNaN(pid) && pid > 0) {
+					try {
+						process.kill(pid, "SIGTERM");
+					} catch {
+						// Process may already be dead
+					}
+				}
+			} catch {
+				// Non-fatal
+			}
+			await deleteFile(watchmanPidPath);
+		}
+	}
+
+	// 9. Delete nudge state + pending nudge markers + agent-busy markers + current-run.txt
 	if (all) {
 		result.nudgeStateCleared = await deleteFile(join(legioDir, "nudge-state.json"));
 		await deleteFile(join(legioDir, "mail-check-state.json")); // legacy debounce state

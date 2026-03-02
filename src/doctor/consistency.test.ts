@@ -92,13 +92,17 @@ describe("checkConsistency", () => {
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
 			},
-			watchdog: {
+			watchman: {
 				tier0Enabled: false,
 				tier0IntervalMs: 30000,
 				tier1Enabled: false,
 				tier2Enabled: false,
 				zombieThresholdMs: 300000,
 				nudgeIntervalMs: 30000,
+				mailIntervalMs: 5_000,
+				reNudgeIntervalMs: 10_000,
+				warnAfterMs: 60_000,
+				beaconNudgeMs: 20_000,
 			},
 			models: {},
 			logging: {

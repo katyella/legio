@@ -24,7 +24,7 @@ import { HeadlessCoordinator } from "../server/headless.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore, type SessionStore } from "../sessions/store.ts";
 import type { AgentSession, HeadlessCoordinatorConfig } from "../types.ts";
-import { isProcessRunning } from "../watchdog/health.ts";
+import { isProcessRunning } from "../watchman/health.ts";
 import {
 	createSession,
 	isSessionAlive,
@@ -113,7 +113,7 @@ export interface CoordinatorDeps {
 			opts?: { timeout?: number; interval?: number },
 		) => Promise<void>;
 	};
-	_watchdog?: {
+	_watchman?: {
 		start: () => Promise<{ pid: number } | null>;
 		stop: () => Promise<boolean>;
 		isRunning: () => Promise<boolean>;
@@ -130,11 +130,11 @@ export interface CoordinatorDeps {
 }
 
 /**
- * Read the PID from the watchdog PID file.
+ * Read the PID from the watchman PID file.
  * Returns null if the file doesn't exist or can't be parsed.
  */
-async function readWatchdogPid(projectRoot: string): Promise<number | null> {
-	const pidFilePath = join(projectRoot, ".legio", "watchdog.pid");
+async function readWatchmanPid(projectRoot: string): Promise<number | null> {
+	const pidFilePath = join(projectRoot, ".legio", "watchman.pid");
 	if (!(await fileExists(pidFilePath))) {
 		return null;
 	}
@@ -152,10 +152,10 @@ async function readWatchdogPid(projectRoot: string): Promise<number | null> {
 }
 
 /**
- * Remove the watchdog PID file.
+ * Remove the watchman PID file.
  */
-async function removeWatchdogPid(projectRoot: string): Promise<void> {
-	const pidFilePath = join(projectRoot, ".legio", "watchdog.pid");
+async function removeWatchmanPid(projectRoot: string): Promise<void> {
+	const pidFilePath = join(projectRoot, ".legio", "watchman.pid");
 	try {
 		await unlink(pidFilePath);
 	} catch {
@@ -164,25 +164,25 @@ async function removeWatchdogPid(projectRoot: string): Promise<void> {
 }
 
 /**
- * Default watchdog implementation for production use.
- * Starts/stops the watchdog daemon via `legio watch --background`.
+ * Default watchman implementation for production use.
+ * Starts/stops the watchman daemon via `legio watchman start --background`.
  */
-function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps["_watchdog"]> {
+function createDefaultWatchman(projectRoot: string): NonNullable<CoordinatorDeps["_watchman"]> {
 	return {
 		async start(): Promise<{ pid: number } | null> {
-			// Check if watchdog is already running
-			const existingPid = await readWatchdogPid(projectRoot);
+			// Check if watchman is already running
+			const existingPid = await readWatchmanPid(projectRoot);
 			if (existingPid !== null && isProcessRunning(existingPid)) {
 				return null; // Already running
 			}
 
 			// Clean up stale PID file
 			if (existingPid !== null) {
-				await removeWatchdogPid(projectRoot);
+				await removeWatchmanPid(projectRoot);
 			}
 
-			// Start watchdog in background
-			const { exitCode } = await runProcess(["legio", "watch", "--background"], {
+			// Start watchman in background
+			const { exitCode } = await runProcess(["legio", "watchman", "start", "--background"], {
 				cwd: projectRoot,
 			});
 			if (exitCode !== 0) {
@@ -190,7 +190,7 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 			}
 
 			// Read the PID file that was written by the background process
-			const pid = await readWatchdogPid(projectRoot);
+			const pid = await readWatchmanPid(projectRoot);
 			if (pid === null) {
 				return null; // PID file wasn't created
 			}
@@ -199,7 +199,7 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 		},
 
 		async stop(): Promise<boolean> {
-			const pid = await readWatchdogPid(projectRoot);
+			const pid = await readWatchmanPid(projectRoot);
 			if (pid === null) {
 				return false; // No PID file
 			}
@@ -207,7 +207,7 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 			// Check if process is running
 			if (!isProcessRunning(pid)) {
 				// Process is dead, clean up PID file
-				await removeWatchdogPid(projectRoot);
+				await removeWatchmanPid(projectRoot);
 				return false;
 			}
 
@@ -219,12 +219,12 @@ function createDefaultWatchdog(projectRoot: string): NonNullable<CoordinatorDeps
 			}
 
 			// Remove PID file
-			await removeWatchdogPid(projectRoot);
+			await removeWatchmanPid(projectRoot);
 			return true;
 		},
 
 		async isRunning(): Promise<boolean> {
-			const pid = await readWatchdogPid(projectRoot);
+			const pid = await readWatchmanPid(projectRoot);
 			if (pid === null) {
 				return false;
 			}
@@ -372,13 +372,13 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 
 	const json = args.includes("--json");
 	const shouldAttach = resolveAttach(args, !!process.stdout.isTTY);
-	const watchdogFlag = args.includes("--watchdog");
+	const watchmanFlag = args.includes("--watchman") || args.includes("--watchdog");
 	const monitorFlag = args.includes("--monitor");
 	const headlessFlag = args.includes("--headless");
 	const cwd = process.cwd();
 	const config = await loadConfig(cwd);
 	const projectRoot = config.project.root;
-	const watchdog = deps._watchdog ?? createDefaultWatchdog(projectRoot);
+	const watchman = deps._watchman ?? createDefaultWatchman(projectRoot);
 	const monitor = deps._monitor ?? createDefaultMonitor(projectRoot);
 	const tmuxSession = coordinatorTmuxSession(config.project.name);
 
@@ -573,7 +573,7 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 			tmuxSession,
 			projectRoot,
 			pid,
-			watchdog: false,
+			watchman: false,
 			monitor: false,
 		};
 
@@ -604,13 +604,13 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 		// Must complete before the finally block closes the store.
 		await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
 
-		// Auto-start watchdog if --watchdog flag is present
-		if (watchdogFlag) {
-			const watchdogResult = await watchdog.start();
-			if (watchdogResult) {
-				if (!json) process.stdout.write(`  Watchdog: started (PID ${watchdogResult.pid})\n`);
+		// Auto-start watchman if --watchman/--watchdog flag is present
+		if (watchmanFlag) {
+			const watchmanResult = await watchman.start();
+			if (watchmanResult) {
+				if (!json) process.stdout.write(`  Watchman: started (PID ${watchmanResult.pid})\n`);
 			} else {
-				if (!json) process.stderr.write("  Watchdog: failed to start or already running\n");
+				if (!json) process.stderr.write("  Watchman: failed to start or already running\n");
 			}
 		}
 
@@ -649,7 +649,7 @@ async function stopCoordinator(args: string[], deps: CoordinatorDeps = {}): Prom
 	const cwd = process.cwd();
 	const config = await loadConfig(cwd);
 	const projectRoot = config.project.root;
-	const watchdog = deps._watchdog ?? createDefaultWatchdog(projectRoot);
+	const watchman = deps._watchman ?? createDefaultWatchman(projectRoot);
 	const monitor = deps._monitor ?? createDefaultMonitor(projectRoot);
 
 	const legioDir = join(projectRoot, ".legio");
@@ -706,8 +706,8 @@ async function stopCoordinator(args: string[], deps: CoordinatorDeps = {}): Prom
 			}
 		}
 
-		// Always attempt to stop watchdog
-		const watchdogStopped = await watchdog.stop();
+		// Always attempt to stop watchman
+		const watchmanStopped = await watchman.stop();
 
 		// Always attempt to stop monitor
 		const monitorStopped = await monitor.stop();
@@ -743,14 +743,14 @@ async function stopCoordinator(args: string[], deps: CoordinatorDeps = {}): Prom
 
 		if (json) {
 			process.stdout.write(
-				`${JSON.stringify({ stopped: true, sessionId: session.id, watchdogStopped, monitorStopped, runCompleted })}\n`,
+				`${JSON.stringify({ stopped: true, sessionId: session.id, watchmanStopped, monitorStopped, runCompleted })}\n`,
 			);
 		} else {
 			process.stdout.write(`Coordinator stopped (session: ${session.id})\n`);
-			if (watchdogStopped) {
-				process.stdout.write("Watchdog stopped\n");
+			if (watchmanStopped) {
+				process.stdout.write("Watchman stopped\n");
 			} else {
-				process.stdout.write("No watchdog running\n");
+				process.stdout.write("No watchman running\n");
 			}
 			if (monitorStopped) {
 				process.stdout.write("Monitor stopped\n");
@@ -780,14 +780,14 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 	const cwd = process.cwd();
 	const config = await loadConfig(cwd);
 	const projectRoot = config.project.root;
-	const watchdog = deps._watchdog ?? createDefaultWatchdog(projectRoot);
+	const watchman = deps._watchman ?? createDefaultWatchman(projectRoot);
 	const monitor = deps._monitor ?? createDefaultMonitor(projectRoot);
 
 	const legioDir = join(projectRoot, ".legio");
 	const { store } = openSessionStore(legioDir);
 	try {
 		const session = store.getByName(COORDINATOR_NAME);
-		const watchdogRunning = await watchdog.isRunning();
+		const watchmanRunning = await watchman.isRunning();
 		const monitorRunning = await monitor.isRunning();
 
 		if (
@@ -798,12 +798,12 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 		) {
 			if (json) {
 				process.stdout.write(
-					`${JSON.stringify({ running: false, watchdogRunning, monitorRunning })}\n`,
+					`${JSON.stringify({ running: false, watchmanRunning, monitorRunning })}\n`,
 				);
 			} else {
 				process.stdout.write("Coordinator is not running\n");
-				if (watchdogRunning) {
-					process.stdout.write("Watchdog: running\n");
+				if (watchmanRunning) {
+					process.stdout.write("Watchman: running\n");
 				}
 				if (monitorRunning) {
 					process.stdout.write("Monitor: running\n");
@@ -838,7 +838,7 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 			pid: session.pid,
 			startedAt: session.startedAt,
 			lastActivity: session.lastActivity,
-			watchdogRunning,
+			watchmanRunning,
 			monitorRunning,
 		};
 
@@ -852,7 +852,7 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 			process.stdout.write(`  PID:       ${session.pid}\n`);
 			process.stdout.write(`  Started:   ${session.startedAt}\n`);
 			process.stdout.write(`  Activity:  ${session.lastActivity}\n`);
-			process.stdout.write(`  Watchdog:  ${watchdogRunning ? "running" : "not running"}\n`);
+			process.stdout.write(`  Watchman:  ${watchmanRunning ? "running" : "not running"}\n`);
 			process.stdout.write(`  Monitor:   ${monitorRunning ? "running" : "not running"}\n`);
 		}
 	} finally {
@@ -874,7 +874,8 @@ Start options:
   --no-attach              Never attach to tmux session after start
                            Default: attach when running in an interactive TTY
   --headless               Start without tmux — use PTY subprocess (no terminal UI)
-  --watchdog               Auto-start watchdog daemon with coordinator
+  --watchman               Auto-start watchman daemon with coordinator
+  --watchdog               Alias for --watchman
   --monitor                Auto-start monitor agent (Tier 2) with coordinator
 
 General options:
@@ -885,7 +886,7 @@ The coordinator runs at the project root and orchestrates work by:
   - Decomposing objectives into beads issues
   - Dispatching agents via legio sling
   - Tracking batches via task groups
-  - Handling escalations from agents and watchdog`;
+  - Handling escalations from agents and watchman`;
 
 /**
  * Entry point for `legio coordinator <subcommand>`.

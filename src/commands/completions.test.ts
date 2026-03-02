@@ -30,7 +30,7 @@ describe("COMMANDS array", () => {
 		expect(names).toContain("clean");
 		expect(names).toContain("doctor");
 		expect(names).toContain("log");
-		expect(names).toContain("watch");
+		expect(names).toContain("watchman");
 		expect(names).toContain("trace");
 		expect(names).toContain("errors");
 		expect(names).toContain("replay");

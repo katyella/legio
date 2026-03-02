@@ -16,7 +16,7 @@ import { spawn } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ServerError, ValidationError } from "../errors.ts";
-import { isProcessRunning } from "../watchdog/health.ts";
+import { isProcessRunning } from "../watchman/health.ts";
 
 function getFlag(args: string[], flag: string): string | undefined {
 	const idx = args.indexOf(flag);

@@ -51,13 +51,17 @@ export interface LegioConfig {
 		aiResolveEnabled: boolean;
 		reimagineEnabled: boolean;
 	};
-	watchdog: {
+	watchman: {
 		tier0Enabled: boolean; // Tier 0: Mechanical daemon (heartbeat, tmux/pid liveness)
 		tier0IntervalMs: number; // Default 30_000
 		tier1Enabled: boolean; // Tier 1: Triage agent (ephemeral AI analysis)
 		tier2Enabled: boolean; // Tier 2: Monitor agent (continuous patrol — not yet implemented)
 		zombieThresholdMs: number; // When to kill
 		nudgeIntervalMs: number; // Time between progressive nudge stages (default 60_000)
+		mailIntervalMs: number; // Mail polling interval (default 5_000)
+		reNudgeIntervalMs: number; // Time between re-nudges for the same agent (default 10_000)
+		warnAfterMs: number; // Warn after unread mail sits this long (default 60_000)
+		beaconNudgeMs: number; // Time before sending follow-up Enter to stuck beacon (default 20_000)
 	};
 	models: Partial<Record<string, ModelAlias>>;
 	logging: {

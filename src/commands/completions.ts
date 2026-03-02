@@ -213,12 +213,31 @@ export const COMMANDS: readonly CommandDef[] = [
 		],
 	},
 	{
-		name: "watch",
-		desc: "Start watchdog daemon",
+		name: "watchman",
+		desc: "Unified daemon — health + mail + beacon",
 		flags: [
-			{ name: "--interval", desc: "Check interval in ms", takesValue: true },
-			{ name: "--background", desc: "Run in background" },
+			{ name: "--json", desc: "JSON output" },
 			{ name: "--help", desc: "Show help" },
+		],
+		subcommands: [
+			{
+				name: "start",
+				desc: "Start the watchman daemon",
+				flags: [
+					{ name: "--background", desc: "Run in background" },
+					{ name: "--interval", desc: "Health check interval in ms", takesValue: true },
+				],
+			},
+			{
+				name: "stop",
+				desc: "Stop the watchman daemon",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "status",
+				desc: "Show watchman status",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
 		],
 	},
 	{
@@ -342,7 +361,7 @@ export const COMMANDS: readonly CommandDef[] = [
 				flags: [
 					{ name: "--attach", desc: "Attach to tmux session" },
 					{ name: "--no-attach", desc: "Do not attach to tmux session" },
-					{ name: "--watchdog", desc: "Auto-start watchdog daemon" },
+					{ name: "--watchman", desc: "Auto-start watchman daemon" },
 					{ name: "--json", desc: "JSON output" },
 				],
 			},
@@ -680,7 +699,7 @@ export function generateBash(): string {
 		"  local cur prev words cword",
 		"  _init_completion || return",
 		"",
-		"  local commands='init sling prime status dashboard inspect merge nudge clean doctor log logs watch trace errors feed replay costs metrics spec coordinator supervisor hooks monitor mail group worktree run'",
+		"  local commands='init sling prime status dashboard inspect merge nudge clean doctor log logs watchman trace errors feed replay costs metrics spec coordinator supervisor hooks monitor mail group worktree run'",
 		"",
 		"  # Top-level completion",
 		"  if [[ $cword -eq 1 ]]; then",

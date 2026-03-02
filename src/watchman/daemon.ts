@@ -1,9 +1,10 @@
 /**
- * Tier 0 mechanical process monitoring daemon.
+ * Unified daemon ("Watchman") — health monitoring + mail delivery + beacon safety net.
  *
- * Runs on a configurable interval, checking the health of all active agent
- * sessions. Detects zombie agents (dead tmux or process) and attempts
- * auto-recovery from checkpoints.
+ * Combines three responsibilities into a single process:
+ *   1. Health tick (default 30s): session health checks, zombie detection, boot timeout, recovery
+ *   2. Mail tick (default 5s): poll for unread mail, nudge agents
+ *   3. Beacon safety net (inside health tick): detect stuck beacons and send follow-up Enter
  *
  * Phase 4 tier numbering:
  *   Tier 0 = Mechanical daemon (this file)
@@ -19,12 +20,15 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadCheckpoint } from "../agents/checkpoint.ts";
+import { nudgeAgent } from "../commands/nudge.ts";
 import { loadConfig } from "../config.ts";
 import { createEventStore } from "../events/store.ts";
+import { isAgentIdle, writePendingNudge } from "../mail/pending.ts";
+import { createMailStore, type MailStore } from "../mail/store.ts";
 import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession, EventStore, HealthCheck, SessionCheckpoint } from "../types.ts";
-import { isSessionAlive, killSession } from "../worktree/tmux.ts";
+import { capturePaneContent, isSessionAlive, killSession, sendKeys } from "../worktree/tmux.ts";
 import { evaluateHealth, transitionState } from "./health.ts";
 
 /**
@@ -230,7 +234,7 @@ async function attemptRecovery(options: {
 					"--priority",
 					"high",
 					"--from",
-					"watchdog",
+					"watchman",
 				]);
 			} catch {
 				// Fire-and-forget: mail failure must not break the watchdog
@@ -266,11 +270,11 @@ async function attemptRecovery(options: {
 				"--subject",
 				`Recovery: ${session.agentName}`,
 				"--body",
-				`Watchdog attempting auto-recovery from checkpoint for ${session.agentName} (attempt ${attempt}/${maxRecoveryAttempts}).`,
+				`Watchman attempting auto-recovery from checkpoint for ${session.agentName} (attempt ${attempt}/${maxRecoveryAttempts}).`,
 				"--type",
 				"health_check",
 				"--from",
-				"watchdog",
+				"watchman",
 			]);
 		} catch {
 			// Fire-and-forget: mail failure must not break the watchdog
@@ -361,8 +365,18 @@ async function listTmuxSessions(prefix: string): Promise<string[]> {
 	});
 }
 
-/** Options shared between startDaemon and runDaemonTick. */
-export interface DaemonOptions {
+/** Activity markers that indicate an agent is actively working (not stuck at prompt). */
+const ACTIVITY_MARKERS = ["⏺", "Claude", "Reading", "Searching", "Editing", "Writing"];
+
+/** Per-agent tracking state for unread mail delivery. */
+export interface AgentMailState {
+	firstSeenAt: number;
+	lastNudgeAt: number;
+	nudgeCount: number;
+}
+
+/** Options shared between startDaemon and runDaemonTick / runMailTick. */
+export interface WatchmanOptions {
 	root: string;
 	zombieThresholdMs: number;
 	onHealthCheck?: (check: HealthCheck) => void;
@@ -399,54 +413,97 @@ export interface DaemonOptions {
 	_listTmuxSessions?: (prefix: string) => Promise<string[]>;
 	/** DI for testing. Overrides project name lookup (bypasses loadConfig). */
 	_projectName?: string;
+
+	// --- Mail delivery fields ---
+
+	/** Mail polling interval in ms (default 5_000). */
+	mailIntervalMs?: number;
+	/** Time between re-nudges for the same agent (default 10_000). */
+	reNudgeIntervalMs?: number;
+	/** Warn after unread mail sits this long (default 60_000). */
+	warnAfterMs?: number;
+	/** Beacon nudge threshold in ms (default 20_000). */
+	beaconNudgeMs?: number;
+	/** Callback when an agent is nudged for unread mail. */
+	onNudge?: (agentName: string, nudgeCount: number) => void;
+	/** Callback when an agent has had unread mail for too long. */
+	onWarn?: (agentName: string, unreadSinceMs: number) => void;
+	/** DI for testing. Overrides MailStore creation. */
+	_mailStore?: MailStore;
+	/** DI for testing. Overrides nudge delivery. */
+	_nudge?: (
+		projectRoot: string,
+		agentName: string,
+		message: string,
+		force: boolean,
+	) => Promise<{ delivered: boolean; reason?: string }>;
+	/** DI for testing. Overrides isAgentIdle check. */
+	_isAgentIdle?: (cwd: string, agentName: string) => Promise<boolean>;
+	/** DI for testing. Overrides writePendingNudge. */
+	_writePendingNudge?: (
+		cwd: string,
+		agentName: string,
+		nudge: { from: string; reason: string; subject: string; messageId: string },
+	) => Promise<void>;
+	/** DI for testing. Overrides capturePaneContent. */
+	_capturePaneContent?: (sessionName: string) => Promise<string>;
+	/** DI for testing. Overrides sendKeys. */
+	_sendKeys?: (sessionName: string, keys: string) => Promise<void>;
 }
 
 /**
- * Start the watchdog daemon that periodically monitors agent health.
+ * Start the unified watchman daemon that monitors agent health and delivers mail.
  *
- * On each tick:
- * 1. Loads sessions from SessionStore (sessions.db)
- * 2. For each session (including zombies — ZFC requires re-checking observable
- *    state), checks tmux liveness and evaluates health
- * 3. For "terminate" actions: kills tmux session immediately
- * 4. For "investigate" actions: surfaces via onHealthCheck, no auto-kill
- * 5. For "escalate" actions: applies progressive nudging based on escalationLevel
- * 6. Persists updated session states back to SessionStore
+ * Two independent intervals within the same process:
+ *   - Health tick: session health checks, zombie detection, beacon stuck detection
+ *   - Mail tick: poll for unread mail and nudge agents
  *
- * @param options.root - Project root directory (contains .legio/)
- * @param options.intervalMs - Polling interval in milliseconds
- * @param options.zombieThresholdMs - Time after which an agent is considered a zombie
- * @param options.onHealthCheck - Optional callback for each health check result
- * @returns An object with a `stop` function to halt the daemon
+ * @returns An object with a `stop` function to halt both intervals
  */
-export function startDaemon(options: DaemonOptions & { intervalMs: number }): { stop: () => void } {
+export function startDaemon(options: WatchmanOptions & { intervalMs: number }): {
+	stop: () => void;
+} {
 	const { intervalMs } = options;
+	const mailIntervalMs = options.mailIntervalMs ?? 5_000;
+	const mailState = new Map<string, AgentMailState>();
 
-	// Run the first tick immediately, then on interval
+	// Run the first health tick immediately, then on interval
 	runDaemonTick(options).catch(() => {
 		// Swallow errors in the first tick — daemon must not crash
 	});
 
-	const interval = setInterval(() => {
+	const healthInterval = setInterval(() => {
 		runDaemonTick(options).catch(() => {
 			// Swallow errors in periodic ticks — daemon must not crash
 		});
 	}, intervalMs);
 
+	// Run the first mail tick immediately, then on interval
+	runMailTick(options, mailState).catch(() => {
+		// Swallow errors in the first tick — daemon must not crash
+	});
+
+	const mailInterval = setInterval(() => {
+		runMailTick(options, mailState).catch(() => {
+			// Swallow errors in periodic ticks — daemon must not crash
+		});
+	}, mailIntervalMs);
+
 	return {
 		stop(): void {
-			clearInterval(interval);
+			clearInterval(healthInterval);
+			clearInterval(mailInterval);
 		},
 	};
 }
 
 /**
- * Run a single daemon tick. Exported for testing — allows direct invocation
+ * Run a single health daemon tick. Exported for testing — allows direct invocation
  * of the monitoring logic without starting the interval-based daemon loop.
  *
  * @param options - Same options as startDaemon (minus intervalMs)
  */
-export async function runDaemonTick(options: DaemonOptions): Promise<void> {
+export async function runDaemonTick(options: WatchmanOptions): Promise<void> {
 	const { root, zombieThresholdMs, onHealthCheck } = options;
 	const tmux = options._tmux ?? { isSessionAlive, killSession };
 	const recordFailureFn = options._recordFailure ?? recordFailure;
@@ -455,6 +512,9 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 	const loadCheckpointFn = options._loadCheckpoint ?? loadCheckpoint;
 	const sendRecoveryMailFn =
 		options._sendRecoveryMail ?? ((args: string[]) => sendMailSubprocess(args, root));
+	const beaconNudgeMs = options.beaconNudgeMs ?? 20_000;
+	const capturePaneFn = options._capturePaneContent ?? capturePaneContent;
+	const sendKeysFn = options._sendKeys ?? sendKeys;
 
 	const legioDir = join(root, ".legio");
 	const { store } = openSessionStore(legioDir);
@@ -504,6 +564,33 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 			if (session.state === "booting" && tmuxAlive) {
 				const bootElapsed = Date.now() - new Date(session.startedAt).getTime();
 				const bootTimeoutMs = options.bootTimeoutMs ?? 90_000;
+
+				// Beacon safety net: if the agent has been booting longer than
+				// beaconNudgeMs but less than bootTimeoutMs, check if the beacon
+				// is stuck in the tmux input buffer and send a follow-up Enter.
+				if (bootElapsed > beaconNudgeMs && bootElapsed <= bootTimeoutMs) {
+					try {
+						const paneContent = await capturePaneFn(session.tmuxSession);
+						const hasActivity = ACTIVITY_MARKERS.some((marker) => paneContent.includes(marker));
+						if (!hasActivity && paneContent.trim().length > 0) {
+							await sendKeysFn(session.tmuxSession, "");
+							recordEvent(eventStore, {
+								runId,
+								agentName: session.agentName,
+								eventType: "custom",
+								level: "info",
+								data: {
+									type: "beacon_nudge",
+									bootElapsedMs: bootElapsed,
+									beaconNudgeMs,
+								},
+							});
+						}
+					} catch {
+						// Non-fatal: beacon nudge failure must not break the daemon
+					}
+				}
+
 				if (bootElapsed > bootTimeoutMs) {
 					const notifyTarget = session.parentAgent ?? "coordinator";
 					try {
@@ -519,7 +606,7 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 							"--priority",
 							"urgent",
 							"--from",
-							"watchdog",
+							"watchman",
 						]);
 					} catch {
 						// Fire-and-forget: mail failure must not break the watchdog
@@ -665,7 +752,7 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 								"--priority",
 								"urgent",
 								"--from",
-								"watchdog",
+								"watchman",
 							]);
 						} catch {
 							// Fire-and-forget: mail failure must not break the watchdog
@@ -698,6 +785,119 @@ export async function runDaemonTick(options: DaemonOptions): Promise<void> {
 			} catch {
 				// Non-fatal
 			}
+		}
+	}
+}
+
+/**
+ * Run a single mail delivery tick. Exported for testing.
+ *
+ * Each tick:
+ * 1. Opens mail.db and queries agents with unread mail
+ * 2. For each agent with unread mail, checks idle state and nudges
+ * 3. Writes pending-nudge marker as fallback
+ * 4. Escalation: first nudge immediately, re-nudge every reNudgeIntervalMs
+ * 5. Warns after warnAfterMs of unread mail
+ * 6. Clears state entry when agent's unread count drops to 0
+ */
+export async function runMailTick(
+	options: WatchmanOptions,
+	state: Map<string, AgentMailState>,
+): Promise<void> {
+	const { root, onNudge, onWarn } = options;
+	const reNudgeIntervalMs = options.reNudgeIntervalMs ?? 10_000;
+	const warnAfterMs = options.warnAfterMs ?? 60_000;
+	const nudgeFn = options._nudge ?? nudgeAgent;
+	const isIdleFn = options._isAgentIdle ?? isAgentIdle;
+	const writePendingNudgeFn = options._writePendingNudge ?? writePendingNudge;
+
+	// Open mail store
+	let store: MailStore;
+	const useInjectedStore = options._mailStore !== undefined;
+	if (useInjectedStore) {
+		store = options._mailStore as MailStore;
+	} else {
+		const dbPath = join(root, ".legio", "mail.db");
+		store = createMailStore(dbPath);
+	}
+
+	try {
+		const agentsWithUnread = store.getAgentsWithUnread();
+		const agentSet = new Set(agentsWithUnread);
+
+		// Clear state for agents that no longer have unread mail
+		for (const [agentName] of state) {
+			if (!agentSet.has(agentName)) {
+				state.delete(agentName);
+			}
+		}
+
+		const now = Date.now();
+
+		for (const agentName of agentsWithUnread) {
+			let agentState = state.get(agentName);
+
+			if (!agentState) {
+				// First time seeing unread mail for this agent — nudge immediately
+				agentState = {
+					firstSeenAt: now,
+					lastNudgeAt: 0,
+					nudgeCount: 0,
+				};
+				state.set(agentName, agentState);
+			}
+
+			// Check if it's time to re-nudge
+			const timeSinceLastNudge = now - agentState.lastNudgeAt;
+			const shouldNudge = agentState.nudgeCount === 0 || timeSinceLastNudge >= reNudgeIntervalMs;
+
+			if (shouldNudge) {
+				// Write pending-nudge marker as fallback (always)
+				try {
+					await writePendingNudgeFn(root, agentName, {
+						from: "watchman",
+						reason: "unread mail",
+						subject: "You have unread mail",
+						messageId: "",
+					});
+				} catch {
+					// Non-fatal: pending marker write failure
+				}
+
+				// If agent is idle, also deliver direct tmux nudge
+				try {
+					const idle = await isIdleFn(root, agentName);
+					if (idle) {
+						await nudgeFn(
+							root,
+							agentName,
+							"[watchman] You have unread mail. Run: legio mail check",
+							true, // force — skip debounce
+						).catch(() => {
+							// Non-fatal: nudge failure
+						});
+					}
+				} catch {
+					// Non-fatal: idle check or nudge failure
+				}
+
+				agentState.lastNudgeAt = now;
+				agentState.nudgeCount++;
+
+				if (onNudge) {
+					onNudge(agentName, agentState.nudgeCount);
+				}
+			}
+
+			// Warn if unread mail has been sitting too long
+			const unreadDuration = now - agentState.firstSeenAt;
+			if (unreadDuration >= warnAfterMs && onWarn) {
+				onWarn(agentName, unreadDuration);
+			}
+		}
+	} finally {
+		if (!useInjectedStore) {
+			store.close();
 		}
 	}
 }

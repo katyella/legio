@@ -15,7 +15,7 @@ export interface ServerOptions {
 	host: string;
 	root: string; // Project root directory
 	shouldOpen?: boolean; // Auto-open browser
-	autoStartCoordinator?: boolean; // Auto-start coordinator with --watchdog on server start
+	autoStartCoordinator?: boolean; // Auto-start coordinator with --watchman on server start
 }
 
 /** Dependency injection for testing. */
@@ -97,7 +97,7 @@ async function tryStartCoordinator(root: string): Promise<void> {
 	}
 
 	// Start coordinator detached so the server doesn't wait on it
-	const startProc = spawn("legio", ["coordinator", "start", "--watchdog", "--no-attach"], {
+	const startProc = spawn("legio", ["coordinator", "start", "--watchman", "--no-attach"], {
 		cwd: root,
 		detached: true,
 		stdio: "ignore",

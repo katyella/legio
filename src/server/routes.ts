@@ -703,7 +703,7 @@ export async function handleApiRequest(
 		}
 
 		const args = ["coordinator", "start", "--no-attach", "--json"];
-		if (parsed.watchdog === true) args.push("--watchdog");
+		if (parsed.watchdog === true) args.push("--watchman");
 		if (parsed.monitor === true) args.push("--monitor");
 		const result = await runLegio(args, projectRoot);
 		if (result.ok) {
