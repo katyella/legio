@@ -21,6 +21,10 @@ When you open Claude Code in a project with `.legio/` initialized:
 2. `UserPromptSubmit` hook runs `legio mail check --inject` (surfaces new messages from agents)
 3. You use the `legio` CLI via Bash tool to spawn agents, check status, merge work
 
+### Full-Stack Management
+
+`legio up` starts the complete stack in one command: runs `legio init` (if needed), starts the web UI server, and launches the coordinator agent. `legio down` tears everything down: stops the coordinator, gateway, and web server. These commands simplify the most common workflow of starting and stopping a legio session.
+
 ### Agent Definitions: Library Base + Dynamic Overlay
 
 Each agent gets two instruction layers:
@@ -30,26 +34,39 @@ Each agent gets two instruction layers:
 
 The orchestrator (or a team lead) only passes WHAT. The base definition already has HOW.
 
+Agent definitions use template variables that are resolved at spawn time by the overlay generator (`src/agents/overlay.ts`). Key variables include `{{TRACKER_CLI}}` (resolves to `bd` or `sd` depending on the configured issue tracker backend) and `{{TRACKER_NAME}}` (resolves to `beads` or `seeds`). These allow agent definitions to remain tracker-agnostic.
+
 ### Hierarchical Delegation
 
 ```
 Orchestrator (your Claude Code session)
-  --> Team Lead (Claude Code in tmux, can spawn sub-workers)
-        --> Specialist Workers (Claude Code in tmux, leaf nodes)
+  --> Coordinator (depth 0, persistent, spawns leads)
+  --> Gateway (depth 0, read-only planning companion)
+  --> CTO (depth 0, read-only strategic analyst)
+  --> Monitor (depth 0, Tier 2 fleet patrol, no worktree)
+  --> Team Lead (depth 1, can spawn sub-workers)
+        --> Builder (depth 2, implementation, leaf node)
+        --> Scout (depth 2, read-only exploration, leaf node)
+        --> Reviewer (depth 2, read-only validation, leaf node)
+        --> Merger (depth 2, branch merge specialist, leaf node)
+  --> Supervisor (depth 1, per-project, can spawn sub-workers)
+        --> (same leaf workers as Team Lead)
 ```
 
 Depth limit is configurable (default 2). Prevents runaway spawning.
 
 ### Messaging: Custom SQLite Mail
 
-Purpose-built messaging via `` in `.legio/mail.db`. WAL mode for concurrent access from multiple agents. ~1-5ms per query. Independent of beads (which is too slow for high-frequency polling).
+Purpose-built messaging via `messages` table in `.legio/mail.db`. WAL mode for concurrent access from multiple agents. ~1-5ms per query. Independent of beads (which is too slow for high-frequency polling).
+
+The core coordination protocol flows through these message types: (1) `dispatch` -- coordinator/lead assigns work to an agent. (2) `worker_done` -- agent signals task completion to its parent. (3) `merge_ready` -- lead signals a reviewed branch is ready for merge. (4) `merged` / `merge_failed` -- coordinator reports merge outcome back to the lead.
 
 ## Directory Structure
 
 ```
 legio/                        # This repo (the legio tool itself)
   src/
-    index.ts                      # CLI entry point (command router, 34 commands)
+    index.ts                      # CLI entry point (command router, 35 commands)
     types.ts                      # ALL shared types and interfaces
     config.ts                     # Config loader + defaults + validation
     errors.ts                     # Custom error types (extend LegioError)
@@ -193,9 +210,8 @@ target-project/
 
 ### Dependencies
 
-
+- **Zero runtime npm dependencies.** Legio has no production `dependencies` in `package.json` — only `devDependencies` for types and tooling
 - External tools (`bd`, `sd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports
-- Dev dependencies are limited to types and tooling
 
 ### File Organization
 
@@ -551,6 +567,8 @@ npm run test:unit                     # Unit tests pass (fast)
 npm run lint                          # Linting + formatting clean
 npm run typecheck                     # Type checking passes
 ```
+
+Agent overlays inherit quality gate commands from `config.yaml` (key: `qualityGates`). The overlay generator defaults to `npm test` and `npm run lint` when not configured.
 
 ## Session Completion Protocol
 
