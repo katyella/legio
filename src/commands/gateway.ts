@@ -21,9 +21,9 @@ import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
+import type { SessionStore } from "../sessions/store.ts";
 import type { AgentSession } from "../types.ts";
 import {
-	capturePaneContent,
 	createSession,
 	isSessionAlive,
 	killSession,
@@ -70,7 +70,6 @@ export interface GatewayDeps {
 			sessionName: string,
 			opts?: { timeout?: number; interval?: number },
 		) => Promise<void>;
-		capturePaneContent?: (name: string) => Promise<string>;
 	};
 	_sleep?: (ms: number) => Promise<void>;
 }
@@ -105,6 +104,47 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
 }
 
 /**
+ * Verify that the gateway beacon was delivered by polling the session state.
+ * If the session remains in "booting" after polling, retries the beacon once.
+ * Logs a warning if delivery cannot be confirmed.
+ *
+ * Matches the coordinator's verifyBeaconDelivery pattern: deterministic,
+ * hook-driven state polling instead of fragile pane-content heuristics.
+ */
+async function verifyBeaconDelivery(
+	store: SessionStore,
+	tmux: NonNullable<GatewayDeps["_tmux"]>,
+	tmuxSession: string,
+	beacon: string,
+	sleep: (ms: number) => Promise<void>,
+): Promise<void> {
+	const MAX_CHECKS = 10;
+	const INTERVAL_MS = 2_000;
+
+	for (let i = 0; i < MAX_CHECKS; i++) {
+		await sleep(INTERVAL_MS);
+		const session = store.getByName(GATEWAY_NAME);
+		if (session && session.state !== "booting") {
+			// Beacon confirmed — gateway transitioned out of booting
+			return;
+		}
+	}
+
+	// Still booting after MAX_CHECKS — retry beacon once
+	process.stderr.write("[legio] Beacon delivery unconfirmed — retrying beacon\n");
+	await tmux.sendKeys(tmuxSession, beacon);
+	await sleep(500);
+	await tmux.sendKeys(tmuxSession, "");
+
+	// One final check after retry
+	await sleep(INTERVAL_MS);
+	const finalSession = store.getByName(GATEWAY_NAME);
+	if (!finalSession || finalSession.state === "booting") {
+		process.stderr.write("[legio] Warning: gateway beacon delivery could not be confirmed\n");
+	}
+}
+
+/**
  * Start the gateway agent.
  *
  * 1. Verify no gateway is already running
@@ -125,7 +165,6 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		killSession,
 		sendKeys,
 		waitForTuiReady,
-		capturePaneContent,
 	};
 	const sleep =
 		deps._sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -262,62 +301,27 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		await sleep(500);
 		await tmux.sendKeys(tmuxSession, "");
 
-		// Verify delivery: poll pane content for agent activity markers.
-		// If the beacon text is still sitting in the input area after several checks,
-		// send additional Enter nudges.
-		const capture = tmux.capturePaneContent ?? capturePaneContent;
-		const maxVerifyChecks = 5;
-		const verifyIntervalMs = 2_000;
-		let beaconDelivered = false;
+		// Verify delivery: poll store until state transitions out of booting.
+		// Must complete before the finally block closes the store.
+		await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
 
-		for (let check = 0; check < maxVerifyChecks; check++) {
-			await sleep(verifyIntervalMs);
-
-			const paneContent = await capture(tmuxSession);
-			const beaconTag = `[LEGIO] ${GATEWAY_NAME}`;
-			const hasAgentActivity =
-				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
-				paneContent.includes("Claude") || // Agent response header
-				paneContent.includes("Reading") || // Tool usage
-				paneContent.includes("Searching"); // Tool usage
-			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
-
-			if (!beaconStillInInput) {
-				beaconDelivered = true;
-				break;
-			}
-
-			// Still stuck — nudge with another Enter
-			process.stderr.write(
-				`[legio] Beacon check ${check + 1}/${maxVerifyChecks}: not consumed — sending Enter\n`,
-			);
-			await tmux.sendKeys(tmuxSession, "");
-		}
-
-		if (beaconDelivered) {
-			const { createMailStore } = await import("../mail/store.ts");
-			const mailDb = createMailStore(join(legioDir, "mail.db"));
-			try {
-				mailDb.insert({
-					id: "",
-					from: GATEWAY_NAME,
-					to: "human",
-					subject: "Gateway online",
-					body: "Gateway is online and ready. Send a message to start chatting.",
-					type: "status",
-					priority: "normal",
-					threadId: null,
-					audience: "human",
-				});
-			} finally {
-				mailDb.close();
-			}
-		}
-
-		if (!beaconDelivered) {
-			process.stderr.write(
-				`[legio] Warning: gateway beacon may not have been delivered after ${maxVerifyChecks} checks\n`,
-			);
+		// Send greeting mail to human
+		const { createMailStore } = await import("../mail/store.ts");
+		const mailDb = createMailStore(join(legioDir, "mail.db"));
+		try {
+			mailDb.insert({
+				id: "",
+				from: GATEWAY_NAME,
+				to: "human",
+				subject: "Gateway online",
+				body: "Gateway is online and ready. Send a message to start chatting.",
+				type: "status",
+				priority: "normal",
+				threadId: null,
+				audience: "human",
+			});
+		} finally {
+			mailDb.close();
 		}
 
 		if (shouldAttach) {

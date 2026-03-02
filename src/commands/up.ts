@@ -91,20 +91,6 @@ function openBrowser(url: string): void {
 	child.unref();
 }
 
-/**
- * Spawn a process detached and unreffed (fire-and-forget).
- */
-function spawnDetached(cmd: string[], opts?: { cwd?: string }): void {
-	const [command, ...args] = cmd;
-	if (!command) return;
-	const child = spawn(command, args, {
-		cwd: opts?.cwd,
-		detached: true,
-		stdio: "ignore",
-	});
-	child.unref();
-}
-
 /** Dependency injection interface for testing. */
 export interface UpDeps {
 	_runCommand?: (
@@ -115,7 +101,6 @@ export interface UpDeps {
 	_readPid?: (path: string) => Promise<number | null>;
 	_isProcessRunning?: (pid: number) => boolean;
 	_openBrowser?: (url: string) => void;
-	_spawnDetached?: (cmd: string[], opts?: { cwd?: string }) => void;
 	_projectRoot?: string;
 }
 
@@ -166,7 +151,6 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	const readPidFn = deps._readPid ?? readPidFromFile;
 	const isRunningFn = deps._isProcessRunning ?? isProcessRunning;
 	const openBrowserFn = deps._openBrowser ?? openBrowser;
-	const spawnDetachedFn = deps._spawnDetached ?? spawnDetached;
 	const projectRoot = deps._projectRoot ?? process.cwd();
 
 	// 1. Check git repo
@@ -254,11 +238,19 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 		// ignore status check errors, proceed to try starting
 	}
 	if (!gatewayRunning) {
-		spawnDetachedFn(["legio", "gateway", "start", "--no-attach"], {
-			cwd: projectRoot,
-		});
-		gatewayStarted = true;
-		if (!json) process.stdout.write("Gateway starting...\n");
+		try {
+			const gatewayResult = await run(["legio", "gateway", "start", "--no-attach", "--json"], {
+				cwd: projectRoot,
+			});
+			if (gatewayResult.exitCode === 0) {
+				gatewayStarted = true;
+				if (!json) process.stdout.write("Gateway started\n");
+			} else if (!json) {
+				process.stderr.write(`Warning: gateway start failed: ${gatewayResult.stderr.trim()}\n`);
+			}
+		} catch {
+			if (!json) process.stderr.write("Warning: gateway start failed\n");
+		}
 	}
 
 	const url = `http://${host}:${port}`;

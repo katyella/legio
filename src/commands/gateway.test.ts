@@ -69,7 +69,6 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 			calls.sendKeys.push({ name, keys });
 		},
 		waitForTuiReady: async (): Promise<void> => {},
-		capturePaneContent: async (): Promise<string> => "",
 	};
 
 	return { tmux, calls };
@@ -312,7 +311,7 @@ describe("startGateway", () => {
 		expect(config.hooks.Stop).toBeDefined();
 	});
 
-	test("hooks use gateway agent name for event logging", async () => {
+	test("hooks use LEGIO_AGENT_NAME env var for event logging", async () => {
 		const { deps } = makeDeps();
 
 		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
@@ -320,8 +319,8 @@ describe("startGateway", () => {
 		const settingsPath = join(tempDir, ".claude", "settings.local.json");
 		const content = await readFile(settingsPath, "utf-8");
 
-		// The hooks should reference the gateway agent name
-		expect(content).toContain("--agent gateway");
+		// Hooks reference the agent via $LEGIO_AGENT_NAME env var (not hardcoded)
+		expect(content).toContain("--agent $LEGIO_AGENT_NAME");
 	});
 
 	test("hooks include ENV_GUARD to avoid affecting user's Claude Code session", async () => {
@@ -503,6 +502,20 @@ describe("startGateway", () => {
 		expect(newSession?.agentName).toBe("gateway");
 		// The new session should have a different ID than the dead one
 		expect(newSession?.id).not.toBe("session-dead-gateway");
+	});
+
+	test("re-sends beacon when session stays in booting state", async () => {
+		const { deps, calls } = makeDeps();
+
+		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
+
+		// verifyBeaconDelivery polls store 10 times (all return "booting" since no hooks run),
+		// then retries the full beacon + follow-up Enter.
+		// Total sendKeys calls: 1 (initial beacon) + 1 (follow-up Enter) + 1 (retry beacon) + 1 (retry Enter)
+		const beaconCalls = calls.sendKeys.filter((c) => c.keys.includes("[LEGIO]"));
+		expect(beaconCalls).toHaveLength(2); // initial + retry
+		const enterCalls = calls.sendKeys.filter((c) => c.keys === "");
+		expect(enterCalls).toHaveLength(2); // follow-up Enter + retry Enter
 	});
 
 	test("sends greeting mail to human after beacon delivery", async () => {
