@@ -55,8 +55,10 @@ export async function createTempGitRepo(): Promise<string> {
 	const template = await getTemplateRepo();
 	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
 	// Clone into the empty dir. Avoid --local (hardlinks trigger EFAULT in Bun's rm).
-	// Git identity is inherited from the template repo's config.
 	await runGitInDir(".", ["clone", template, dir]);
+	// git clone does not copy local config — set identity so merge commits work on CI
+	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
+	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	return dir;
 }
 
@@ -74,6 +76,9 @@ export async function cloneFixtureRepo(): Promise<string> {
 	const dir = await mkdtemp(join(tmpdir(), "legio-test-"));
 	// Avoid --local (hardlinks trigger EFAULT in Bun's rm).
 	await runGitInDir(".", ["clone", fixturePath, dir]);
+	// git clone does not copy local config — set identity so merge commits work on CI
+	await runGitInDir(dir, ["config", "user.name", "Legio Test"]);
+	await runGitInDir(dir, ["config", "user.email", "test@legio.dev"]);
 	return dir;
 }
 

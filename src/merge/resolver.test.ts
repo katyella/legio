@@ -45,6 +45,17 @@ const realSpawn = cp.spawn.bind(cp);
  * Build a selective spawn function: routes "claude" calls to a mock process,
  * passes all other commands (git) through to the real spawn.
  */
+/**
+ * Git env vars so merge commits succeed on CI runners without global identity.
+ * Matches the env used by test-helpers.ts `runGitInDir`.
+ */
+const GIT_TEST_ENV = {
+	GIT_AUTHOR_NAME: "Legio Test",
+	GIT_AUTHOR_EMAIL: "test@legio.dev",
+	GIT_COMMITTER_NAME: "Legio Test",
+	GIT_COMMITTER_EMAIL: "test@legio.dev",
+};
+
 function makeSelectiveSpawn(
 	claudeStdout: string,
 	claudeStderr = "",
@@ -56,7 +67,9 @@ function makeSelectiveSpawn(
 			onClaude?.();
 			return createMockProcess(claudeStdout, claudeStderr, claudeExitCode);
 		}
-		return realSpawn(command, args, opts);
+		// Inject git identity env vars so merge commits work on CI
+		const env = { ...process.env, ...GIT_TEST_ENV, ...opts.env };
+		return realSpawn(command, args, { ...opts, env });
 	};
 }
 
