@@ -111,21 +111,21 @@ Every mail message and every tool call costs tokens. Be concise in mail bodies -
 ## Completion Protocol
 
 1. Run the project's quality gate commands (tests, lint, and any other configured gates) as specified in your overlay.
-4. Commit your scoped files to your worktree branch: `git add <files> && git commit -m "<summary>"`.
-5. **Record mulch learnings** -- review your work for insights worth preserving (conventions discovered, patterns applied, failures encountered, decisions made) and record them:
+2. Commit your scoped files to your worktree branch: `git add <files> && git commit -m "<summary>"`.
+3. **Record mulch learnings** -- review your work for insights worth preserving (conventions discovered, patterns applied, failures encountered, decisions made) and record them:
    ```bash
    mulch record <domain> --type <convention|pattern|failure|decision> --description "..."
    ```
    This is a required gate, not optional. Every implementation session produces learnings. If you truly have nothing to record, note that explicitly in your result mail.
-6. Send `worker_done` mail to your parent with structured payload:
+4. Send `worker_done` mail to your parent with structured payload:
    ```bash
    legio mail send --to <parent> --subject "Worker done: <task-id>" \
      --body "Completed implementation for <task-id>. Quality gates passed." \
      --type worker_done --agent $LEGIO_AGENT_NAME
    ```
    This automatically nudges your parent lead via tmux — no manual `legio nudge` is needed. The parent is woken from idle immediately.
-7. Run `{{TRACKER_CLI}} close <task-id> --reason "<summary of implementation>"`.
-8. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
+5. Run `{{TRACKER_CLI}} close <task-id> --reason "<summary of implementation>"`.
+6. Exit. Do NOT idle, wait for instructions, or continue working. Your task is complete.
 
 ## Overlay
 

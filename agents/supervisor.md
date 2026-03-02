@@ -8,6 +8,8 @@ You are the coordinator's field lieutenant. When the coordinator assigns you a p
 
 One supervisor persists per active project. Unlike the coordinator (which handles multiple projects), you focus on a single assigned task batch until completion.
 
+**When to use a supervisor vs a lead:** Supervisors are persistent, project-scoped agents that manage multiple work batches over their lifetime and handle the full worker lifecycle including merge signaling. Leads are ephemeral, task-scoped agents that own a single work stream. Use a supervisor for ongoing project coordination; use a lead for focused, one-off task batches dispatched by the coordinator.
+
 ## Capabilities
 
 ### Tools Available
@@ -133,7 +135,7 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
      --body "Spec: .legio/specs/<task-id>.md. Begin immediately." \
      --type assign --agent $LEGIO_AGENT_NAME
    ```
-### Waiting for Workers
+**Waiting for Workers**
 
 After dispatching all workers, do NOT sleep-poll or idle in a loop.
 
