@@ -37,18 +37,18 @@ describe("deployHooks", () => {
 		expect(exists).toBe(true);
 	});
 
-	test("replaces {{AGENT_NAME}} with the actual agent name", async () => {
+	test("template hooks use $LEGIO_AGENT_NAME env var", async () => {
 		const worktreePath = join(tempDir, "worktree");
 
 		await deployHooks(worktreePath, "my-builder");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
 		const content = await readFile(outputPath, "utf-8");
-		expect(content).toContain("my-builder");
+		expect(content).toContain("$LEGIO_AGENT_NAME");
 		expect(content).not.toContain("{{AGENT_NAME}}");
 	});
 
-	test("replaces all occurrences of {{AGENT_NAME}}", async () => {
+	test("template hooks all use $LEGIO_AGENT_NAME env var", async () => {
 		const worktreePath = join(tempDir, "worktree");
 
 		await deployHooks(worktreePath, "scout-alpha");
@@ -56,8 +56,8 @@ describe("deployHooks", () => {
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
 		const content = await readFile(outputPath, "utf-8");
 
-		// The template has {{AGENT_NAME}} in multiple hook commands
-		const occurrences = content.split("scout-alpha").length - 1;
+		// The template has $LEGIO_AGENT_NAME in multiple hook commands
+		const occurrences = content.split("$LEGIO_AGENT_NAME").length - 1;
 		expect(occurrences).toBeGreaterThanOrEqual(6);
 		expect(content).not.toContain("{{AGENT_NAME}}");
 	});
@@ -149,7 +149,7 @@ describe("deployHooks", () => {
 		// First entry has both the logging hook and signal-gated mail check
 		expect(postToolUse[0].hooks[0].command).toContain("legio log tool-end");
 		expect(postToolUse[0].hooks[1].command).toContain("legio mail check --inject");
-		expect(postToolUse[0].hooks[1].command).toContain("mail-check-agent");
+		expect(postToolUse[0].hooks[1].command).toContain("$LEGIO_AGENT_NAME");
 		expect(postToolUse[0].hooks[1].command).toContain("--signal");
 		expect(postToolUse[0].hooks[1].command).toContain("LEGIO_AGENT_NAME");
 		// Second entry is mulch diff after commit (with HEAD~1 guard)
@@ -198,7 +198,7 @@ describe("deployHooks", () => {
 		const parsed = JSON.parse(content);
 		const sessionStart = parsed.hooks.SessionStart[0];
 		expect(sessionStart.hooks[0].type).toBe("command");
-		expect(sessionStart.hooks[0].command).toContain("legio prime --agent prime-agent");
+		expect(sessionStart.hooks[0].command).toContain("legio prime --agent $LEGIO_AGENT_NAME");
 		expect(sessionStart.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -211,7 +211,7 @@ describe("deployHooks", () => {
 		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const userPrompt = parsed.hooks.UserPromptSubmit[0];
-		expect(userPrompt.hooks[0].command).toContain("legio mail check --inject --agent mail-agent");
+		expect(userPrompt.hooks[0].command).toContain("legio mail check --inject --agent $LEGIO_AGENT_NAME");
 		expect(userPrompt.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -225,7 +225,7 @@ describe("deployHooks", () => {
 		const parsed = JSON.parse(content);
 		const preCompact = parsed.hooks.PreCompact[0];
 		expect(preCompact.hooks[0].type).toBe("command");
-		expect(preCompact.hooks[0].command).toContain("legio prime --agent compact-agent --compact");
+		expect(preCompact.hooks[0].command).toContain("legio prime --agent $LEGIO_AGENT_NAME --compact");
 		expect(preCompact.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -244,7 +244,7 @@ describe("deployHooks", () => {
 		expect(baseHook).toBeDefined();
 		expect(baseHook.hooks[0].command).toContain("--stdin");
 		expect(baseHook.hooks[0].command).toContain("legio log tool-start");
-		expect(baseHook.hooks[0].command).toContain("stdin-agent");
+		expect(baseHook.hooks[0].command).toContain("$LEGIO_AGENT_NAME");
 		expect(baseHook.hooks[0].command).not.toContain("read -r INPUT");
 	});
 
@@ -259,7 +259,7 @@ describe("deployHooks", () => {
 		const postToolUse = parsed.hooks.PostToolUse[0];
 		expect(postToolUse.hooks[0].command).toContain("--stdin");
 		expect(postToolUse.hooks[0].command).toContain("legio log tool-end");
-		expect(postToolUse.hooks[0].command).toContain("stdin-agent");
+		expect(postToolUse.hooks[0].command).toContain("$LEGIO_AGENT_NAME");
 		expect(postToolUse.hooks[0].command).not.toContain("read -r INPUT");
 	});
 
@@ -279,7 +279,7 @@ describe("deployHooks", () => {
 		// Second hook should be signal-gated mail check
 		expect(postToolUse.hooks[1].command).toContain("legio mail check");
 		expect(postToolUse.hooks[1].command).toContain("--inject");
-		expect(postToolUse.hooks[1].command).toContain("--agent mail-signal-agent");
+		expect(postToolUse.hooks[1].command).toContain("--agent $LEGIO_AGENT_NAME");
 		expect(postToolUse.hooks[1].command).toContain("--signal");
 		expect(postToolUse.hooks[1].command).not.toContain("--debounce");
 		expect(postToolUse.hooks[1].command).toContain("LEGIO_AGENT_NAME");
@@ -334,7 +334,7 @@ describe("deployHooks", () => {
 		const stop = parsed.hooks.Stop[0];
 		expect(stop.hooks[0].command).toContain("--stdin");
 		expect(stop.hooks[0].command).toContain("legio log session-end");
-		expect(stop.hooks[0].command).toContain("stdin-agent");
+		expect(stop.hooks[0].command).toContain("$LEGIO_AGENT_NAME");
 		expect(stop.hooks[0].command).not.toContain("read -r INPUT");
 	});
 

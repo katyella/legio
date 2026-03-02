@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}}"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent $LEGIO_AGENT_NAME"
 					}
 				]
 			}
@@ -17,7 +17,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}}"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent $LEGIO_AGENT_NAME"
 					}
 				]
 			}
@@ -73,7 +73,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-start --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-start --agent $LEGIO_AGENT_NAME --stdin"
 					}
 				]
 			}
@@ -84,11 +84,11 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-end --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log tool-end --agent $LEGIO_AGENT_NAME --stdin"
 					},
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent {{AGENT_NAME}} --signal"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio mail check --inject --agent $LEGIO_AGENT_NAME --signal"
 					}
 				]
 			},
@@ -108,7 +108,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log session-end --agent {{AGENT_NAME}} --stdin"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio log session-end --agent $LEGIO_AGENT_NAME --stdin"
 					},
 					{
 						"type": "command",
@@ -123,7 +123,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent {{AGENT_NAME}} --compact"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio prime --agent $LEGIO_AGENT_NAME --compact"
 					}
 				]
 			}

@@ -497,8 +497,7 @@ export function getCapabilityGuards(capability: string): HookEntry[] {
 /**
  * Deploy hooks config to an agent's worktree as `.claude/settings.local.json`.
  *
- * Reads `templates/hooks.json.tmpl`, replaces `{{AGENT_NAME}}`, then merges
- * capability-specific PreToolUse guards into the resulting config.
+ * Reads `templates/hooks.json.tmpl`, then merges capability-specific PreToolUse guards into the resulting config.
  *
  * @param worktreePath - Absolute path to the agent's git worktree
  * @param agentName - The unique name of the agent
@@ -531,16 +530,13 @@ export async function deployHooks(
 		});
 	}
 
-	// Replace all occurrences of {{AGENT_NAME}}
-	const content = template.replaceAll("{{AGENT_NAME}}", agentName);
-
 	// Parse the base config and merge guards into PreToolUse
 	let config: { hooks: Record<string, HookEntry[]> };
 	try {
-		config = JSON.parse(content) as { hooks: Record<string, HookEntry[]> };
+		config = JSON.parse(template) as { hooks: Record<string, HookEntry[]> };
 	} catch (err) {
 		throw new AgentError(
-			`Failed to parse hooks template as JSON after substitution: ${templatePath}`,
+			`Failed to parse hooks template as JSON: ${templatePath}`,
 			{
 				agentName,
 				cause: err instanceof Error ? err : undefined,
