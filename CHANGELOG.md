@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Task tracker abstraction layer (`src/tracker/`) with factory, types, and adapters for beads and seeds backends — agent definitions are now tracker-agnostic via `{{TRACKER_CLI}}` and `{{TRACKER_NAME}}` template variables
+- Gateway greeting mail — gateway sends an introductory message to the human after beacon delivery, visible in the dashboard chat
+- Terminal panel session-state-aware ready detection — replaces the previous stale decay model with deterministic state machine
+- Boot timeout detection and unregistered agent detection in watchman daemon
+- Nudge session fallback and escalation/dispatch default high priority
+- Beacon activity state machine — replaces thinking boolean with capture-driven activity detection
+- Sleep hook guard — `PreToolUse` hooks block `sleep` commands in agent Bash calls
+- Status prefix styling in chat message bubbles
+- Nudge and wait-for-workers patterns documented in builder, lead, and supervisor agent definitions
+- Completion notification and anti-sleep-polling guidance in agent definitions
+
+### Changed
+- Unified watchdog + mailman into single watchman daemon (`src/watchman/`)
+- Mobile-responsive web UI — dashboard, issues, chat, costs, and inspect views all work on small screens
+- Gateway beacon delivery uses deterministic store-polling instead of fragile pane-content heuristics
+- `legio up` spawns gateway via awaited `run()` instead of fire-and-forget `spawnDetached()`, matching coordinator's reliable pattern
+- Hook templates use `$LEGIO_AGENT_NAME` env var instead of hardcoded `{{AGENT_NAME}}` placeholder
+- Quality gate commands included in overlay for read-only agents (scout, reviewer)
+- Dashboard `/api/agents` scoped to current run instead of all historical sessions
+- Fish shell compatibility — use `env -u` instead of `unset` in tmux sessions
+- Package author updated to Matthew Wojtowicz
+- 2397 tests across 79 test files (up from 2384 across 85)
+
+### Fixed
+- Gateway beacon delivery — replaced unreliable pane-content polling with store-polling `verifyBeaconDelivery()`, fixing the consistent "beacon stuck in input buffer" issue when started via `legio up`
+- Removed 200ms `sendKeys` delay band-aid from tmux.ts (no longer needed with store-polling)
+- Suppressed noisy watchman nudge spam during gateway startup
+- Issues view sort order uses `closed_at` for closed column
+- Test isolation — replaced `vi.mock` module-level mocking with DI pattern to prevent cross-file leaks
+- Test performance — shared repos across tests, removed redundant git-wrapper tests, replaced `process.chdir` with `vi.spyOn(process, "cwd")`
+- 13 agent definition documentation fixes (CLAUDE.md accuracy, agent roles, capability sections)
+
 ## [0.1.3] - 2026-02-27
 
 ### Fixed

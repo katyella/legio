@@ -435,7 +435,7 @@ describe("startCoordinator", () => {
 		expect(config.hooks.Stop).toBeDefined();
 	});
 
-	test("hooks use coordinator agent name for event logging", async () => {
+	test("hooks use LEGIO_AGENT_NAME env var for event logging", async () => {
 		const { deps } = makeDeps();
 
 		await captureStdout(() => coordinatorCommand(["start", "--no-attach"], deps));
@@ -443,8 +443,8 @@ describe("startCoordinator", () => {
 		const settingsPath = join(tempDir, ".claude", "settings.local.json");
 		const content = await readFile(settingsPath, "utf-8");
 
-		// The hooks should reference the coordinator agent name
-		expect(content).toContain("--agent coordinator");
+		// The hooks should use the env var, not a hardcoded agent name
+		expect(content).toContain("--agent $LEGIO_AGENT_NAME");
 	});
 
 	test("hooks include ENV_GUARD to avoid affecting user's Claude Code session", async () => {
