@@ -54,45 +54,6 @@ async function fileExists(path: string): Promise<boolean> {
 	}
 }
 
-/**
- * Verify that the gateway beacon was delivered by polling the session store
- * until the state transitions out of "booting" (which happens on the first
- * tool call via updateLastActivity in the PostToolUse hook).
- *
- * Same pattern as coordinator's verifyBeaconDelivery.
- */
-async function verifyGatewayBeaconDelivery(
-	store: ReturnType<typeof openSessionStore>["store"],
-	tmux: NonNullable<GatewayDeps["_tmux"]>,
-	tmuxSession: string,
-	beacon: string,
-	sleep: (ms: number) => Promise<void>,
-): Promise<void> {
-	const MAX_CHECKS = 10;
-	const INTERVAL_MS = 2_000;
-
-	for (let i = 0; i < MAX_CHECKS; i++) {
-		await sleep(INTERVAL_MS);
-		const session = store.getByName(GATEWAY_NAME);
-		if (session && session.state !== "booting") {
-			return;
-		}
-	}
-
-	// Still booting after MAX_CHECKS — retry beacon once
-	process.stderr.write("[legio] Beacon delivery unconfirmed — retrying beacon\n");
-	await tmux.sendKeys(tmuxSession, beacon);
-	await sleep(500);
-	await tmux.sendKeys(tmuxSession, "");
-
-	// One final check
-	await sleep(INTERVAL_MS);
-	const finalSession = store.getByName(GATEWAY_NAME);
-	if (!finalSession || finalSession.state === "booting") {
-		process.stderr.write("[legio] Warning: gateway beacon delivery could not be confirmed\n");
-	}
-}
-
 /** Dependency injection for testing. Uses real implementations when omitted. */
 export interface GatewayDeps {
 	_tmux?: {
