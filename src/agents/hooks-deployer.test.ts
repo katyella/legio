@@ -211,7 +211,9 @@ describe("deployHooks", () => {
 		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const userPrompt = parsed.hooks.UserPromptSubmit[0];
-		expect(userPrompt.hooks[0].command).toContain("legio mail check --inject --agent $LEGIO_AGENT_NAME");
+		expect(userPrompt.hooks[0].command).toContain(
+			"legio mail check --inject --agent $LEGIO_AGENT_NAME",
+		);
 		expect(userPrompt.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
@@ -225,7 +227,9 @@ describe("deployHooks", () => {
 		const parsed = JSON.parse(content);
 		const preCompact = parsed.hooks.PreCompact[0];
 		expect(preCompact.hooks[0].type).toBe("command");
-		expect(preCompact.hooks[0].command).toContain("legio prime --agent $LEGIO_AGENT_NAME --compact");
+		expect(preCompact.hooks[0].command).toContain(
+			"legio prime --agent $LEGIO_AGENT_NAME --compact",
+		);
 		expect(preCompact.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
