@@ -126,8 +126,8 @@ export function GatewayChat({ gwRunning }) {
 
 	useEffect(() => {
 		if (fromAgentCount > prevFromAgentCountRef.current) {
-			// Agent replied — transition activity to stale (state machine in TerminalPanel takes over)
-			setTerminalActivity("stale");
+			// Agent replied — transition activity to ready (state machine in TerminalPanel takes over)
+			setTerminalActivity("ready");
 			// Deduplicate pending messages that now appear in history
 			setPendingMessages((prev) =>
 				prev.filter(
@@ -172,6 +172,11 @@ export function GatewayChat({ gwRunning }) {
 		}
 	}
 	allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+	// Look up gateway agent session state for TerminalPanel ready/idle determination
+	const gwAgents = appState.agents.value ?? [];
+	const gwSession = gwAgents.find((a) => (a.agentName ?? a.name) === "gateway");
+	const gwState = gwSession?.state ?? null;
 
 	// Auto-scroll to bottom when near bottom
 	useEffect(() => {
@@ -437,7 +442,7 @@ export function GatewayChat({ gwRunning }) {
 			</div>
 
 			<!-- Terminal panel (collapsible, collapsed by default) -->
-			<${TerminalPanel} chatTarget="gateway" activity=${terminalActivity} />
+			<${TerminalPanel} chatTarget="gateway" activity=${terminalActivity} agentState=${gwState} />
 
 			<!-- Input area (always visible) -->
 			<div class="border-t border-[#2a2a2a] p-3 shrink-0">

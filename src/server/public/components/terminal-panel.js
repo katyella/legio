@@ -8,7 +8,7 @@ function stripAnsi(str) {
 	return str.replace(/\x1b\[[?0-9;]*[a-zA-Z]/g, "");
 }
 
-const ACTIVITY_LEVEL = { idle: 0, stale: 1, active: 2 };
+const ACTIVITY_LEVEL = { idle: 0, ready: 1, active: 2 };
 
 function higherActivity(a, b) {
 	return (ACTIVITY_LEVEL[a] ?? 0) >= (ACTIVITY_LEVEL[b] ?? 0) ? a : b;
@@ -16,15 +16,22 @@ function higherActivity(a, b) {
 
 // TerminalPanel — collapsible terminal capture sub-component
 // Props:
-//   chatTarget {string} — agent name to capture terminal from
-//   activity   {string} — 'idle'|'active'|'stale' hint from parent (e.g. gateway just sent a message)
-export function TerminalPanel({ chatTarget, activity = "idle" }) {
+//   chatTarget {string}      — agent name to capture terminal from
+//   activity   {string}      — 'idle'|'active'|'ready' hint from parent (e.g. gateway just sent a message)
+//   agentState {string|null} — agent session state ('working'|'booting'|'completed'|'zombie'|null)
+export function TerminalPanel({ chatTarget, activity = "idle", agentState = null }) {
 	const [userExpanded, setUserExpanded] = useState(false);
 	const [captureText, setCaptureText] = useState("");
 	const [captureActivity, setCaptureActivity] = useState("idle");
 	const lastChangeTimeRef = useRef(Date.now());
 	const lastHashRef = useRef("");
+	const agentStateRef = useRef(agentState);
 	const terminalRef = useRef(null);
+
+	// Keep agentStateRef in sync with the agentState prop
+	useEffect(() => {
+		agentStateRef.current = agentState;
+	}, [agentState]);
 
 	// Reset when chatTarget changes
 	useEffect(() => {
@@ -53,12 +60,12 @@ export function TerminalPanel({ chatTarget, activity = "idle" }) {
 					lastChangeTimeRef.current = now;
 					setCaptureActivity("active");
 				} else {
-					// No change — decay based on elapsed time since last change
-					const elapsed = now - lastChangeTimeRef.current;
-					if (elapsed >= 30000) {
+					// No change — use agent session state to determine activity level
+					const state = agentStateRef.current;
+					if (state === "working" || state === "booting") {
+						setCaptureActivity("ready");
+					} else {
 						setCaptureActivity("idle");
-					} else if (elapsed >= 5000) {
-						setCaptureActivity("stale");
 					}
 				}
 
@@ -91,8 +98,8 @@ export function TerminalPanel({ chatTarget, activity = "idle" }) {
 		"w-2 h-2 rounded-full flex-shrink-0 " +
 		(effectiveActivity === "active"
 			? "bg-yellow-500 animate-pulse"
-			: effectiveActivity === "stale"
-				? "bg-yellow-500/50"
+			: effectiveActivity === "ready"
+				? "bg-green-500"
 				: "bg-[#333]");
 
 	return html`
@@ -104,7 +111,7 @@ export function TerminalPanel({ chatTarget, activity = "idle" }) {
 				<span class=${dotClass}></span>
 				<span class="text-xs text-[#666]">Terminal</span>
 				${effectiveActivity === "active" ? html`<span class="text-xs text-yellow-500 animate-pulse">active</span>` : null}
-				${effectiveActivity === "stale" ? html`<span class="text-xs text-yellow-500/50">stale</span>` : null}
+				${effectiveActivity === "ready" ? html`<span class="text-xs text-green-500">ready</span>` : null}
 				<span class="ml-auto text-xs text-[#444]">${userExpanded ? "\u25b2" : "\u25bc"}</span>
 			</div>
 			${
