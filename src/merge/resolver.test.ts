@@ -17,7 +17,7 @@ import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { MergeError } from "../errors.ts";
 import type { MulchClient } from "../mulch/client.ts";
 import {
@@ -544,10 +544,7 @@ describe("createMergeResolver", () => {
 		let failBranch: string;
 
 		beforeAll(async () => {
-			[successRepoDir, failRepoDir] = await Promise.all([
-				createTempGitRepo(),
-				createTempGitRepo(),
-			]);
+			[successRepoDir, failRepoDir] = await Promise.all([createTempGitRepo(), createTempGitRepo()]);
 			[successBranch, failBranch] = await Promise.all([
 				getDefaultBranch(successRepoDir),
 				getDefaultBranch(failRepoDir),
@@ -559,10 +556,7 @@ describe("createMergeResolver", () => {
 		});
 
 		afterAll(async () => {
-			await Promise.all([
-				cleanupTempDir(successRepoDir),
-				cleanupTempDir(failRepoDir),
-			]);
+			await Promise.all([cleanupTempDir(successRepoDir), cleanupTempDir(failRepoDir)]);
 		});
 
 		test("successful result has correct MergeResult shape", async () => {
@@ -1264,12 +1258,14 @@ describe("createMergeResolver", () => {
 		let repoDir: string;
 		let defaultBranch: string;
 
+		// biome-ignore lint/suspicious/noDuplicateTestHooks: separate describe scope from sibling
 		beforeAll(async () => {
 			repoDir = await createTempGitRepo();
 			defaultBranch = await getDefaultBranch(repoDir);
 			await setupDeleteModifyConflict(repoDir, defaultBranch);
 		});
 
+		// biome-ignore lint/suspicious/noDuplicateTestHooks: separate describe scope from sibling
 		afterAll(async () => {
 			await cleanupTempDir(repoDir);
 		});

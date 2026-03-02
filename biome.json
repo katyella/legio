@@ -1,7 +1,14 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.4.2/schema.json",
 	"files": {
-		"includes": ["**", "!**/.beads", "!**/.claude", "!**/.legio", "!**/node_modules"]
+		"includes": [
+			"**",
+			"!**/.beads",
+			"!**/.claude",
+			"!**/.legio",
+			"!**/node_modules",
+			"!src/server/public/**"
+		]
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },
 	"linter": {
