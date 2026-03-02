@@ -476,6 +476,11 @@ export async function sendKeys(name: string, keys: string): Promise<void> {
 		if (textResult.exitCode !== 0) {
 			throwSendKeysError(name, textResult.stderr);
 		}
+		// Wait for the TUI to process the text before sending Enter.
+		// Claude Code's TUI needs time to render long input (beacons can be
+		// 300+ chars). Without this delay, Enter arrives before the TUI has
+		// finished accepting the text, causing it to be swallowed.
+		await setTimeout(200);
 	}
 
 	// Step 2: Send Enter separately to trigger submission.

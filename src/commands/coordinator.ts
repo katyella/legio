@@ -324,7 +324,7 @@ async function verifyBeaconDelivery(
 	beacon: string,
 	sleep: (ms: number) => Promise<void>,
 ): Promise<void> {
-	const MAX_CHECKS = 5;
+	const MAX_CHECKS = 10;
 	const INTERVAL_MS = 2_000;
 
 	for (let i = 0; i < MAX_CHECKS; i++) {

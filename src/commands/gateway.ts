@@ -54,6 +54,45 @@ async function fileExists(path: string): Promise<boolean> {
 	}
 }
 
+/**
+ * Verify that the gateway beacon was delivered by polling the session store
+ * until the state transitions out of "booting" (which happens on the first
+ * tool call via updateLastActivity in the PostToolUse hook).
+ *
+ * Same pattern as coordinator's verifyBeaconDelivery.
+ */
+async function verifyGatewayBeaconDelivery(
+	store: ReturnType<typeof openSessionStore>["store"],
+	tmux: NonNullable<GatewayDeps["_tmux"]>,
+	tmuxSession: string,
+	beacon: string,
+	sleep: (ms: number) => Promise<void>,
+): Promise<void> {
+	const MAX_CHECKS = 10;
+	const INTERVAL_MS = 2_000;
+
+	for (let i = 0; i < MAX_CHECKS; i++) {
+		await sleep(INTERVAL_MS);
+		const session = store.getByName(GATEWAY_NAME);
+		if (session && session.state !== "booting") {
+			return;
+		}
+	}
+
+	// Still booting after MAX_CHECKS — retry beacon once
+	process.stderr.write("[legio] Beacon delivery unconfirmed — retrying beacon\n");
+	await tmux.sendKeys(tmuxSession, beacon);
+	await sleep(500);
+	await tmux.sendKeys(tmuxSession, "");
+
+	// One final check
+	await sleep(INTERVAL_MS);
+	const finalSession = store.getByName(GATEWAY_NAME);
+	if (!finalSession || finalSession.state === "booting") {
+		process.stderr.write("[legio] Warning: gateway beacon delivery could not be confirmed\n");
+	}
+}
+
 /** Dependency injection for testing. Uses real implementations when omitted. */
 export interface GatewayDeps {
 	_tmux?: {
@@ -256,52 +295,14 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		}
 		const beacon = buildGatewayBeacon(isFirstRun);
 
-		// Send beacon with immediate follow-up Enter (same pattern as coordinator).
-		// The initial sendKeys sends text + Enter, but the TUI may not register the
-		// Enter if its input handler isn't fully ready. The follow-up Enter at 500ms
-		// ensures submission before any SessionStart hook can fire and transition
-		// the session state out of "booting".
+		// Same beacon delivery pattern as coordinator: send text, follow-up Enter,
+		// then poll session state to confirm delivery.
 		await tmux.sendKeys(tmuxSession, beacon);
 		await sleep(500);
 		await tmux.sendKeys(tmuxSession, "");
 
-		// Verify delivery: poll pane content for agent activity markers.
-		// If the beacon text is still sitting in the input area after several checks,
-		// send additional Enter nudges.
-		const capture = tmux.capturePaneContent ?? capturePaneContent;
-		const maxVerifyChecks = 5;
-		const verifyIntervalMs = 2_000;
-		let beaconDelivered = false;
-
-		for (let check = 0; check < maxVerifyChecks; check++) {
-			await sleep(verifyIntervalMs);
-
-			const paneContent = await capture(tmuxSession);
-			const beaconTag = `[LEGIO] ${GATEWAY_NAME}`;
-			const hasAgentActivity =
-				paneContent.includes("⏺") || // Claude Code thinking/tool indicator
-				paneContent.includes("Claude") || // Agent response header
-				paneContent.includes("Reading") || // Tool usage
-				paneContent.includes("Searching"); // Tool usage
-			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
-
-			if (!beaconStillInInput) {
-				beaconDelivered = true;
-				break;
-			}
-
-			// Still stuck — nudge with another Enter
-			process.stderr.write(
-				`[legio] Beacon check ${check + 1}/${maxVerifyChecks}: not consumed — sending Enter\n`,
-			);
-			await tmux.sendKeys(tmuxSession, "");
-		}
-
-		if (!beaconDelivered) {
-			process.stderr.write(
-				`[legio] Warning: gateway beacon may not have been delivered after ${maxVerifyChecks} checks\n`,
-			);
-		}
+		// Verify beacon delivery: poll store until state transitions out of booting.
+		await verifyGatewayBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
 
 		if (shouldAttach) {
 			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
