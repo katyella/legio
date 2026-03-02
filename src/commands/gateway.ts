@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { deployHooks } from "../agents/hooks-deployer.ts";
 import { createIdentity, loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
-import { loadConfig } from "../config.ts";
+import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { SessionStore } from "../sessions/store.ts";
@@ -82,10 +82,11 @@ export function buildGatewayBeacon(isFirstRun = false): string {
 	const timestamp = new Date().toISOString();
 	const parts = [
 		`[LEGIO] ${GATEWAY_NAME} (gateway) ${timestamp}`,
-		"Depth: 0 | Role: planning companion",
-		"READONLY: No Write/Edit",
-		"ISSUES: Use bd create",
-		`Startup: run mulch prime, check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user via BOTH terminal AND mail (legio mail send --to human --subject "chat" --body "..." --type status --agent ${GATEWAY_NAME}) so replies appear in dashboard chat`,
+		"You are a gateway agent in the legio multi-agent orchestration system. legio is a CLI tool installed on this machine that coordinates multiple Claude Code agents via tmux, SQLite mail, and git worktrees.",
+		"Depth: 0 | Role: planning companion | READONLY: No Write/Edit tool access",
+		'COMMUNICATION: Use legio mail for all inter-agent messaging. Check your inbox with: legio mail check --agent gateway. Send replies via: legio mail send --to human --subject "chat" --body "..." --type status --agent gateway',
+		"ISSUES: If a task tracker is configured, use it to create issues for work decomposition. Check legio status for current agent fleet.",
+		`Startup: check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user via BOTH terminal AND mail so replies appear in dashboard chat`,
 	];
 	if (isFirstRun) {
 		parts.push("FIRST_RUN: true — Follow the First Run workflow in your agent definition");
@@ -238,6 +239,7 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		await writeFile(settingsPath, JSON.stringify(settings), "utf-8");
 		const claudeCmd = `claude --model ${model} --dangerously-skip-permissions --settings ${settingsPath}`;
 		const pid = await tmux.createSession(tmuxSession, projectRoot, claudeCmd, {
+			...collectProviderEnv(),
 			LEGIO_AGENT_NAME: GATEWAY_NAME,
 		});
 

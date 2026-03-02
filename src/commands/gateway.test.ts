@@ -713,21 +713,21 @@ describe("buildGatewayBeacon", () => {
 
 	test("includes ISSUES notice", () => {
 		const beacon = buildGatewayBeacon();
-		expect(beacon).toContain("ISSUES: Use bd create");
+		expect(beacon).toContain("ISSUES:");
+		expect(beacon).toContain("legio status");
 	});
 
 	test("includes startup instructions", () => {
 		const beacon = buildGatewayBeacon();
-		expect(beacon).toContain("mulch prime");
 		expect(beacon).toContain("legio mail check --agent gateway");
 		expect(beacon).toContain("respond to user via BOTH terminal AND mail");
 	});
 
 	test("parts are joined with em-dash separator", () => {
 		const beacon = buildGatewayBeacon();
-		// Should have exactly 4 " — " separators (5 parts)
+		// Should have exactly 5 " — " separators (6 parts)
 		const dashes = beacon.split(" — ");
-		expect(dashes).toHaveLength(5);
+		expect(dashes).toHaveLength(6);
 	});
 
 	test("default (no args) does not include FIRST_RUN", () => {
