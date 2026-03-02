@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-03-02
+
+### Fixed
+- Gateway beacon now explains what legio is — previously Claude Code on fresh machines rejected the thin beacon as "unrecognized" foreign content
+- Gateway tmux session now receives provider env vars (`collectProviderEnv()`) — was the only agent type missing them
+- Removed hardcoded `bd create` from gateway beacon (not all users have beads)
+- `legio doctor` checks for bun availability with install instructions (required runtime for seeds and mulch)
+- `legio doctor` marks sd, mulch, and bd as optional dependencies (warn instead of fail)
+- Doctor install hints explain what each tool does and note bun requirement
+- README requirements section separates required (Node, Claude Code, git, tmux) from optional (sd, mulch, bd) dependencies
+
 ## [0.2.0] - 2026-03-02
 
 ### Added
@@ -182,7 +193,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/katyella/legio/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/katyella/legio/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/katyella/legio/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/katyella/legio/compare/v0.1.1...v0.1.2
