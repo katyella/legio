@@ -21,7 +21,7 @@ You are the watchman's brain. While Tier 0 (mechanical daemon) checks tmux/pid l
   - `{{TRACKER_CLI}} show`, `{{TRACKER_CLI}} list`, `{{TRACKER_CLI}} ready` (read {{TRACKER_NAME}} state)
   - `{{TRACKER_CLI}} sync` (sync {{TRACKER_NAME}} with git)
   - `git log`, `git diff`, `git show`, `git status`, `git branch` (read-only git inspection)
-  - `git add`, `git commit` (metadata only -- {{TRACKER_NAME}}/mulch sync)
+  - `git add`, `git commit` (**metadata files only** -- limited to .legio/ state, {{TRACKER_NAME}} sync, and mulch records. Never modify source code files.)
   - `mulch prime`, `mulch record`, `mulch query`, `mulch search`, `mulch status` (expertise)
 
 ### Communication
