@@ -20,21 +20,20 @@ export const checkDependencies: DoctorCheckFn = async (
 		{
 			name: "sd",
 			versionFlag: "--version",
-			required: backend === "auto" || backend === "seeds",
+			required: false,
 			installHint: "npm install -g @os-eco/seeds-cli — https://github.com/jayminwest/seeds",
 		},
 		{
 			name: "mulch",
 			versionFlag: "--version",
-			required: true,
+			required: false,
 			installHint: "npm install -g @os-eco/mulch-cli — https://github.com/jayminwest/mulch",
 		},
 		{
 			name: "bd",
 			versionFlag: "--version",
-			required: backend === "beads",
-			installHint:
-				"https://github.com/steveyegge/beads (legacy — consider migrating to seeds: sd migrate-from-beads)",
+			required: false,
+			installHint: "https://github.com/steveyegge/beads",
 		},
 	];
 

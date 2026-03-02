@@ -68,34 +68,13 @@ describe("checkDependencies", () => {
 		expect(toolNames).toContain("bd availability");
 	});
 
-	test("sd is required when backend is auto", async () => {
+	test("sd, mulch, and bd are all optional (warn if missing)", async () => {
 		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
-		const sdCheck = checks.find((c) => c.name === "sd availability");
-		// sd should be required (fail if missing) when backend is "auto"
-		if (sdCheck?.status !== "pass") {
-			expect(sdCheck?.status).toBe("fail");
-		}
-	});
-
-	test("bd is optional when backend is auto", async () => {
-		const checks = await checkDependencies(mockConfig, "/tmp/.legio");
-		const bdCheck = checks.find((c) => c.name === "bd availability");
-		// bd should be optional (warn if missing) when backend is "auto"
-		if (bdCheck?.status !== "pass") {
-			expect(bdCheck?.status).toBe("warn");
-		}
-	});
-
-	test("bd is required when backend is beads", async () => {
-		const beadsConfig = {
-			...mockConfig,
-			taskTracker: { backend: "beads" as const, enabled: true },
-		};
-		const checks = await checkDependencies(beadsConfig, "/tmp/.legio");
-		const bdCheck = checks.find((c) => c.name === "bd availability");
-		// bd should be required (fail if missing) when backend is "beads"
-		if (bdCheck?.status !== "pass") {
-			expect(bdCheck?.status).toBe("fail");
+		for (const name of ["sd", "mulch", "bd"]) {
+			const check = checks.find((c) => c.name === `${name} availability`);
+			if (check?.status !== "pass") {
+				expect(check?.status).toBe("warn");
+			}
 		}
 	});
 
