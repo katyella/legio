@@ -1256,7 +1256,7 @@ export async function handleApiRequest(
 				// No current run file
 			}
 			if (runId) {
-				return jsonResponse(store.getByRunIncludeOrphans(runId));
+				return jsonResponse(store.getByRunIncludeActive(runId));
 			}
 			return jsonResponse(store.getActive());
 		} finally {

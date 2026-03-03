@@ -86,7 +86,7 @@ export async function gatherStatus(
 		} catch {
 			// current-run.txt does not exist
 		}
-		sessions = runId ? store.getByRunIncludeOrphans(runId) : store.getActive();
+		sessions = runId ? store.getByRunIncludeActive(runId) : store.getActive();
 
 		const worktrees = await listWorktrees(root);
 
