@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   bead_id TEXT NOT NULL,
   tmux_session TEXT NOT NULL,
   state TEXT NOT NULL DEFAULT 'booting'
-    CHECK(state IN ('booting','working','completed','zombie')),
+    CHECK(state IN ('booting','working','idle','completed','zombie')),
   pid INTEGER,
   parent_agent TEXT,
   depth INTEGER NOT NULL DEFAULT 0,
