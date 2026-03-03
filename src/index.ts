@@ -7,6 +7,7 @@
  * Usage: legio <command> [args...]
  */
 
+import { createRequire } from "node:module";
 import { agentsCommand } from "./commands/agents.ts";
 import { cleanCommand } from "./commands/clean.ts";
 import { completionsCommand } from "./commands/completions.ts";
@@ -44,7 +45,6 @@ import { traceCommand } from "./commands/trace.ts";
 import { upCommand } from "./commands/up.ts";
 import { watchmanCommand } from "./commands/watchman.ts";
 import { worktreeCommand } from "./commands/worktree.ts";
-import { createRequire } from "node:module";
 import { LegioError, WorktreeError } from "./errors.ts";
 import { setQuiet } from "./logging/color.ts";
 

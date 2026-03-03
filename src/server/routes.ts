@@ -1017,10 +1017,7 @@ export async function handleApiRequest(
 			// These agents send curated messages via legio mail send --to human. Syncing raw
 			// transcripts causes duplicates because the bodies never match exactly.
 			const DIRECT_MAIL_CAPABILITIES = new Set(["gateway"]);
-			if (
-				agentSession.capability &&
-				DIRECT_MAIL_CAPABILITIES.has(agentSession.capability)
-			) {
+			if (agentSession.capability && DIRECT_MAIL_CAPABILITIES.has(agentSession.capability)) {
 				return jsonResponse({
 					synced: 0,
 					skipped: true,
