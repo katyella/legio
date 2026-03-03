@@ -61,7 +61,10 @@ interface MonitorCallTracker {
 }
 
 /** Build a fake tmux DI object with configurable session liveness. */
-function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
+function makeFakeTmux(
+	sessionAliveMap: Record<string, boolean> = {},
+	paneContent = "",
+): {
 	tmux: NonNullable<CoordinatorDeps["_tmux"]>;
 	calls: TmuxCallTracker;
 } {
@@ -93,6 +96,7 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 		sendKeys: async (name: string, keys: string): Promise<void> => {
 			calls.sendKeys.push({ name, keys });
 		},
+		capturePaneContent: async (): Promise<string> => paneContent,
 	};
 
 	return { tmux, calls };

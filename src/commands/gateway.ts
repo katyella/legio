@@ -21,10 +21,11 @@ import { createManifestLoader, resolveModel } from "../agents/manifest.ts";
 import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, ValidationError } from "../errors.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import type { SessionStore } from "../sessions/store.ts";
 import type { AgentSession } from "../types.ts";
 import {
+	capturePaneContent,
 	createSession,
+	deliverBeacon,
 	isSessionAlive,
 	killSession,
 	sendKeys,
@@ -66,6 +67,7 @@ export interface GatewayDeps {
 		isSessionAlive: (name: string) => Promise<boolean>;
 		killSession: (name: string) => Promise<void>;
 		sendKeys: (name: string, keys: string) => Promise<void>;
+		capturePaneContent: (name: string) => Promise<string>;
 		waitForTuiReady?: (
 			sessionName: string,
 			opts?: { timeout?: number; interval?: number },
@@ -84,12 +86,14 @@ export function buildGatewayBeacon(isFirstRun = false): string {
 		`[LEGIO] ${GATEWAY_NAME} (gateway) ${timestamp}`,
 		"You are a gateway agent in the legio multi-agent orchestration system. legio is a CLI tool installed on this machine that coordinates multiple Claude Code agents via tmux, SQLite mail, and git worktrees.",
 		"Depth: 0 | Role: planning companion | READONLY: No Write/Edit tool access",
-		'COMMUNICATION: Use legio mail for all inter-agent messaging. Check your inbox with: legio mail check --agent gateway. Send replies via: legio mail send --to human --subject "chat" --body "..." --type status --agent gateway',
-		"ISSUES: If a task tracker is configured, use it to create issues for work decomposition. Check legio status for current agent fleet.",
-		`Startup: check mail (legio mail check --agent ${GATEWAY_NAME}), respond to user via BOTH terminal AND mail so replies appear in dashboard chat`,
+		'COMMUNICATION: Use legio mail for all inter-agent messaging. Check your inbox with: legio mail check --agent gateway. Send replies via: legio mail send --to human --subject "chat" --body "..." --type status --audience human --agent gateway',
+		"ISSUES: If a task tracker is configured, use legio task to create issues for work decomposition. Check legio status for current agent fleet.",
+		`Startup: run legio memory prime, check mail (legio mail check --agent ${GATEWAY_NAME}), check legio status, then send a greeting to the human via legio mail send --to human --subject "chat" --body "Gateway online and ready. What would you like to work on?" --type status --audience human --agent ${GATEWAY_NAME}`,
 	];
 	if (isFirstRun) {
-		parts.push("FIRST_RUN: true — Follow the First Run workflow in your agent definition");
+		parts.push(
+			"FIRST_RUN: true — Follow the First Run workflow in your agent definition: introduce yourself via mail to human, run legio doctor --category config, then ask the human what they want to work on",
+		);
 	}
 	return parts.join(" — ");
 }
@@ -102,49 +106,6 @@ export function resolveAttach(args: string[], isTTY: boolean): boolean {
 	if (args.includes("--attach")) return true;
 	if (args.includes("--no-attach")) return false;
 	return isTTY;
-}
-
-/**
- * Verify that the gateway beacon was delivered by polling the session state.
- * If the session remains in "booting" after polling, retries the beacon once.
- * Logs a warning if delivery cannot be confirmed.
- *
- * Matches the coordinator's verifyBeaconDelivery pattern: deterministic,
- * hook-driven state polling instead of fragile pane-content heuristics.
- */
-async function verifyBeaconDelivery(
-	store: SessionStore,
-	tmux: NonNullable<GatewayDeps["_tmux"]>,
-	tmuxSession: string,
-	beacon: string,
-	sleep: (ms: number) => Promise<void>,
-): Promise<boolean> {
-	const MAX_CHECKS = 10;
-	const INTERVAL_MS = 2_000;
-
-	for (let i = 0; i < MAX_CHECKS; i++) {
-		await sleep(INTERVAL_MS);
-		const session = store.getByName(GATEWAY_NAME);
-		if (session && session.state !== "booting") {
-			// Beacon confirmed — gateway transitioned out of booting
-			return true;
-		}
-	}
-
-	// Still booting after MAX_CHECKS — retry beacon once
-	process.stderr.write("[legio] Beacon delivery unconfirmed — retrying beacon\n");
-	await tmux.sendKeys(tmuxSession, beacon);
-	await sleep(500);
-	await tmux.sendKeys(tmuxSession, "");
-
-	// One final check after retry
-	await sleep(INTERVAL_MS);
-	const finalSession = store.getByName(GATEWAY_NAME);
-	if (!finalSession || finalSession.state === "booting") {
-		process.stderr.write("[legio] Warning: gateway beacon delivery could not be confirmed\n");
-		return false;
-	}
-	return true;
 }
 
 /**
@@ -167,6 +128,7 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		isSessionAlive,
 		killSession,
 		sendKeys,
+		capturePaneContent,
 		waitForTuiReady,
 	};
 	const sleep =
@@ -216,7 +178,7 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 				capability: "gateway",
 				created: new Date().toISOString(),
 				sessionsCompleted: 0,
-				expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
+				expertiseDomains: config.memory.enabled ? config.memory.domains : [],
 				recentTasks: [],
 			});
 		}
@@ -299,15 +261,17 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 		}
 		const beacon = buildGatewayBeacon(isFirstRun);
 
-		// Same beacon delivery pattern as coordinator: send text, follow-up Enter,
-		// then poll session state to confirm delivery.
-		await tmux.sendKeys(tmuxSession, beacon);
-		await sleep(500);
-		await tmux.sendKeys(tmuxSession, "");
-
-		// Verify delivery: poll store until state transitions out of booting.
-		// Must complete before the finally block closes the store.
-		const confirmed = await verifyBeaconDelivery(store, tmux, tmuxSession, beacon, sleep);
+		// Deliver beacon using pane-content-based verification (sling-style).
+		// Sends beacon text + Enter, checks pane content for agent activity,
+		// and retries if the beacon is stuck in paste preview or input area.
+		const confirmed = await deliverBeacon({
+			sessionName: tmuxSession,
+			beacon,
+			agentName: GATEWAY_NAME,
+			sendKeysFn: tmux.sendKeys,
+			capturePane: tmux.capturePaneContent,
+			sleep,
+		});
 
 		// Send greeting mail to human only after confirmed beacon delivery
 		if (confirmed) {
@@ -319,7 +283,7 @@ async function startGateway(args: string[], deps: GatewayDeps = {}): Promise<voi
 					from: GATEWAY_NAME,
 					to: "human",
 					subject: "Gateway online",
-					body: "Gateway is online and ready. Send a message to start chatting.",
+					body: "Gateway starting up.",
 					type: "status",
 					priority: "normal",
 					threadId: null,

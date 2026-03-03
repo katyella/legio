@@ -31,7 +31,8 @@ export const DEFAULT_CONFIG: LegioConfig = {
 		backend: "auto" as const,
 		enabled: true,
 	},
-	mulch: {
+	memory: {
+		backend: "auto" as const,
 		enabled: true,
 		domains: [],
 		primeFormat: "markdown",
@@ -296,16 +297,11 @@ function deepMerge(
  *
  * Mutates the parsed config object in place.
  */
-let watchdogDeprecationWarned = false;
 function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	// Migration 1: `watchdog` → `watchman`
 	if ("watchdog" in parsed && !("watchman" in parsed)) {
 		parsed.watchman = parsed.watchdog;
 		delete parsed.watchdog;
-		if (!watchdogDeprecationWarned) {
-			watchdogDeprecationWarned = true;
-			process.stderr.write("[legio] DEPRECATED: config 'watchdog' key → use 'watchman'\n");
-		}
 	}
 
 	// Migration 2: fold `mailman` into `watchman`
@@ -324,7 +320,6 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 			if ("warnAfterMs" in mm) wm.warnAfterMs = mm.warnAfterMs;
 		}
 		delete parsed.mailman;
-		process.stderr.write("[legio] DEPRECATED: config 'mailman' key → folded into 'watchman'\n");
 	}
 
 	const watchman = parsed.watchman;
@@ -347,22 +342,17 @@ function migrateDeprecatedWatchdogKeys(parsed: Record<string, unknown>): void {
 	// Old tier1Enabled → new tier0Enabled (mechanical daemon)
 	wd.tier0Enabled = wd.tier1Enabled;
 	wd.tier1Enabled = undefined;
-	process.stderr.write("[legio] DEPRECATED: watchman.tier1Enabled → use watchman.tier0Enabled\n");
 
 	// Old tier1IntervalMs → new tier0IntervalMs (mechanical daemon)
 	if ("tier1IntervalMs" in wd) {
 		wd.tier0IntervalMs = wd.tier1IntervalMs;
 		wd.tier1IntervalMs = undefined;
-		process.stderr.write(
-			"[legio] DEPRECATED: watchman.tier1IntervalMs → use watchman.tier0IntervalMs\n",
-		);
 	}
 
 	// Old tier2Enabled → new tier1Enabled (AI triage)
 	if ("tier2Enabled" in wd) {
 		wd.tier1Enabled = wd.tier2Enabled;
 		wd.tier2Enabled = undefined;
-		process.stderr.write("[legio] DEPRECATED: watchman.tier2Enabled → use watchman.tier1Enabled\n");
 	}
 }
 
@@ -465,12 +455,23 @@ function validateConfig(config: LegioConfig): void {
 		});
 	}
 
-	// mulch.primeFormat must be one of the valid options
+	// memory.backend must be one of the valid options
+	const validMemoryBackends = ["auto", "mulch", "builtin"] as const;
+	if (
+		!validMemoryBackends.includes(config.memory.backend as (typeof validMemoryBackends)[number])
+	) {
+		throw new ValidationError(`memory.backend must be one of: ${validMemoryBackends.join(", ")}`, {
+			field: "memory.backend",
+			value: config.memory.backend,
+		});
+	}
+
+	// memory.primeFormat must be one of the valid options
 	const validFormats = ["markdown", "xml", "json"] as const;
-	if (!validFormats.includes(config.mulch.primeFormat as (typeof validFormats)[number])) {
-		throw new ValidationError(`mulch.primeFormat must be one of: ${validFormats.join(", ")}`, {
-			field: "mulch.primeFormat",
-			value: config.mulch.primeFormat,
+	if (!validFormats.includes(config.memory.primeFormat as (typeof validFormats)[number])) {
+		throw new ValidationError(`memory.primeFormat must be one of: ${validFormats.join(", ")}`, {
+			field: "memory.primeFormat",
+			value: config.memory.primeFormat,
 		});
 	}
 
@@ -495,7 +496,6 @@ function validateConfig(config: LegioConfig): void {
  * Detection: 'beads' key present and 'taskTracker' key absent.
  * Mutates the parsed config object in place.
  */
-let beadsDeprecationWarned = false;
 function migrateDeprecatedBeadsKey(parsed: Record<string, unknown>): void {
 	const hasBeads = "beads" in parsed;
 	const hasTaskTracker = "taskTracker" in parsed;
@@ -515,10 +515,39 @@ function migrateDeprecatedBeadsKey(parsed: Record<string, unknown>): void {
 		enabled: typeof b.enabled === "boolean" ? b.enabled : true,
 	};
 	delete parsed.beads;
-	if (!beadsDeprecationWarned) {
-		beadsDeprecationWarned = true;
-		process.stderr.write("[legio] DEPRECATED: config 'beads' key → use 'taskTracker'\n");
+}
+
+/**
+ * Migrate deprecated 'mulch' config key to 'memory'.
+ *
+ * If the parsed config has a 'mulch' key but no 'memory', map
+ * mulch fields to memory fields with backend set to 'mulch'.
+ *
+ * Detection: 'mulch' key present and 'memory' key absent.
+ * Mutates the parsed config object in place.
+ */
+function migrateDeprecatedMulchKey(parsed: Record<string, unknown>): void {
+	const hasMulch = "mulch" in parsed;
+	const hasMemory = "memory" in parsed;
+
+	if (!hasMulch || hasMemory) {
+		return;
 	}
+
+	const mulch = parsed.mulch;
+	if (mulch === null || mulch === undefined || typeof mulch !== "object") {
+		return;
+	}
+
+	const m = mulch as Record<string, unknown>;
+	parsed.memory = {
+		backend: "mulch",
+		enabled: typeof m.enabled === "boolean" ? m.enabled : true,
+		domains: Array.isArray(m.domains) ? m.domains : [],
+		primeFormat: typeof m.primeFormat === "string" ? m.primeFormat : "markdown",
+		domainMap: typeof m.domainMap === "object" && m.domainMap !== null ? m.domainMap : {},
+	};
+	delete parsed.mulch;
 }
 
 /**
@@ -562,6 +591,7 @@ async function mergeLocalConfig(resolvedRoot: string, config: LegioConfig): Prom
 
 	migrateDeprecatedWatchdogKeys(parsed);
 	migrateDeprecatedBeadsKey(parsed);
+	migrateDeprecatedMulchKey(parsed);
 
 	return deepMerge(config as unknown as Record<string, unknown>, parsed) as unknown as LegioConfig;
 }
@@ -675,6 +705,8 @@ export async function loadConfig(projectRoot: string): Promise<LegioConfig> {
 	migrateDeprecatedWatchdogKeys(parsed);
 	// Backward compatibility: migrate deprecated 'beads' key to 'taskTracker'.
 	migrateDeprecatedBeadsKey(parsed);
+	// Backward compatibility: migrate deprecated 'mulch' key to 'memory'.
+	migrateDeprecatedMulchKey(parsed);
 
 	// Deep merge parsed config over defaults
 	let merged = deepMerge(

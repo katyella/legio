@@ -36,7 +36,10 @@ interface TmuxCallTracker {
 }
 
 /** Build a fake tmux DI object with configurable session liveness. */
-function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
+function makeFakeTmux(
+	sessionAliveMap: Record<string, boolean> = {},
+	paneContent = "",
+): {
 	tmux: NonNullable<GatewayDeps["_tmux"]>;
 	calls: TmuxCallTracker;
 } {
@@ -68,6 +71,7 @@ function makeFakeTmux(sessionAliveMap: Record<string, boolean> = {}): {
 		sendKeys: async (name: string, keys: string): Promise<void> => {
 			calls.sendKeys.push({ name, keys });
 		},
+		capturePaneContent: async (): Promise<string> => paneContent,
 		waitForTuiReady: async (): Promise<void> => {},
 	};
 
@@ -504,39 +508,30 @@ describe("startGateway", () => {
 		expect(newSession?.id).not.toBe("session-dead-gateway");
 	});
 
-	test("re-sends beacon when session stays in booting state", async () => {
-		const { deps, calls } = makeDeps();
+	test("retries beacon when pane shows beacon tag stuck in input", async () => {
+		// Simulate beacon tag visible in pane (stuck in input) — deliverBeacon retries
+		const { tmux, calls } = makeFakeTmux({}, "[LEGIO] gateway (gateway) stuck text");
+		const deps: GatewayDeps = {
+			_tmux: tmux,
+			_sleep: () => Promise.resolve(),
+		};
 
 		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
 
-		// verifyBeaconDelivery polls store 10 times (all return "booting" since no hooks run),
-		// then retries the full beacon + follow-up Enter.
-		// Total sendKeys calls: 1 (initial beacon) + 1 (follow-up Enter) + 1 (retry beacon) + 1 (retry Enter)
+		// deliverBeacon sends beacon text once, then retries with Enter only.
+		// 1 beacon send + 1 initial Enter + 3 retry Enters = 1 beacon, 4+ Enters.
 		const beaconCalls = calls.sendKeys.filter((c) => c.keys.includes("[LEGIO]"));
-		expect(beaconCalls).toHaveLength(2); // initial + retry
+		expect(beaconCalls).toHaveLength(1); // beacon sent only once
 		const enterCalls = calls.sendKeys.filter((c) => c.keys === "");
-		expect(enterCalls).toHaveLength(2); // follow-up Enter + retry Enter
+		expect(enterCalls.length).toBeGreaterThanOrEqual(4);
 	});
 
 	test("sends greeting mail to human after confirmed beacon delivery", async () => {
-		const { tmux } = makeFakeTmux();
-		// Simulate hooks transitioning session out of "booting" after a few sleep calls
-		let sleepCount = 0;
+		// Simulate pane showing agent activity (beacon consumed)
+		const { tmux } = makeFakeTmux({}, "⏺ Reading file...");
 		const deps: GatewayDeps = {
 			_tmux: tmux,
-			_sleep: async () => {
-				sleepCount++;
-				// After 3 sleeps (waitForTuiReady + follow-up Enter delay + first poll),
-				// transition session to "working" like hooks would
-				if (sleepCount === 3) {
-					const { store } = openSessionStore(legioDir);
-					try {
-						store.updateState("gateway", "working");
-					} finally {
-						store.close();
-					}
-				}
-			},
+			_sleep: () => Promise.resolve(),
 		};
 		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
 		// Verify mail.db has the greeting
@@ -546,7 +541,7 @@ describe("startGateway", () => {
 			const msgs = mailDb.getAll({ from: "gateway", to: "human" });
 			expect(msgs).toHaveLength(1);
 			expect(msgs[0]?.subject).toBe("Gateway online");
-			expect(msgs[0]?.body).toContain("online and ready");
+			expect(msgs[0]?.body).toContain("starting up");
 			expect(msgs[0]?.type).toBe("status");
 			expect(msgs[0]?.audience).toBe("human");
 		} finally {
@@ -555,9 +550,14 @@ describe("startGateway", () => {
 	});
 
 	test("does not send greeting mail when beacon delivery fails", async () => {
-		const { deps } = makeDeps();
+		// Simulate beacon stuck in pane (never consumed) — deliverBeacon returns false
+		const { tmux } = makeFakeTmux({}, "[LEGIO] gateway (gateway) stuck");
+		const deps: GatewayDeps = {
+			_tmux: tmux,
+			_sleep: () => Promise.resolve(),
+		};
 		await captureStdout(() => gatewayCommand(["start", "--no-attach"], deps));
-		// verifyBeaconDelivery returns false (session stays in "booting"), so no greeting mail
+		// deliverBeacon returns false — no greeting mail sent
 		const { createMailStore } = await import("../mail/store.ts");
 		const mailDb = createMailStore(join(legioDir, "mail.db"));
 		try {
@@ -751,8 +751,10 @@ describe("buildGatewayBeacon", () => {
 
 	test("includes startup instructions", () => {
 		const beacon = buildGatewayBeacon();
+		expect(beacon).toContain("legio memory prime");
 		expect(beacon).toContain("legio mail check --agent gateway");
-		expect(beacon).toContain("respond to user via BOTH terminal AND mail");
+		expect(beacon).toContain("legio status");
+		expect(beacon).toContain("send a greeting to the human");
 	});
 
 	test("parts are joined with em-dash separator", () => {
@@ -775,7 +777,8 @@ describe("buildGatewayBeacon", () => {
 	test("isFirstRun=true includes FIRST_RUN flag", () => {
 		const beacon = buildGatewayBeacon(true);
 		expect(beacon).toContain("FIRST_RUN: true");
-		expect(beacon).toContain("Follow the First Run workflow");
+		expect(beacon).toContain("First Run workflow");
+		expect(beacon).toContain("legio doctor");
 	});
 
 	test("isFirstRun=true beacon is longer than default", () => {

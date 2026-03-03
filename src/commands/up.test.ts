@@ -36,7 +36,6 @@ const GATEWAY_STATUS_NOT_RUNNING = {
 	stderr: "",
 	exitCode: 0,
 };
-const GATEWAY_START_OK = { stdout: "{}\n", stderr: "", exitCode: 0 };
 
 describe("upCommand", () => {
 	let capturedStdout: string;
@@ -83,6 +82,7 @@ describe("upCommand", () => {
 			}),
 			_fileExists: async () => false,
 			_projectRoot: "/tmp/not-a-repo",
+			_spawnDetached: () => {},
 		};
 		await expect(upCommand([], deps)).rejects.toThrow(ValidationError);
 	});
@@ -103,8 +103,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => false, // config.yaml not found, no server.pid
@@ -112,6 +110,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -132,8 +131,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // config exists, no server.pid
@@ -141,6 +138,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -159,8 +157,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // initialized, no server.pid
@@ -168,6 +164,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--force"], deps);
@@ -184,8 +181,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => true, // config.yaml exists AND server.pid exists
@@ -193,6 +188,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => true, // server is alive
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -214,8 +210,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml") || p.endsWith("server.pid"),
@@ -223,6 +217,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false, // PID exists but process is dead
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -242,8 +237,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"), // no server.pid
@@ -251,6 +244,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -273,8 +267,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -282,6 +274,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--port", "8080", "--host", "0.0.0.0"], deps);
@@ -302,8 +295,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -313,6 +304,7 @@ describe("upCommand", () => {
 				browserOpened = true;
 			},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--no-open"], deps);
@@ -327,8 +319,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -338,6 +328,7 @@ describe("upCommand", () => {
 				openedUrl = url;
 			},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand([], deps);
@@ -358,6 +349,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await expect(upCommand([], deps)).rejects.toThrow(ServerError);
@@ -377,6 +369,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await expect(upCommand([], deps)).rejects.toThrow(ValidationError);
@@ -389,8 +382,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -398,6 +389,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--json"], deps);
@@ -424,8 +416,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async () => true,
@@ -433,6 +423,7 @@ describe("upCommand", () => {
 			_isProcessRunning: () => true,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--json"], deps);
@@ -452,8 +443,6 @@ describe("upCommand", () => {
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -461,23 +450,21 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
 		};
 
 		await upCommand(["--port", "5000"], deps);
 		expect(capturedStdout).toContain("http://127.0.0.1:5000");
 	});
 
-	it("starts gateway when not already running", async () => {
-		const commands: string[][] = [];
+	it("starts gateway via detached spawn when not already running", async () => {
+		const detachedCalls: string[][] = [];
 		const deps: UpDeps = {
 			_runCommand: async (cmd) => {
-				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -485,15 +472,18 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: (cmd) => {
+				detachedCalls.push(cmd);
+			},
 		};
 
 		await upCommand(["--json"], deps);
 
-		const gatewayStarted = commands.some(
-			(c) =>
-				c[0] === "legio" && c[1] === "gateway" && c[2] === "start" && c.includes("--no-attach"),
+		const gatewayStartCmd = detachedCalls.find(
+			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
 		);
-		expect(gatewayStarted).toBe(true);
+		expect(gatewayStartCmd).toBeDefined();
+		expect(gatewayStartCmd).toContain("--no-attach");
 
 		const parsed = JSON.parse(capturedStdout.trim()) as {
 			gatewayStarted: boolean;
@@ -503,43 +493,10 @@ describe("upCommand", () => {
 		expect(parsed.gatewayAlreadyRunning).toBe(false);
 	});
 
-	it("starts gateway via awaited runCommand (not detached)", async () => {
-		const commands: string[][] = [];
-		const deps: UpDeps = {
-			_runCommand: async (cmd) => {
-				commands.push(cmd);
-				if (cmd[0] === "git") return GIT_OK;
-				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
-					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
-				return { stdout: "", stderr: "unexpected", exitCode: 1 };
-			},
-			_fileExists: async (p) => p.endsWith("config.yaml"),
-			_readPid: async () => null,
-			_isProcessRunning: () => false,
-			_openBrowser: () => {},
-			_projectRoot: "/tmp/test-project",
-		};
-
-		await upCommand([], deps);
-
-		// Gateway start MUST go through _runCommand (awaited, not fire-and-forget)
-		const gatewayStartCmd = commands.find(
-			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
-		);
-		expect(gatewayStartCmd).toBeDefined();
-		// Must include --no-attach and --json for proper piped-stdout behavior
-		expect(gatewayStartCmd).toContain("--no-attach");
-		expect(gatewayStartCmd).toContain("--json");
-	});
-
 	it("skips gateway start when already running", async () => {
-		const commands: string[][] = [];
+		const detachedCalls: string[][] = [];
 		const deps: UpDeps = {
 			_runCommand: async (cmd) => {
-				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status") {
@@ -552,14 +509,18 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: (cmd) => {
+				detachedCalls.push(cmd);
+			},
 		};
 
 		await upCommand(["--json"], deps);
 
-		const gatewayStarted = commands.some(
+		// No detached spawn should have been called for gateway
+		const gatewaySpawned = detachedCalls.some(
 			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
 		);
-		expect(gatewayStarted).toBe(false);
+		expect(gatewaySpawned).toBe(false);
 
 		const parsed = JSON.parse(capturedStdout.trim()) as {
 			gatewayStarted: boolean;
@@ -569,16 +530,13 @@ describe("upCommand", () => {
 		expect(parsed.gatewayAlreadyRunning).toBe(true);
 	});
 
-	it("gateway start failure is non-fatal", async () => {
+	it("gateway spawn failure is non-fatal", async () => {
 		const deps: UpDeps = {
 			_runCommand: async (cmd) => {
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
 					return GATEWAY_STATUS_NOT_RUNNING;
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start") {
-					return { stdout: "", stderr: "gateway failed to start", exitCode: 1 };
-				}
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -586,6 +544,9 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {
+				throw new Error("spawn failed");
+			},
 		};
 
 		// Gateway failure must NOT propagate — command completes successfully
@@ -601,17 +562,14 @@ describe("upCommand", () => {
 	});
 
 	it("continues when gateway status check fails", async () => {
-		const commands: string[][] = [];
+		const detachedCalls: string[][] = [];
 		const deps: UpDeps = {
 			_runCommand: async (cmd) => {
-				commands.push(cmd);
 				if (cmd[0] === "git") return GIT_OK;
 				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
 				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status") {
 					return { stdout: "", stderr: "status failed", exitCode: 1 };
 				}
-				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "start")
-					return GATEWAY_START_OK;
 				return { stdout: "", stderr: "unexpected", exitCode: 1 };
 			},
 			_fileExists: async (p) => p.endsWith("config.yaml"),
@@ -619,13 +577,43 @@ describe("upCommand", () => {
 			_isProcessRunning: () => false,
 			_openBrowser: () => {},
 			_projectRoot: "/tmp/test-project",
+			_spawnDetached: (cmd) => {
+				detachedCalls.push(cmd);
+			},
 		};
 
 		await expect(upCommand([], deps)).resolves.toBeUndefined();
 
-		const gatewayStarted = commands.some(
+		// Gateway should still be spawned even if status check failed
+		const gatewaySpawned = detachedCalls.some(
 			(c) => c[0] === "legio" && c[1] === "gateway" && c[2] === "start",
 		);
-		expect(gatewayStarted).toBe(true);
+		expect(gatewaySpawned).toBe(true);
+	});
+
+	it("shows spinner succeed messages for each step", async () => {
+		const deps: UpDeps = {
+			_runCommand: async (cmd) => {
+				if (cmd[0] === "git") return GIT_OK;
+				if (cmd[0] === "legio" && cmd[1] === "server") return SERVER_START_OK;
+				if (cmd[0] === "legio" && cmd[1] === "gateway" && cmd[2] === "status")
+					return GATEWAY_STATUS_NOT_RUNNING;
+				return { stdout: "", stderr: "unexpected", exitCode: 1 };
+			},
+			_fileExists: async (p) => p.endsWith("config.yaml"),
+			_readPid: async () => null,
+			_isProcessRunning: () => false,
+			_openBrowser: () => {},
+			_projectRoot: "/tmp/test-project",
+			_spawnDetached: () => {},
+		};
+
+		await upCommand([], deps);
+
+		expect(capturedStdout).toContain("Git repository");
+		expect(capturedStdout).toContain("Already initialized");
+		expect(capturedStdout).toContain("Server started");
+		expect(capturedStdout).toContain("Gateway launched");
+		expect(capturedStdout).toContain("Legio is up");
 	});
 });

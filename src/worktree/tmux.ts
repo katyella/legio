@@ -476,6 +476,19 @@ export async function sendKeys(name: string, keys: string): Promise<void> {
 		if (textResult.exitCode !== 0) {
 			throwSendKeysError(name, textResult.stderr);
 		}
+
+		// Wait for tmux server to deliver all characters to the terminal
+		// before sending Enter. The `tmux send-keys` CLI returns after
+		// queuing characters with the server, but the server may still be
+		// delivering them to the pane. For long text (>~750 chars), the
+		// Enter arrives while delivery is in progress, causing Claude Code's
+		// TUI to split the input and enter paste preview mode instead of
+		// submitting. A 100ms delay per 500 chars gives the server time to
+		// flush the character queue.
+		if (flatKeys.length > 500) {
+			const delayMs = Math.ceil(flatKeys.length / 500) * 100;
+			await setTimeout(delayMs);
+		}
 	}
 
 	// Step 2: Send Enter separately to trigger submission.
@@ -619,6 +632,113 @@ export function hasTuiMarkers(content: string): boolean {
  * @param opts.interval - Polling interval in ms (default: 500)
  * @param opts.postReadyDelay - Extra delay after marker detection in ms (default: 500)
  */
+/**
+ * Detect if the TUI is showing a paste preview and submit it.
+ *
+ * Claude Code's TUI enters "paste preview" mode for long text, showing
+ * `[Pasted text #N +M lines]` in the input field. In this mode, the
+ * initial Enter from sendKeys may be consumed before the preview renders,
+ * leaving the text unsubmitted.
+ *
+ * This function polls the pane content for paste preview indicators and
+ * sends additional Enter keystrokes to submit the pasted text.
+ *
+ * @param sessionName - Tmux session name to check
+ * @param opts.maxRetries - Maximum Enter retries (default: 3)
+ * @param opts.interval - Polling interval in ms (default: 1000)
+ */
+export async function submitPastedText(
+	sessionName: string,
+	opts?: { maxRetries?: number; interval?: number },
+): Promise<boolean> {
+	const maxRetries = opts?.maxRetries ?? 3;
+	const intervalMs = opts?.interval ?? 1_000;
+
+	for (let i = 0; i < maxRetries; i++) {
+		await setTimeout(intervalMs);
+		const content = await capturePaneContent(sessionName);
+		if (!content.includes("[Pasted text")) {
+			// No paste preview — text was submitted or never entered paste mode
+			return true;
+		}
+		// Paste preview still showing — send Enter to submit
+		await sendKeys(sessionName, "");
+	}
+
+	// Final check
+	await setTimeout(intervalMs);
+	const finalContent = await capturePaneContent(sessionName);
+	if (finalContent.includes("[Pasted text")) {
+		process.stderr.write(
+			`[legio] Warning: paste preview still showing for "${sessionName}" after ${maxRetries} retries\n`,
+		);
+		return false;
+	}
+	return true;
+}
+
+/**
+ * Deliver a beacon to a tmux session with pane-content-based verification.
+ *
+ * Extracts the sling.ts delivery pattern into a reusable utility:
+ * sends the beacon text + Enter, waits, checks pane content to see if
+ * the beacon was consumed (agent shows activity) or is stuck (paste
+ * preview, raw text still in input). Retries with increasing delays.
+ *
+ * @returns true if the beacon was consumed, false if all attempts failed
+ */
+export async function deliverBeacon(opts: {
+	sessionName: string;
+	beacon: string;
+	agentName: string;
+	sendKeysFn: (name: string, keys: string) => Promise<void>;
+	capturePane: (name: string) => Promise<string>;
+	sleep: (ms: number) => Promise<void>;
+	maxAttempts?: number;
+}): Promise<boolean> {
+	const maxAttempts = opts.maxAttempts ?? 3;
+	const beaconTag = `[LEGIO] ${opts.agentName}`;
+
+	// Send beacon text exactly once, then Enter to submit
+	await opts.sendKeysFn(opts.sessionName, opts.beacon);
+	await opts.sleep(500);
+	await opts.sendKeysFn(opts.sessionName, "");
+
+	// Retry loop only sends Enter keys to push through paste preview —
+	// never re-sends the beacon text, which would cause double delivery.
+	for (let attempt = 0; attempt < maxAttempts; attempt++) {
+		const verifyDelay = 1000 + attempt * 1000; // 1s, 2s, 3s
+		await opts.sleep(verifyDelay);
+
+		// Check pane content: if agent is active, beacon was consumed
+		const paneContent = await opts.capturePane(opts.sessionName);
+		const hasAgentActivity =
+			paneContent.includes("⏺") || // Claude Code thinking/tool indicator
+			paneContent.includes("Reading") || // Tool usage
+			paneContent.includes("Searching") || // Tool usage
+			paneContent.includes("Editing") || // Tool usage
+			paneContent.includes("Running"); // Tool usage
+		const isPastePreview = paneContent.includes("[Pasted text");
+		const beaconStillInInput =
+			(paneContent.includes(beaconTag) || isPastePreview) && !hasAgentActivity;
+
+		if (!beaconStillInInput) {
+			return true;
+		}
+
+		// Beacon stuck in paste preview or input — send Enter to submit
+		process.stderr.write(
+			`⚠️  Beacon attempt ${attempt + 1}/${maxAttempts} not consumed — sending Enter\n`,
+		);
+		await opts.sendKeysFn(opts.sessionName, "");
+	}
+
+	process.stderr.write(
+		`⚠️  Warning: Beacon for "${opts.agentName}" may not have been delivered after ${maxAttempts} attempts\n`,
+	);
+	return false;
+}
+
 export async function waitForTuiReady(
 	sessionName: string,
 	opts?: { timeout?: number; interval?: number; postReadyDelay?: number },

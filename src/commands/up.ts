@@ -91,6 +91,71 @@ function openBrowser(url: string): void {
 	child.unref();
 }
 
+/**
+ * Spawn a process in the background (detached, unreffed).
+ * The process outlives the parent — used for gateway start
+ * so legio up doesn't block on beacon delivery.
+ */
+function defaultSpawnDetached(cmd: string[], opts?: { cwd?: string }): void {
+	const [command, ...args] = cmd;
+	if (!command) return;
+	const proc = spawn(command, args, {
+		cwd: opts?.cwd,
+		stdio: "ignore",
+		detached: true,
+	});
+	proc.unref();
+}
+
+// --- Spinner ---
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/** Handle returned by spinner factories. */
+export interface SpinnerHandle {
+	succeed(msg: string): void;
+	fail(msg: string): void;
+}
+
+/** Animated braille spinner for interactive TTYs. */
+function createAnimatedSpinner(msg: string): SpinnerHandle {
+	let i = 0;
+	const frame0 = SPINNER_FRAMES[0] ?? "⠋";
+	process.stdout.write(`${frame0} ${msg}`);
+	const timer = setInterval(() => {
+		i = (i + 1) % SPINNER_FRAMES.length;
+		const frame = SPINNER_FRAMES[i] ?? "⠋";
+		process.stdout.write(`\r${frame} ${msg}`);
+	}, 80);
+	return {
+		succeed(finalMsg: string) {
+			clearInterval(timer);
+			process.stdout.write(`\r\x1b[2K✓ ${finalMsg}\n`);
+		},
+		fail(finalMsg: string) {
+			clearInterval(timer);
+			process.stdout.write(`\r\x1b[2K✗ ${finalMsg}\n`);
+		},
+	};
+}
+
+/** Static spinner for non-TTY (piped, CI). Prints the final message only. */
+function createStaticSpinner(_msg: string): SpinnerHandle {
+	return {
+		succeed(finalMsg: string) {
+			process.stdout.write(`✓ ${finalMsg}\n`);
+		},
+		fail(finalMsg: string) {
+			process.stdout.write(`✗ ${finalMsg}\n`);
+		},
+	};
+}
+
+/** Silent spinner for JSON mode. No output. */
+function createSilentSpinner(): SpinnerHandle {
+	return { succeed() {}, fail() {} };
+}
+
 /** Dependency injection interface for testing. */
 export interface UpDeps {
 	_runCommand?: (
@@ -102,6 +167,8 @@ export interface UpDeps {
 	_isProcessRunning?: (pid: number) => boolean;
 	_openBrowser?: (url: string) => void;
 	_projectRoot?: string;
+	_spawnDetached?: (cmd: string[], opts?: { cwd?: string }) => void;
+	_createSpinner?: (msg: string) => SpinnerHandle;
 }
 
 const UP_HELP = `legio up — Start the full legio stack
@@ -152,14 +219,12 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	const isRunningFn = deps._isProcessRunning ?? isProcessRunning;
 	const openBrowserFn = deps._openBrowser ?? openBrowser;
 	const projectRoot = deps._projectRoot ?? process.cwd();
+	const spawnBg = deps._spawnDetached ?? defaultSpawnDetached;
 
-	// 1. Check git repo
-	const gitCheck = await run(["git", "rev-parse", "--is-inside-work-tree"], { cwd: projectRoot });
-	if (gitCheck.exitCode !== 0) {
-		throw new ValidationError("legio requires a git repository. Run 'git init' first.", {
-			field: "git",
-		});
-	}
+	// Spinner: animated on TTY, static on pipe/CI, silent for JSON
+	const spin = json
+		? () => createSilentSpinner()
+		: (deps._createSpinner ?? (process.stdout.isTTY ? createAnimatedSpinner : createStaticSpinner));
 
 	let initRan = false;
 	let serverStarted = false;
@@ -167,27 +232,38 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 	let gatewayStarted = false;
 	let gatewayAlreadyRunning = false;
 
+	// 1. Check git repo
+	let s = spin("Checking git repository...");
+	const gitCheck = await run(["git", "rev-parse", "--is-inside-work-tree"], { cwd: projectRoot });
+	if (gitCheck.exitCode !== 0) {
+		s.fail("Not a git repository");
+		throw new ValidationError("legio requires a git repository. Run 'git init' first.", {
+			field: "git",
+		});
+	}
+	s.succeed("Git repository");
+
 	// 2. Check if .legio/ is initialized
 	const configPath = join(projectRoot, ".legio", "config.yaml");
 	const initialized = await fileExistsFn(configPath);
 
 	if (!initialized || force) {
-		if (!json) {
-			const msg = initialized
-				? "Reinitializing .legio/ (--force)...\n"
-				: "Initializing .legio/...\n";
-			process.stdout.write(msg);
-		}
+		const label = initialized ? "Reinitializing .legio/ (--force)..." : "Initializing .legio/...";
+		s = spin(label);
 		const initArgs = ["legio", "init"];
 		if (force) initArgs.push("--force");
 		const initResult = await run(initArgs, { cwd: projectRoot });
 		if (initResult.exitCode !== 0) {
+			s.fail("Init failed");
 			throw new ValidationError(`Init failed: ${initResult.stderr.trim()}`, {
 				field: "init",
 			});
 		}
-		if (!json && initResult.stdout) process.stdout.write(initResult.stdout);
+		s.succeed("Initialized");
 		initRan = true;
+	} else {
+		s = spin("Checking initialization...");
+		s.succeed("Already initialized");
 	}
 
 	// 3. Check if server is already running
@@ -200,26 +276,24 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 		if (pid !== null && isRunningFn(pid)) {
 			serverAlreadyRunning = true;
 			serverPid = pid;
-			if (!json) {
-				process.stdout.write(`Server already running (PID ${pid})\n`);
-			}
 		}
 	}
 
-	if (!serverAlreadyRunning) {
-		// Start server in daemon mode
-		if (!json) {
-			process.stdout.write(`Starting server on ${host}:${port}...\n`);
-		}
+	if (serverAlreadyRunning) {
+		s = spin("Checking server...");
+		s.succeed(`Server already running (PID ${serverPid})`);
+	} else {
+		s = spin(`Starting server on ${host}:${port}...`);
 		const serverResult = await run(
 			["legio", "server", "start", "--daemon", "--port", String(port), "--host", host],
 			{ cwd: projectRoot },
 		);
 		if (serverResult.exitCode !== 0) {
+			s.fail("Server start failed");
 			throw new ServerError(`Server start failed: ${serverResult.stderr.trim()}`, { port });
 		}
-		if (!json && serverResult.stdout) process.stdout.write(serverResult.stdout);
 		serverStarted = true;
+		s.succeed(`Server started on ${host}:${port}`);
 	}
 
 	// 4. Check if gateway is already running and start if needed (non-fatal)
@@ -231,25 +305,25 @@ export async function upCommand(args: string[], deps: UpDeps = {}): Promise<void
 			if (statusData.running === true) {
 				gatewayAlreadyRunning = true;
 				gatewayRunning = true;
-				if (!json) process.stdout.write("Gateway already running\n");
 			}
 		}
 	} catch {
 		// ignore status check errors, proceed to try starting
 	}
-	if (!gatewayRunning) {
+
+	if (gatewayRunning) {
+		s = spin("Checking gateway...");
+		s.succeed("Gateway already running");
+	} else {
+		s = spin("Starting gateway...");
 		try {
-			const gatewayResult = await run(["legio", "gateway", "start", "--no-attach", "--json"], {
-				cwd: projectRoot,
-			});
-			if (gatewayResult.exitCode === 0) {
-				gatewayStarted = true;
-				if (!json) process.stdout.write("Gateway started\n");
-			} else if (!json) {
-				process.stderr.write(`Warning: gateway start failed: ${gatewayResult.stderr.trim()}\n`);
-			}
+			// Spawn gateway detached so legio up returns immediately.
+			// Beacon delivery (15-30s) happens in the background.
+			spawnBg(["legio", "gateway", "start", "--no-attach"], { cwd: projectRoot });
+			gatewayStarted = true;
+			s.succeed("Gateway launched");
 		} catch {
-			if (!json) process.stderr.write("Warning: gateway start failed\n");
+			s.fail("Gateway failed to start");
 		}
 	}
 
