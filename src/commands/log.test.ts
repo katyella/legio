@@ -344,13 +344,13 @@ describe("logCommand", () => {
 
 		await logCommand(["session-end", "--agent", "coordinator"]);
 
-		// Coordinator should remain 'working', not transition to 'completed'
+		// Coordinator should transition to 'idle', not 'completed'
 		const readStore = createSessionStore(dbPath);
 		const updatedSession = readStore.getByName("coordinator");
 		readStore.close();
 
 		expect(updatedSession).toBeDefined();
-		expect(updatedSession?.state).toBe("working");
+		expect(updatedSession?.state).toBe("idle");
 		// But lastActivity should be updated
 		expect(new Date(updatedSession?.lastActivity ?? "").getTime()).toBeGreaterThan(
 			new Date(session.lastActivity).getTime(),
@@ -388,7 +388,7 @@ describe("logCommand", () => {
 		readStore.close();
 
 		expect(updatedSession).toBeDefined();
-		expect(updatedSession?.state).toBe("working");
+		expect(updatedSession?.state).toBe("idle");
 	});
 
 	describe("session-end coordinator run completion", () => {
@@ -754,6 +754,82 @@ describe("logCommand", () => {
 		expect(updatedSession?.state).toBe("working");
 	});
 
+	test("tool-start transitions state from idle to working", async () => {
+		// Create sessions.db with agent in 'idle' state
+		const dbPath = join(tempDir, ".legio", "sessions.db");
+		const session: AgentSession = {
+			id: "session-idle-001",
+			agentName: "idle-agent",
+			capability: "gateway",
+			worktreePath: "/tmp/idle",
+			branchName: "main",
+			beadId: "",
+			tmuxSession: "legio-gateway",
+			state: "idle",
+			pid: 22222,
+			parentAgent: null,
+			depth: 0,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date().toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		};
+		const store = createSessionStore(dbPath);
+		store.upsert(session);
+		store.close();
+
+		await logCommand(["tool-start", "--agent", "idle-agent", "--tool-name", "Read"]);
+
+		// Read sessions.db and verify state changed from idle to working
+		const readStore = createSessionStore(dbPath);
+		const updatedSession = readStore.getByName("idle-agent");
+		readStore.close();
+
+		expect(updatedSession).toBeDefined();
+		expect(updatedSession?.state).toBe("working");
+	});
+
+	test("session-end transitions gateway to idle (persistent agent)", async () => {
+		// Create sessions.db with a gateway agent in 'working' state
+		const dbPath = join(tempDir, ".legio", "sessions.db");
+		const session: AgentSession = {
+			id: "session-gw-idle",
+			agentName: "gateway-idle",
+			capability: "gateway",
+			worktreePath: tempDir,
+			branchName: "main",
+			beadId: "",
+			tmuxSession: "legio-gateway-idle",
+			state: "working",
+			pid: 33333,
+			parentAgent: null,
+			depth: 0,
+			runId: null,
+			startedAt: new Date().toISOString(),
+			lastActivity: new Date(Date.now() - 60_000).toISOString(),
+			escalationLevel: 0,
+			stalledSince: null,
+		};
+		const store = createSessionStore(dbPath);
+		store.upsert(session);
+		store.close();
+
+		await logCommand(["session-end", "--agent", "gateway-idle"]);
+
+		// Gateway should transition to 'idle', not 'completed' or remain 'working'
+		const readStore = createSessionStore(dbPath);
+		const updatedSession = readStore.getByName("gateway-idle");
+		readStore.close();
+
+		expect(updatedSession).toBeDefined();
+		expect(updatedSession?.state).toBe("idle");
+		// lastActivity should be updated
+		expect(new Date(updatedSession?.lastActivity ?? "").getTime()).toBeGreaterThan(
+			new Date(session.lastActivity).getTime(),
+		);
+	});
+
 	test("tool-start defaults to unknown when --tool-name not provided", async () => {
 		// Should not throw when --tool-name is missing
 		await expect(
@@ -874,13 +950,13 @@ describe("logCommand", () => {
 		const mailDbFile = fileAccessor(mailDbPath);
 		expect(await mailDbFile.exists()).toBe(false);
 
-		// Coordinator should remain working (persistent agent)
+		// Coordinator should transition to idle (persistent agent)
 		const readStore = createSessionStore(dbPath);
 		const updatedSession = readStore.getByName("coordinator-mulch");
 		readStore.close();
 
 		expect(updatedSession).toBeDefined();
-		expect(updatedSession?.state).toBe("working");
+		expect(updatedSession?.state).toBe("idle");
 	});
 
 	test("autoRecordExpertise calls record for each suggested domain", async () => {

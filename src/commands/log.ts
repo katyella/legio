@@ -77,7 +77,7 @@ function updateLastActivity(projectRoot: string, agentName: string): void {
 			const session = store.getByName(agentName);
 			if (session) {
 				store.updateLastActivity(agentName);
-				if (session.state === "booting") {
+				if (session.state === "booting" || session.state === "idle") {
 					store.updateState(agentName, "working");
 				}
 			}
@@ -112,7 +112,8 @@ function transitionToCompleted(projectRoot: string, agentName: string): void {
 		try {
 			const session = store.getByName(agentName);
 			if (session && PERSISTENT_CAPABILITIES.has(session.capability)) {
-				// Persistent agents: only update activity, don't mark completed
+				// Persistent agents: transition to idle, don't mark completed
+				store.updateState(agentName, "idle");
 				store.updateLastActivity(agentName);
 				return;
 			}

@@ -11,6 +11,7 @@ const html = htm.bind(h);
 const STATE_COLORS = {
 	working: "text-green-500",
 	booting: "text-yellow-500",
+	idle: "text-blue-400",
 	stalled: "text-red-500",
 	completed: "text-gray-500",
 	zombie: "text-orange-500",
@@ -21,7 +22,7 @@ const STATE_COLORS = {
  *
  * @param {object} props
  * @param {string} props.name       - Agent name
- * @param {string} props.state      - Agent state: working | booting | stalled | completed | zombie
+ * @param {string} props.state      - Agent state: working | booting | idle | stalled | completed | zombie
  * @param {string} props.capability - Agent capability label (e.g. "builder", "scout")
  */
 export function AgentBadge({ name, state, capability }) {
