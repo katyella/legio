@@ -34,8 +34,8 @@ describe("loadConfig", () => {
 		expect(config.agents.maxDepth).toBe(2);
 		expect(config.taskTracker.enabled).toBe(true);
 		expect(config.taskTracker.backend).toBe("auto");
-		expect(config.mulch.enabled).toBe(true);
-		expect(config.mulch.primeFormat).toBe("markdown");
+		expect(config.memory.enabled).toBe(true);
+		expect(config.memory.primeFormat).toBe("markdown");
 		expect(config.logging.verbose).toBe(false);
 	});
 
@@ -92,7 +92,7 @@ logging:
 
 		expect(config.taskTracker.enabled).toBe(false);
 		expect(config.taskTracker.backend).toBe("beads");
-		expect(config.mulch.enabled).toBe(true);
+		expect(config.memory.enabled).toBe(true);
 		expect(config.logging.verbose).toBe(true);
 		expect(config.logging.redactSecrets).toBe(false);
 	});
@@ -105,7 +105,7 @@ mulch:
 `);
 
 		const config = await loadConfig(tempDir);
-		expect(config.mulch.domains).toEqual([]);
+		expect(config.memory.domains).toEqual([]);
 	});
 
 	test("parses numeric values including underscore-separated", async () => {
@@ -303,9 +303,9 @@ agents:
 		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
 	});
 
-	test("rejects invalid mulch.primeFormat", async () => {
+	test("rejects invalid memory.primeFormat", async () => {
 		await writeConfig(`
-mulch:
+memory:
   primeFormat: yaml
 `);
 		await expect(loadConfig(tempDir)).rejects.toThrow(ValidationError);
@@ -356,7 +356,7 @@ describe("DEFAULT_CONFIG", () => {
 		expect(DEFAULT_CONFIG.agents).toBeDefined();
 		expect(DEFAULT_CONFIG.worktrees).toBeDefined();
 		expect(DEFAULT_CONFIG.taskTracker).toBeDefined();
-		expect(DEFAULT_CONFIG.mulch).toBeDefined();
+		expect(DEFAULT_CONFIG.memory).toBeDefined();
 		expect(DEFAULT_CONFIG.merge).toBeDefined();
 		expect(DEFAULT_CONFIG.watchman).toBeDefined();
 		expect(DEFAULT_CONFIG.models).toBeDefined();

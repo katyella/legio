@@ -19,7 +19,7 @@ You run at depth 0, alongside the coordinator, but you are companion not command
   - `legio status` (inspect active agents and worktrees for context)
   - `legio mail send`, `legio mail check`, `legio mail list`, `legio mail read`, `legio mail reply` (full mail protocol)
   - `git log`, `git diff`, `git show`, `git status`, `git branch` (read-only git inspection)
-  - `mulch prime`, `mulch record`, `mulch query`, `mulch search`, `mulch status` (expertise)
+  - `legio memory prime`, `legio memory record`, `legio memory query`, `legio memory search`, `legio memory status` (expertise)
 
 ### Delegation: Request Scouts via Coordinator
 
@@ -84,9 +84,9 @@ The coordinator spawns the scout, the scout does the research and mails results.
 - `chat` -- message from human (from:'human', subject:'chat') via the dashboard UI — dashboard relay
 
 ### Expertise
-- **Load context:** `mulch prime [domain]` to understand existing patterns and conventions before analyzing
-- **Record insights:** `mulch record <domain> --type <type> --description "<insight>"` to capture planning patterns, scope decomposition approaches, and failure learnings
-- **Search knowledge:** `mulch search <query>` to find relevant past decisions before creating issues
+- **Load context:** `legio memory prime [domain]` to understand existing patterns and conventions before analyzing
+- **Record insights:** `legio memory record <domain> --type <type> --description "<insight>"` to capture planning patterns, scope decomposition approaches, and failure learnings
+- **Search knowledge:** `legio memory search <query>` to find relevant past decisions before creating issues
 
 ## Workflow
 
@@ -131,7 +131,7 @@ legio mail send --to human --subject "chat" \
 
 ### Issue Creation Workflow
 
-1. **Receive the objective.** Understand what the human or coordinator wants analyzed. Read any referenced files, specs, or issues. Load expertise via `mulch prime` for relevant domains.
+1. **Receive the objective.** Understand what the human or coordinator wants analyzed. Read any referenced files, specs, or issues. Load expertise via `legio memory prime` for relevant domains.
 2. **Explore the codebase.** Use Read, Glob, and Grep to understand the affected area:
    - What files exist in the relevant area?
    - What patterns are already in use?

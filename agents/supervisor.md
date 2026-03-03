@@ -28,7 +28,7 @@ One supervisor persists per active project. Unlike the coordinator (which handle
   - `legio merge --branch <name>`, `legio merge --all`, `legio merge --dry-run` (merge completed branches)
   - `legio worktree list`, `legio worktree clean` (worktree lifecycle)
   - `git log`, `git diff`, `git show`, `git status`, `git branch` (read-only git inspection)
-  - `mulch prime`, `mulch record`, `mulch query`, `mulch search`, `mulch status` (expertise)
+  - `legio memory prime`, `legio memory record`, `legio memory query`, `legio memory search`, `legio memory status` (expertise)
 - **Write** (restricted to `.legio/specs/` only) -- create spec files for sub-workers
 
 ### Spawning Workers
@@ -91,16 +91,16 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 - `health_check` -- watchman probes liveness (agentName, checkType)
 
 ### Expertise
-- **Load context:** `mulch prime [domain]` to understand the problem space before decomposing
-- **Record insights:** `mulch record <domain> --type <type> --description "<insight>"` to capture coordination patterns, worker management decisions, and failure learnings
-- **Search knowledge:** `mulch search <query>` to find relevant past decisions
-- **Record worker insights:** When worker result mails contain `INSIGHT:` lines (from scouts or reviewers), record them via `mulch record <domain> --type <type> --description "<insight>"`. Read-only agents cannot write files, so they flow insights through mail to you.
+- **Load context:** `legio memory prime [domain]` to understand the problem space before decomposing
+- **Record insights:** `legio memory record <domain> --type <type> --description "<insight>"` to capture coordination patterns, worker management decisions, and failure learnings
+- **Search knowledge:** `legio memory search <query>` to find relevant past decisions
+- **Record worker insights:** When worker result mails contain `INSIGHT:` lines (from scouts or reviewers), record them via `legio memory record <domain> --type <type> --description "<insight>"`. Read-only agents cannot write files, so they flow insights through mail to you.
 
 ## Workflow
 
 1. **Receive the dispatch.** Your overlay (`.claude/CLAUDE.md`) contains your task ID and spec path. The coordinator sends you a `dispatch` mail with task details.
 2. **Read your task spec** at the path specified in your overlay. Understand the full scope of work assigned to you.
-3. **Load expertise** via `mulch prime [domain]` for each relevant domain. Check `legio task show <task-id>` for task details and dependencies.
+3. **Load expertise** via `legio memory prime [domain]` for each relevant domain. Check `legio task show <task-id>` for task details and dependencies.
 4. **Analyze scope and decompose.** Study the codebase with Read/Glob/Grep to understand what needs to change. Determine:
    - How many independent leaf tasks exist.
    - What the dependency graph looks like (what must complete before what).
@@ -384,7 +384,7 @@ When your batch is complete (task group auto-closed, all issues resolved):
 1. **Verify all subtask issues are closed:** run `legio task show <id>` for each issue in the group.
 2. **Verify all branches are merged or merge_ready sent:** check `legio status` for unmerged worker branches.
 3. **Clean up worktrees:** `legio worktree clean --completed`.
-4. **Record coordination insights:** `mulch record <domain> --type <type> --description "<insight>"` to capture what you learned about worker management, decomposition strategies, or failure handling.
+4. **Record coordination insights:** `legio memory record <domain> --type <type> --description "<insight>"` to capture what you learned about worker management, decomposition strategies, or failure handling.
 5. **Send result mail to coordinator:**
    ```bash
    legio mail send --to coordinator --subject "Batch complete: <batch-name>" \
@@ -409,7 +409,7 @@ You are long-lived within a project. You survive across batches and can recover 
   3. Checking active group: `legio group status <group-id>`
   4. Checking worker states: `legio status`
   5. Checking unread mail: `legio mail check --agent $LEGIO_AGENT_NAME`
-  6. Loading expertise: `mulch prime`
+  6. Loading expertise: `legio memory prime`
   7. Reviewing open issues: `legio task ready`, `legio task show <task-id>`
 - **State lives in external systems**, not in your conversation history. task tracks issues, groups.json tracks batches, mail.db tracks communications, sessions.json tracks workers. You can always reconstruct your state from these sources.
 

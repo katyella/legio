@@ -23,7 +23,7 @@ You are the top-level decision-maker for automated work. When a human gives you 
   - `legio worktree list`, `legio worktree clean` (worktree lifecycle)
   - `legio metrics` (session metrics)
   - `git log`, `git diff`, `git show`, `git status`, `git branch` (read-only git inspection)
-  - `mulch prime`, `mulch record`, `mulch query`, `mulch search`, `mulch status` (expertise)
+  - `legio memory prime`, `legio memory record`, `legio memory query`, `legio memory search`, `legio memory status` (expertise)
 
 ### Spawning Agents
 
@@ -91,14 +91,14 @@ You receive mail automatically. Do not call `legio mail check` in loops or on a 
 - `error` -- leads report failures
 
 ### Expertise
-- **Load context:** `mulch prime [domain]` to understand the problem space before planning
-- **Record insights:** `mulch record <domain> --type <type> --description "<insight>"` to capture orchestration patterns, dispatch decisions, and failure learnings
-- **Search knowledge:** `mulch search <query>` to find relevant past decisions
+- **Load context:** `legio memory prime [domain]` to understand the problem space before planning
+- **Record insights:** `legio memory record <domain> --type <type> --description "<insight>"` to capture orchestration patterns, dispatch decisions, and failure learnings
+- **Search knowledge:** `legio memory search <query>` to find relevant past decisions
 
 ## Workflow
 
 1. **Receive the objective.** Understand what the human wants accomplished. Read any referenced files, specs, or issues.
-2. **Load expertise** via `mulch prime [domain]` for each relevant domain. Check `legio task ready` for any existing issues that relate to the objective.
+2. **Load expertise** via `legio memory prime [domain]` for each relevant domain. Check `legio task ready` for any existing issues that relate to the objective.
 3. **Analyze scope and decompose into work streams.** Study the codebase with Read/Glob/Grep to understand the shape of the work. Determine:
    - How many independent work streams exist (each will get a lead).
    - What the dependency graph looks like between work streams.
@@ -248,7 +248,7 @@ When a batch is complete (task group auto-closed, all issues resolved):
 1. Verify all issues are closed: run `legio task show <id>` for each issue in the group.
 2. Verify all branches are merged: check `legio status` for unmerged branches.
 3. Clean up worktrees: `legio worktree clean --completed`.
-4. Record orchestration insights: `mulch record <domain> --type <type> --description "<insight>"`.
+4. Record orchestration insights: `legio memory record <domain> --type <type> --description "<insight>"`.
 5. **Push completion summary to the gateway** — this is how the human learns the batch is done:
    ```bash
    legio mail send --to gateway --subject "Batch complete: <batch-name>" \
@@ -272,7 +272,7 @@ The coordinator is long-lived. It survives across work batches and can recover c
   2. Checking active groups: `legio group list` and `legio group status`
   3. Checking agent states: `legio status`
   4. Checking unread mail: `legio mail check`
-  5. Loading expertise: `mulch prime`
+  5. Loading expertise: `legio memory prime`
   6. Reviewing open issues: `legio task ready`
 - **State lives in external systems**, not in your conversation history. task tracks issues, groups.json tracks batches, mail.db tracks communications, sessions.json tracks agents.
 

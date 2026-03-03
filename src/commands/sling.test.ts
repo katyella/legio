@@ -767,7 +767,7 @@ function makeOverlayConfig(overrides?: Partial<OverlayConfig>): OverlayConfig {
 		branchName: "legio/test-lead/legio-test",
 		worktreePath: "/tmp/test-worktree",
 		fileScope: [],
-		mulchDomains: [],
+		memoryDomains: [],
 		parentAgent: null,
 		depth: 0,
 		canSpawn: true,

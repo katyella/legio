@@ -15,8 +15,8 @@ import { loadIdentity } from "../agents/identity.ts";
 import { createManifestLoader } from "../agents/manifest.ts";
 import { loadConfig } from "../config.ts";
 import { AgentError } from "../errors.ts";
+import { createMemoryClient } from "../memory/factory.ts";
 import { createMetricsStore } from "../metrics/store.ts";
-import { createMulchClient } from "../mulch/client.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentIdentity, AgentManifest, SessionCheckpoint, SessionMetrics } from "../types.ts";
 import { getCurrentSessionName } from "../worktree/tmux.ts";
@@ -184,15 +184,19 @@ export async function primeCommand(args: string[]): Promise<void> {
 	const legioDir = join(config.project.root, ".legio");
 	await healGitignore(legioDir);
 
-	// 3. Load mulch expertise (optional — skip on failure)
+	// 3. Load memory expertise (optional — skip on failure)
 	let expertiseOutput: string | null = null;
-	if (!compact && config.mulch.enabled) {
+	if (!compact && config.memory.enabled) {
 		try {
-			const mulch = createMulchClient(config.project.root);
-			const domains = config.mulch.domains.length > 0 ? config.mulch.domains : undefined;
-			expertiseOutput = await mulch.prime(domains, config.mulch.primeFormat);
+			const memory = createMemoryClient(config.memory.backend, config.project.root);
+			try {
+				const domains = config.memory.domains.length > 0 ? config.memory.domains : undefined;
+				expertiseOutput = await memory.prime({ domains, format: config.memory.primeFormat });
+			} finally {
+				if (memory.dispose) memory.dispose();
+			}
 		} catch {
-			// Mulch is optional — silently skip if it fails
+			// Memory is optional — silently skip if it fails
 		}
 	}
 

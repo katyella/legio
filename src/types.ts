@@ -41,7 +41,15 @@ export interface LegioConfig {
 		backend: "auto" | "seeds" | "beads" | "builtin";
 		enabled: boolean;
 	};
-	mulch: {
+	/** @deprecated Use memory instead. Kept for backward compatibility. */
+	mulch?: {
+		enabled: boolean;
+		domains: string[];
+		primeFormat: "markdown" | "xml" | "json";
+		domainMap?: Record<string, string[]>;
+	};
+	memory: {
+		backend: "auto" | "mulch" | "builtin";
 		enabled: boolean;
 		domains: string[]; // Domains to prime (empty = auto-detect)
 		primeFormat: "markdown" | "xml" | "json";
@@ -300,15 +308,15 @@ export interface OverlayConfig {
 	branchName: string;
 	worktreePath: string;
 	fileScope: string[];
-	mulchDomains: string[];
+	memoryDomains: string[];
 	parentAgent: string | null;
 	depth: number;
 	canSpawn: boolean;
 	capability: string;
 	/** Full content of the base agent definition file (Layer 1: role-specific HOW). */
 	baseDefinition: string;
-	/** Pre-fetched mulch expertise output to embed directly in the overlay. */
-	mulchExpertise?: string;
+	/** Pre-fetched memory expertise output to embed directly in the overlay. */
+	memoryExpertise?: string;
 	/** Absolute path to the canonical project root (for agents that need to write outside their worktree). */
 	canonicalRoot?: string;
 	/** When true, lead agents should skip reviewer spawning and self-verify quality gates instead. */
@@ -667,7 +675,7 @@ export interface SessionCheckpoint {
 	filesModified: string[]; // Paths modified since session start
 	currentBranch: string;
 	pendingWork: string; // What remains to be done
-	mulchDomains: string[]; // Domains the agent has been working in
+	memoryDomains: string[]; // Domains the agent has been working in
 }
 
 /**

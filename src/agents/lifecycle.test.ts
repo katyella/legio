@@ -29,7 +29,7 @@ describe("lifecycle", () => {
 			pendingWork: "Tests remain",
 			currentBranch: "legio/builder-1/legio-xyz1",
 			filesModified: ["src/widget.ts"],
-			mulchDomains: ["agents"],
+			memoryDomains: ["agents"],
 		});
 
 		// Handoff record is correct
@@ -66,7 +66,7 @@ describe("lifecycle", () => {
 			pendingWork: "Finish implementation",
 			currentBranch: "legio/builder-2/legio-abc2",
 			filesModified: ["src/foo.ts"],
-			mulchDomains: [],
+			memoryDomains: [],
 		});
 
 		const result = await resumeFromHandoff({
@@ -92,7 +92,7 @@ describe("lifecycle", () => {
 			pendingWork: "Phase 2",
 			currentBranch: "legio/builder-3/legio-def3",
 			filesModified: [],
-			mulchDomains: [],
+			memoryDomains: [],
 		});
 
 		await completeHandoff({
@@ -127,7 +127,7 @@ describe("lifecycle", () => {
 			pendingWork: "Continue",
 			currentBranch: "legio/builder-4/legio-ghi4",
 			filesModified: ["a.ts"],
-			mulchDomains: [],
+			memoryDomains: [],
 		});
 
 		// Complete the first handoff
@@ -148,7 +148,7 @@ describe("lifecycle", () => {
 			pendingWork: "Finish up",
 			currentBranch: "legio/builder-4/legio-ghi4",
 			filesModified: ["a.ts", "b.ts"],
-			mulchDomains: [],
+			memoryDomains: [],
 		});
 
 		const handoffs = JSON.parse(
@@ -184,7 +184,7 @@ describe("lifecycle", () => {
 			pendingWork: "Nothing",
 			currentBranch: "legio/builder-5/legio-jkl5",
 			filesModified: [],
-			mulchDomains: [],
+			memoryDomains: [],
 		});
 
 		await completeHandoff({

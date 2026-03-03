@@ -54,6 +54,12 @@ const mockConfig: LegioConfig = {
 		domains: [],
 		primeFormat: "markdown",
 	},
+	memory: {
+		backend: "auto" as const,
+		enabled: false,
+		domains: [],
+		primeFormat: "markdown" as const,
+	},
 	merge: {
 		aiResolveEnabled: false,
 		reimagineEnabled: false,

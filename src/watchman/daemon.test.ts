@@ -391,7 +391,7 @@ describe("daemon event recording", () => {
 			filesModified: [],
 			currentBranch: "legio/zombie-agent/task-abc",
 			pendingWork: "Finish implementation",
-			mulchDomains: [],
+			memoryDomains: [],
 		};
 
 		const eventsDbPath = join(tempRoot, ".legio", "events.db");
@@ -481,7 +481,7 @@ describe("daemon recovery", () => {
 			filesModified: ["src/foo.ts"],
 			currentBranch: `legio/${agentName}/${beadId}`,
 			pendingWork: "Finish implementation",
-			mulchDomains: ["typescript"],
+			memoryDomains: ["typescript"],
 		};
 	}
 

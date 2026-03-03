@@ -97,7 +97,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bgit\\s+commit\\b'; then git rev-parse HEAD~1 >/dev/null 2>&1 && mulch diff HEAD~1; fi;"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; read -r INPUT; CMD=$(echo \"$INPUT\" | sed 's/.*\"command\": *\"\\([^\"]*\\)\".*/\\1/'); if echo \"$CMD\" | grep -qE '\\bgit\\s+commit\\b'; then git rev-parse HEAD~1 >/dev/null 2>&1 && legio memory suggest --files $(git diff --name-only HEAD~1) 2>/dev/null; fi;"
 					}
 				]
 			}
@@ -112,7 +112,7 @@
 					},
 					{
 						"type": "command",
-						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; mulch learn"
+						"command": "[ -z \"$LEGIO_AGENT_NAME\" ] && exit 0; legio memory suggest --files $(git diff --name-only HEAD~1 2>/dev/null) 2>/dev/null || true"
 					}
 				]
 			}

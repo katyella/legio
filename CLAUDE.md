@@ -17,7 +17,7 @@ Project-agnostic swarm system for Claude Code agent orchestration. Legio turns a
 ### Orchestrator Model
 
 When you open Claude Code in a project with `.legio/` initialized:
-1. `SessionStart` hook runs `legio prime` (loads config, recent activity, mulch expertise)
+1. `SessionStart` hook runs `legio prime` (loads config, recent activity, memory expertise)
 2. `UserPromptSubmit` hook runs `legio mail check --inject` (surfaces new messages from agents)
 3. You use the `legio` CLI via Bash tool to spawn agents, check status, merge work
 
@@ -107,6 +107,7 @@ legio/                        # This repo (the legio tool itself)
       down.ts                     # legio down (stop full stack)
       stop.ts                     # legio stop (stop active agents)
       task.ts                     # legio task (universal task interface)
+      memory.ts                   # legio memory (expertise/memory management)
     agents/                       # Agent lifecycle management
       manifest.ts                 # Agent registry (load + query capabilities)
       overlay.ts                  # Dynamic CLAUDE.md overlay generator
@@ -138,8 +139,14 @@ legio/                        # This repo (the legio tool itself)
       store.ts                    # SQLite mail storage (better-sqlite3, WAL mode)
       client.ts                   # Mail operations (send/check/list/read/reply)
       broadcast.ts                # Group address resolution (@all, @builders, etc.)
+    memory/
+      types.ts                    # MemoryClient interface + MemoryBackend type
+      factory.ts                  # Backend factory (auto-detect, create client)
+      builtin.ts                  # SQLite MemoryClient adapter (zero dependencies)
+      mulch.ts                    # Mulch CLI subprocess adapter (optional backend)
+      domain-map.ts               # Domain inference from file paths
     mulch/
-      client.ts                   # mulch CLI wrapper
+      client.ts                   # mulch CLI wrapper (legacy, used by memory/mulch.ts)
     merge/
       queue.ts                    # FIFO merge queue
       resolver.ts                 # Tiered conflict resolution (4 tiers)
@@ -193,6 +200,7 @@ target-project/
     specs/{bead-id}.md            # Task specifications
     logs/{agent-name}/{ts}/       # Agent logs (gitignored)
     tasks.db                      # SQLite builtin task tracker (gitignored, WAL mode)
+    memory.db                     # SQLite builtin memory/expertise (gitignored, WAL mode)
     mail.db                       # SQLite mail (gitignored, WAL mode)
     sessions.db                   # SQLite sessions + runs (gitignored, WAL mode)
     events.db                     # SQLite events/timelines (gitignored, WAL mode)
@@ -219,7 +227,7 @@ target-project/
 ### Dependencies
 
 - **Zero runtime npm dependencies.** Legio has no production `dependencies` in `package.json` — only `devDependencies` for types and tooling
-- External tools (`bd`, `sd`, `mulch`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports
+- External tools (`bd`, `sd`, `git`, `tmux`) are invoked as subprocesses via `node:child_process` `spawn`, never as npm imports. `mulch` is an optional backend for memory (see `src/memory/mulch.ts`)
 
 ### File Organization
 
@@ -303,6 +311,35 @@ legio task <sub>                   Universal task interface (pluggable backends)
   close <id>                             Close a task
     --reason <text>                      Close reason
   sync                                   Sync tracker state
+  --json                                 JSON output for all subcommands
+
+legio memory <sub>                 Structured expertise/memory management
+  prime                                  Output priming prompt for current project
+    --domains <d1,d2,...>                Specific domains to prime
+    --files <f1,f2,...>                  Infer domains from file paths
+    --format <full|compact|minimal>      Output format (default: full)
+    --budget <n>                         Max records to include
+  record <domain>                        Record a new expertise entry
+    --type <type>                        convention|pattern|failure|decision|reference|guide
+    --description <text>                 Record content
+    --tags <t1,t2,...>                   Optional tags
+    --classification <class>             tactical|observational (default: tactical)
+    --evidence-commit <sha>              Link to git commit
+    --evidence-bead <id>                 Link to bead/task ID
+  search <query>                         Search across all domains (FTS)
+  query [domain]                         Query records in a domain
+  status                                 Show domain statistics
+  list                                   List records with filters
+    --domain <name>  --type <type>       Filter by domain or type
+    --limit <n>  --since <ts>            Pagination and time filter
+  show <id>                              Show a single record
+  delete <id>                            Delete a record
+  prune                                  Remove stale records
+    --dry-run                            Show what would be pruned
+    --older-than-days <n>                Age threshold (default: 90)
+    --domain <name>                      Prune specific domain
+  suggest                                Suggest domains for changed files
+    --files <f1,f2,...>                  File paths to analyze
   --json                                 JSON output for all subcommands
 ```
 
@@ -500,6 +537,7 @@ legio clean                         Wipe runtime state (nuclear cleanup)
   --all                                  Wipe everything
   --mail  --sessions  --metrics          Individual DB cleanup
   --tasks                                Wipe tasks.db (builtin tracker)
+  --memory                               Wipe memory.db (builtin memory/expertise)
   --logs  --worktrees  --branches        Individual resource cleanup
   --agents  --specs                      Individual state cleanup
   --json                                 JSON output
@@ -550,7 +588,7 @@ Prefer real implementations over mocks. Mocks are a last resort, not a default.
 
 When mocking is truly necessary, document WHY in a comment at the top of the test file.
 
-See mulch record `mx-56558b` for background on why `mock.module()` should be avoided (it leaks across test files).
+See memory record `mx-56558b` for background on why `mock.module()` should be avoided (it leaks across test files).
 
 ### Test Helpers
 
@@ -584,16 +622,20 @@ bd sync                               # Sync with git
 
 Issues are tracked in `.beads/issues.jsonl`. Beads owns all task lifecycle (create, assign, close, dependencies, molecules). Legio wraps `bd` via `src/beads/client.ts`.
 
-### mulch -- Structured Expertise
+### legio memory -- Structured Expertise
 
 ```bash
-mulch prime [domain]                  # Output priming prompt
-mulch status                          # Show domain statistics
-mulch record <domain>                 # Record expertise
-mulch search [query]                  # Search across domains
+legio memory prime                    # Output priming prompt
+legio memory status                   # Show domain statistics
+legio memory record <domain>          # Record expertise
+legio memory search <query>           # Search across domains
 ```
 
-Expertise records live in `.mulch/`. Legio wraps `mulch` via `src/mulch/client.ts`.
+Supported backends:
+- **builtin** (default) — Zero-dependency SQLite adapter at `.legio/memory.db`. No external tools needed.
+- **mulch** — Delegates to `mulch` CLI (requires mulch installed)
+
+Auto-detection: when `memory.backend` is `"auto"` (default), legio checks for `.mulch/` directory. If it exists, uses mulch; otherwise falls back to `"builtin"`.
 
 ## Quality Gates
 
@@ -626,14 +668,13 @@ When ending a work session, you MUST:
 
 Work is NOT complete until `git push` succeeds.
 
-<!-- mulch:start -->
-## Project Expertise (Mulch)
+## Project Expertise (Memory)
 
-This project uses [Mulch](https://github.com/jayminwest/mulch) for structured expertise management.
+This project uses `legio memory` for structured expertise management.
 
 **At the start of every session**, run:
 ```bash
-mulch prime
+legio memory prime
 ```
 
 This injects project-specific conventions, patterns, decisions, and other learnings into your context.
@@ -641,20 +682,19 @@ This injects project-specific conventions, patterns, decisions, and other learni
 **Before completing your task**, review your work for insights worth preserving — conventions discovered,
 patterns applied, failures encountered, or decisions made — and record them:
 ```bash
-mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
+legio memory record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
 ```
 
-Run `mulch status` to check domain health and entry counts.
-Run `mulch --help` for full usage.
+Run `legio memory status` to check domain health and entry counts.
+Run `legio memory --help` for full usage.
 
 ### Before You Finish
 
 1. Store insights from this work session:
    ```bash
-   mulch record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
+   legio memory record <domain> --type <convention|pattern|failure|decision|reference|guide> --description "..."
    ```
-2. Validate and commit:
+2. Commit any changes:
    ```bash
-   mulch validate && git add .mulch/ && git commit -m "mulch: record learnings"
+   git add -A && git commit -m "record learnings"
    ```
-<!-- mulch:end -->

@@ -25,6 +25,7 @@ import { inspectCommand } from "./commands/inspect.ts";
 import { logCommand } from "./commands/log.ts";
 import { logsCommand } from "./commands/logs.ts";
 import { mailCommand } from "./commands/mail.ts";
+import { memoryCommand } from "./commands/memory.ts";
 import { mergeCommand } from "./commands/merge.ts";
 import { metricsCommand } from "./commands/metrics.ts";
 import { monitorCommand } from "./commands/monitor.ts";
@@ -69,6 +70,7 @@ Commands:
   monitor <sub>           Tier 2 monitor agent (start/stop/status)
   merge                   Merge agent branches into canonical
   nudge <agent> [msg]     Send a text nudge to an agent
+  memory <sub>            Memory/expertise system (prime/record/search/query/status/list/show/delete/prune/suggest)
   task <sub>              Universal task interface (create/list/show/ready/claim/close/sync)
   group <sub>             Task groups (create/status/add/remove/list)
   clean                   Wipe runtime state (nuclear cleanup)
@@ -116,6 +118,7 @@ const COMMANDS = [
 	"watchman",
 	"merge",
 	"nudge",
+	"memory",
 	"task",
 	"group",
 	"worktree",
@@ -262,6 +265,9 @@ async function main(): Promise<void> {
 			break;
 		case "nudge":
 			await nudgeCommand(commandArgs);
+			break;
+		case "memory":
+			await memoryCommand(commandArgs);
 			break;
 		case "task":
 			await taskCommand(commandArgs);

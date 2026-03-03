@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { MergeError } from "../errors.ts";
-import type { MulchClient } from "../mulch/client.ts";
+import type { MemoryClient } from "../memory/types.ts";
 import {
 	cleanupTempDir,
 	commitFile,
@@ -188,23 +188,24 @@ async function setupReimagineScenario(
 }
 
 /**
- * Create a mock MulchClient for testing.
+ * Create a mock MemoryClient for testing.
  * Optionally override the record method to track calls or simulate failures.
  */
 function createMockMulchClient(
-	recordImpl?: (domain: string, options: unknown) => Promise<void>,
-): MulchClient {
+	recordImpl?: (domain: string, options: unknown) => Promise<string>,
+): MemoryClient {
 	return {
 		async prime() {
 			return "";
 		},
 		async status() {
-			return { domains: [] };
+			return [];
 		},
 		async record(domain: string, options: unknown) {
 			if (recordImpl) {
 				return recordImpl(domain, options);
 			}
+			return "mem-mock";
 		},
 		async query() {
 			return "";
@@ -212,61 +213,26 @@ function createMockMulchClient(
 		async search() {
 			return "";
 		},
-		async diff() {
+		async list() {
+			return [];
+		},
+		async show(_id: string) {
 			return {
-				success: true,
-				command: "diff",
-				since: "HEAD",
-				domains: [],
-				message: "",
+				id: "mem-mock",
+				domain: "test",
+				type: "convention",
+				content: "",
+				classification: "tactical",
+				tags: [],
+				recordedAt: new Date().toISOString(),
 			};
 		},
-		async learn() {
-			return {
-				success: true,
-				command: "learn",
-				changedFiles: [],
-				suggestedDomains: [],
-				unmatchedFiles: [],
-			};
-		},
+		async delete() {},
 		async prune() {
-			return {
-				success: true,
-				command: "prune",
-				dryRun: false,
-				totalPruned: 0,
-				results: [],
-			};
+			return { pruned: 0, dryRun: false };
 		},
-		async doctor() {
-			return {
-				success: true,
-				command: "doctor",
-				checks: [],
-				summary: {
-					pass: 0,
-					warn: 0,
-					fail: 0,
-					totalIssues: 0,
-					fixableIssues: 0,
-				},
-			};
-		},
-		async ready() {
-			return {
-				success: true,
-				command: "ready",
-				count: 0,
-				entries: [],
-			};
-		},
-		async compact() {
-			return {
-				success: true,
-				command: "compact",
-				action: "analyze",
-			};
+		suggestDomains() {
+			return [];
 		},
 	};
 }
@@ -769,13 +735,13 @@ describe("createMergeResolver", () => {
 			await cleanupTempDir(repoDir);
 		});
 
-		test("no recording when mulchClient is not provided (backward compatible)", async () => {
+		test("no recording when memoryClient is not provided (backward compatible)", async () => {
 			const entry = makeTestEntry({
 				branchName: "rec-compat",
 				filesModified: ["rec/compat.ts"],
 			});
 
-			// No mulchClient passed — should work as before
+			// No memoryClient passed — should work as before
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
@@ -795,7 +761,7 @@ describe("createMergeResolver", () => {
 				filesModified: ["rec/t2.ts"],
 			});
 
-			// Create a mock MulchClient with a spy on record
+			// Create a mock MemoryClient with a spy on record
 			const recordCalls: Array<{
 				domain: string;
 				options: {
@@ -816,12 +782,13 @@ describe("createMergeResolver", () => {
 						evidenceBead?: string;
 					},
 				});
+				return "mem-mock";
 			});
 
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 			});
 
 			const result = await resolver.resolve(entry, defaultBranch, repoDir);
@@ -874,13 +841,14 @@ describe("createMergeResolver", () => {
 						evidenceBead?: string;
 					},
 				});
+				return "mem-mock";
 			});
 
 			// AI and reimagine disabled — will fail at tier 2
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 			});
 
 			const result = await resolver.resolve(entry, defaultBranch, repoDir);
@@ -907,7 +875,7 @@ describe("createMergeResolver", () => {
 				filesModified: ["rec/fire.ts"],
 			});
 
-			// Mock mulchClient whose record rejects
+			// Mock memoryClient whose record rejects
 			const mockMulchClient = createMockMulchClient(async () => {
 				throw new Error("Mulch recording failed!");
 			});
@@ -915,7 +883,7 @@ describe("createMergeResolver", () => {
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 			});
 
 			// Should still succeed despite recording failure (fire-and-forget)
@@ -952,12 +920,13 @@ describe("createMergeResolver", () => {
 						evidenceBead?: string;
 					},
 				});
+				return "mem-mock";
 			});
 
 			const resolver = createMergeResolver({
 				aiResolveEnabled: true,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 				_spawn: makeSelectiveSpawn("resolved content from AI\n", "", 0),
 			});
 
@@ -1004,12 +973,13 @@ describe("createMergeResolver", () => {
 						evidenceBead?: string;
 					},
 				});
+				return "mem-mock";
 			});
 
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: true,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 				_spawn: makeSelectiveSpawn("reimagined content\n", "", 0),
 			});
 
@@ -1039,12 +1009,13 @@ describe("createMergeResolver", () => {
 
 			const mockMulchClient = createMockMulchClient(async (domain, options) => {
 				recordCalls.push({ domain, options });
+				return "mem-mock";
 			});
 
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 			});
 
 			const result = await resolver.resolve(entry, defaultBranch, repoDir);
@@ -1244,7 +1215,7 @@ describe("createMergeResolver", () => {
 				filesModified: ["src/test.ts"],
 			});
 
-			// Mock mulchClient that returns history showing auto-resolve always fails
+			// Mock memoryClient that returns history showing auto-resolve always fails
 			const mockMulchClient = createMockMulchClient();
 			mockMulchClient.search = async () => {
 				return [
@@ -1257,7 +1228,7 @@ describe("createMergeResolver", () => {
 			const resolver = createMergeResolver({
 				aiResolveEnabled: false,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 			});
 
 			const result = await resolver.resolve(entry, defaultBranch, repoDir);
@@ -1289,7 +1260,7 @@ describe("createMergeResolver", () => {
 				filesModified: ["src/test.ts"],
 			});
 
-			// Mock mulchClient that returns successful resolution history
+			// Mock memoryClient that returns successful resolution history
 			const mockMulchClient = createMockMulchClient();
 			mockMulchClient.search = async () => {
 				return "Merge conflict resolved at tier ai-resolve. Branch: old-branch. Agent: old-agent. Conflicting files: src/test.ts.";
@@ -1300,7 +1271,7 @@ describe("createMergeResolver", () => {
 			const resolver = createMergeResolver({
 				aiResolveEnabled: true,
 				reimagineEnabled: false,
-				mulchClient: mockMulchClient,
+				memoryClient: mockMulchClient,
 				_spawn: (command, args, opts) => {
 					if (command === "claude") {
 						capturedPrompt = args[2] ?? "";

@@ -16,7 +16,7 @@ function makeCheckpoint(overrides?: Partial<SessionCheckpoint>): SessionCheckpoi
 		filesModified: ["src/agents/checkpoint.ts"],
 		currentBranch: "legio/test-agent/legio-abc1",
 		pendingWork: "Write tests",
-		mulchDomains: ["agents"],
+		memoryDomains: ["agents"],
 		...overrides,
 	};
 }
@@ -46,7 +46,7 @@ describe("checkpoint", () => {
 		expect(loaded?.filesModified).toEqual(["src/agents/checkpoint.ts"]);
 		expect(loaded?.currentBranch).toBe("legio/test-agent/legio-abc1");
 		expect(loaded?.pendingWork).toBe("Write tests");
-		expect(loaded?.mulchDomains).toEqual(["agents"]);
+		expect(loaded?.memoryDomains).toEqual(["agents"]);
 	});
 
 	test("load returns null when no checkpoint exists", async () => {

@@ -152,9 +152,9 @@ describe("deployHooks", () => {
 		expect(postToolUse[0].hooks[1].command).toContain("$LEGIO_AGENT_NAME");
 		expect(postToolUse[0].hooks[1].command).toContain("--signal");
 		expect(postToolUse[0].hooks[1].command).toContain("LEGIO_AGENT_NAME");
-		// Second entry is mulch diff after commit (with HEAD~1 guard)
+		// Second entry is memory suggest after commit (with HEAD~1 guard)
 		expect(postToolUse[1].matcher).toBe("Bash");
-		expect(postToolUse[1].hooks[0].command).toContain("mulch diff HEAD~1");
+		expect(postToolUse[1].hooks[0].command).toContain("legio memory suggest");
 		expect(postToolUse[1].hooks[0].command).toContain("git rev-parse HEAD~1");
 	});
 
@@ -289,22 +289,22 @@ describe("deployHooks", () => {
 		expect(postToolUse.hooks[1].command).toContain("LEGIO_AGENT_NAME");
 	});
 
-	test("PostToolUse contains mulch diff hook triggered after git commits", async () => {
-		const worktreePath = join(tempDir, "mulch-diff-wt");
+	test("PostToolUse contains memory suggest hook triggered after git commits", async () => {
+		const worktreePath = join(tempDir, "memory-suggest-wt");
 
-		await deployHooks(worktreePath, "mulch-diff-agent");
+		await deployHooks(worktreePath, "memory-suggest-agent");
 
 		const outputPath = join(worktreePath, ".claude", "settings.local.json");
 		const content = await readFile(outputPath, "utf-8");
 		const parsed = JSON.parse(content);
 		const postToolUse = parsed.hooks.PostToolUse;
 
-		// Third entry should be the mulch diff hook (Bash matcher)
-		const mulchDiffEntry = postToolUse.find((h: { matcher: string }) => h.matcher === "Bash");
-		expect(mulchDiffEntry).toBeDefined();
-		expect(mulchDiffEntry.hooks[0].command).toContain("mulch diff HEAD~1");
-		expect(mulchDiffEntry.hooks[0].command).toContain("git\\s+commit");
-		expect(mulchDiffEntry.hooks[0].command).toContain("LEGIO_AGENT_NAME");
+		// Third entry should be the memory suggest hook (Bash matcher)
+		const memorySuggestEntry = postToolUse.find((h: { matcher: string }) => h.matcher === "Bash");
+		expect(memorySuggestEntry).toBeDefined();
+		expect(memorySuggestEntry.hooks[0].command).toContain("legio memory suggest");
+		expect(memorySuggestEntry.hooks[0].command).toContain("git\\s+commit");
+		expect(memorySuggestEntry.hooks[0].command).toContain("LEGIO_AGENT_NAME");
 	});
 
 	test("PreToolUse template contains push-guard blocking git push", async () => {
@@ -342,7 +342,7 @@ describe("deployHooks", () => {
 		expect(stop.hooks[0].command).not.toContain("read -r INPUT");
 	});
 
-	test("Stop hook includes mulch learn command", async () => {
+	test("Stop hook includes legio memory suggest command", async () => {
 		const worktreePath = join(tempDir, "worktree");
 
 		await deployHooks(worktreePath, "learn-agent");
@@ -352,7 +352,7 @@ describe("deployHooks", () => {
 		const parsed = JSON.parse(content);
 		const stop = parsed.hooks.Stop[0];
 		expect(stop.hooks.length).toBe(2);
-		expect(stop.hooks[1].command).toContain("mulch learn");
+		expect(stop.hooks[1].command).toContain("legio memory suggest");
 		expect(stop.hooks[1].command).toContain("LEGIO_AGENT_NAME");
 	});
 

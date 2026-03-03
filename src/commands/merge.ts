@@ -16,9 +16,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { MergeError, ValidationError } from "../errors.ts";
+import { createMemoryClient } from "../memory/factory.ts";
 import { createMergeQueue } from "../merge/queue.ts";
 import { createMergeResolver } from "../merge/resolver.ts";
-import { createMulchClient } from "../mulch/client.ts";
 import type { MergeEntry, MergeResult } from "../types.ts";
 
 /**
@@ -205,11 +205,11 @@ export async function mergeCommand(args: string[]): Promise<void> {
 	const targetBranch = into ?? sessionBranch ?? config.project.canonicalBranch;
 	const queuePath = join(config.project.root, ".legio", "merge-queue.db");
 	const queue = createMergeQueue(queuePath);
-	const mulchClient = createMulchClient(config.project.root);
+	const memoryClient = createMemoryClient(config.memory.backend, config.project.root);
 	const resolver = createMergeResolver({
 		aiResolveEnabled: config.merge.aiResolveEnabled,
 		reimagineEnabled: config.merge.reimagineEnabled,
-		mulchClient,
+		memoryClient,
 	});
 
 	if (branchName) {

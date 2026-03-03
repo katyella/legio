@@ -6,10 +6,9 @@
  * --all does everything. Individual flags allow selective cleanup.
  *
  * Execution order for --all (processes → filesystem → databases):
- *   0. Run mulch health checks (informational, non-destructive):
+ *   0. Run memory health checks (informational, non-destructive):
  *      - Check domains approaching governance limits
- *      - Run mulch prune --dry-run (report stale record counts)
- *      - Run mulch doctor (report health issues)
+ *      - Run prune --dry-run (report stale record counts)
  *   1. Kill all legio tmux sessions
  *   2. Remove all worktrees
  *   3. Delete orphaned legio/* branches
@@ -26,9 +25,10 @@ import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
 import { createEventStore } from "../events/store.ts";
-import { createMulchClient } from "../mulch/client.ts";
+import { createMemoryClient } from "../memory/factory.ts";
+import type { DomainStats } from "../memory/types.ts";
 import { openSessionStore } from "../sessions/compat.ts";
-import type { AgentSession, MulchDoctorResult, MulchPruneResult, MulchStatus } from "../types.ts";
+import type { AgentSession } from "../types.ts";
 import { listWorktrees, removeWorktree } from "../worktree/manager.ts";
 import { killSession, listSessions } from "../worktree/tmux.ts";
 
@@ -155,17 +155,16 @@ interface CleanResult {
 	mergeQueueCleared: boolean;
 	metricsWiped: boolean;
 	tasksWiped: boolean;
+	memoryWiped: boolean;
 	logsCleared: boolean;
 	agentsCleared: boolean;
 	specsCleared: boolean;
 	nudgeStateCleared: boolean;
 	currentRunCleared: boolean;
-	mulchHealth: {
+	memoryHealth: {
 		checked: boolean;
 		domainsNearLimit: Array<{ domain: string; recordCount: number; warnThreshold: number }>;
 		stalePruneCandidates: number;
-		doctorIssues: number;
-		doctorWarnings: number;
 	} | null;
 }
 
@@ -350,72 +349,55 @@ async function deleteFile(path: string): Promise<boolean> {
 }
 
 /**
- * Check mulch repository health and return diagnostic information.
+ * Check memory repository health and return diagnostic information.
  *
- * Governance limits warn threshold (based on mulch defaults):
+ * Governance limits warn threshold:
  * - Max records per domain: 500 (warn at 400 = 80%)
  *
  * This is informational only — no data is modified.
  */
-async function checkMulchHealth(repoRoot: string): Promise<{
+async function checkMemoryHealth(
+	repoRoot: string,
+	backend: "auto" | "mulch" | "builtin",
+): Promise<{
 	domainsNearLimit: Array<{ domain: string; recordCount: number; warnThreshold: number }>;
 	stalePruneCandidates: number;
-	doctorIssues: number;
-	doctorWarnings: number;
 } | null> {
 	try {
-		const mulch = createMulchClient(repoRoot);
+		const memory = createMemoryClient(backend, repoRoot);
 
 		// 1. Check domain sizes against governance limits
-		let status: MulchStatus;
+		let status: DomainStats[];
 		try {
-			status = await mulch.status();
+			status = await memory.status();
 		} catch {
-			// Mulch not available or no .mulch directory
+			// Memory not available
+			if (memory.dispose) memory.dispose();
 			return null;
 		}
 
 		const warnThreshold = 400; // 80% of 500 max
-		const domainsNearLimit = status.domains
+		const domainsNearLimit = status
 			.filter((d) => d.recordCount >= warnThreshold)
 			.map((d) => ({ domain: d.name, recordCount: d.recordCount, warnThreshold }));
 
 		// 2. Run prune --dry-run to count stale records
-		let pruneResult: MulchPruneResult;
+		let stalePruneCandidates = 0;
 		try {
-			pruneResult = await mulch.prune({ dryRun: true });
+			const pruneResult = await memory.prune({ dryRun: true });
+			stalePruneCandidates = pruneResult.pruned;
 		} catch {
 			// Prune failed — skip this check
-			pruneResult = { success: false, command: "prune", dryRun: true, totalPruned: 0, results: [] };
 		}
 
-		const stalePruneCandidates = pruneResult.totalPruned;
-
-		// 3. Run doctor to check repository health
-		let doctorResult: MulchDoctorResult;
-		try {
-			doctorResult = await mulch.doctor({ fix: false });
-		} catch {
-			// Doctor failed — skip this check
-			doctorResult = {
-				success: false,
-				command: "doctor",
-				checks: [],
-				summary: { pass: 0, warn: 0, fail: 0 },
-			};
-		}
-
-		const doctorIssues = doctorResult.summary.fail;
-		const doctorWarnings = doctorResult.summary.warn;
+		if (memory.dispose) memory.dispose();
 
 		return {
 			domainsNearLimit,
 			stalePruneCandidates,
-			doctorIssues,
-			doctorWarnings,
 		};
 	} catch {
-		// Mulch not available or other error — skip health checks
+		// Memory not available or other error — skip health checks
 		return null;
 	}
 }
@@ -430,6 +412,7 @@ Flags:
   --sessions      Wipe sessions.db
   --metrics       Delete metrics.db
   --tasks         Delete tasks.db (builtin task tracker)
+  --memory        Delete memory.db (builtin memory/expertise)
   --logs          Remove all agent logs
   --worktrees     Remove all worktrees + kill tmux sessions
   --branches      Delete all legio/* branch refs
@@ -441,14 +424,13 @@ Options:
   --help, -h      Show this help
 
 When --all is passed, ALL of the above are executed in safe order:
-  0. Run mulch health checks (informational, non-destructive):
+  0. Run memory health checks (informational, non-destructive):
      - Check domains approaching governance limits (warn threshold: 400 records)
-     - Run mulch prune --dry-run (report stale record counts)
-     - Run mulch doctor (report health issues)
+     - Run prune --dry-run (report stale record counts)
   1. Kill all legio tmux sessions (processes first)
   2. Remove all worktrees
   3. Delete orphaned branch refs
-  4. Wipe mail.db, metrics.db, sessions.db, merge-queue.db
+  4. Wipe mail.db, metrics.db, sessions.db, merge-queue.db, tasks.db, memory.db
   5. Clear logs, agents, specs, nudge state`;
 
 export async function cleanCommand(args: string[]): Promise<void> {
@@ -466,6 +448,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	const doSessions = all || hasFlag(args, "--sessions");
 	const doMetrics = all || hasFlag(args, "--metrics");
 	const doTasks = all || hasFlag(args, "--tasks");
+	const doMemory = all || hasFlag(args, "--memory");
 	const doLogs = all || hasFlag(args, "--logs");
 	const doAgents = all || hasFlag(args, "--agents");
 	const doSpecs = all || hasFlag(args, "--specs");
@@ -477,6 +460,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 		doSessions ||
 		doMetrics ||
 		doTasks ||
+		doMemory ||
 		doLogs ||
 		doAgents ||
 		doSpecs;
@@ -502,25 +486,24 @@ export async function cleanCommand(args: string[]): Promise<void> {
 		mergeQueueCleared: false,
 		metricsWiped: false,
 		tasksWiped: false,
+		memoryWiped: false,
 		logsCleared: false,
 		agentsCleared: false,
 		specsCleared: false,
 		nudgeStateCleared: false,
 		currentRunCleared: false,
-		mulchHealth: null,
+		memoryHealth: null,
 	};
 
-	// 0. Run mulch health checks BEFORE cleanup operations (when --all is set).
+	// 0. Run memory health checks BEFORE cleanup operations (when --all is set).
 	// This is informational only — no data is modified.
 	if (all) {
-		const healthCheck = await checkMulchHealth(root);
+		const healthCheck = await checkMemoryHealth(root, config.memory.backend);
 		if (healthCheck) {
-			result.mulchHealth = {
+			result.memoryHealth = {
 				checked: true,
 				domainsNearLimit: healthCheck.domainsNearLimit,
 				stalePruneCandidates: healthCheck.stalePruneCandidates,
-				doctorIssues: healthCheck.doctorIssues,
-				doctorWarnings: healthCheck.doctorWarnings,
 			};
 		}
 	}
@@ -556,6 +539,9 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	}
 	if (doTasks) {
 		result.tasksWiped = await wipeSqliteDb(join(legioDir, "tasks.db"));
+	}
+	if (doMemory) {
+		result.memoryWiped = await wipeSqliteDb(join(legioDir, "memory.db"));
 	}
 
 	// 6. Wipe sessions.db + legacy sessions.json
@@ -638,6 +624,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	if (result.mailWiped) lines.push("Wiped mail.db");
 	if (result.metricsWiped) lines.push("Wiped metrics.db");
 	if (result.tasksWiped) lines.push("Wiped tasks.db");
+	if (result.memoryWiped) lines.push("Wiped memory.db");
 	if (result.sessionsCleared) lines.push("Wiped sessions.db");
 	if (result.mergeQueueCleared) lines.push("Wiped merge-queue.db");
 	if (result.logsCleared) lines.push("Cleared logs/");
@@ -646,13 +633,13 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	if (result.nudgeStateCleared) lines.push("Cleared nudge-state.json");
 	if (result.currentRunCleared) lines.push("Cleared current-run.txt");
 
-	// Mulch health diagnostics (shown before cleanup results)
-	if (result.mulchHealth?.checked) {
-		const health = result.mulchHealth;
+	// Memory health diagnostics (shown before cleanup results)
+	if (result.memoryHealth?.checked) {
+		const health = result.memoryHealth;
 		const healthLines: string[] = [];
 
 		if (health.domainsNearLimit.length > 0) {
-			healthLines.push("\n⚠️  Mulch domains approaching governance limits:");
+			healthLines.push("\nMemory domains approaching governance limits:");
 			for (const d of health.domainsNearLimit) {
 				healthLines.push(
 					`   ${d.domain}: ${d.recordCount} records (warn threshold: ${d.warnThreshold})`,
@@ -662,13 +649,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 
 		if (health.stalePruneCandidates > 0) {
 			healthLines.push(
-				`\n📦 Stale records found: ${health.stalePruneCandidates} candidate${health.stalePruneCandidates === 1 ? "" : "s"} (run 'mulch prune' to remove)`,
-			);
-		}
-
-		if (health.doctorWarnings > 0 || health.doctorIssues > 0) {
-			healthLines.push(
-				`\n🩺 Mulch health check: ${health.doctorWarnings} warning${health.doctorWarnings === 1 ? "" : "s"}, ${health.doctorIssues} issue${health.doctorIssues === 1 ? "" : "s"} (run 'mulch doctor' for details)`,
+				`\nStale records found: ${health.stalePruneCandidates} candidate${health.stalePruneCandidates === 1 ? "" : "s"} (run 'legio memory prune' to remove)`,
 			);
 		}
 
@@ -682,7 +663,7 @@ export async function cleanCommand(args: string[]): Promise<void> {
 	if (lines.length === 0) {
 		process.stdout.write("Nothing to clean.\n");
 	} else {
-		if (result.mulchHealth?.checked) {
+		if (result.memoryHealth?.checked) {
 			process.stdout.write("\n--- Cleanup Results ---\n");
 		}
 		for (const line of lines) {

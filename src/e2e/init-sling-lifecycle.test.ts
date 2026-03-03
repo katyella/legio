@@ -188,7 +188,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 			branchName: "legio/test-agent/test-bead-001",
 			worktreePath: join(tempDir, ".legio", "worktrees", "test-agent"),
 			fileScope: [],
-			mulchDomains: [],
+			memoryDomains: [],
 			parentAgent: null,
 			depth: 0,
 			canSpawn: false,
@@ -254,7 +254,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 			branchName: "legio/lifecycle-builder/lifecycle-001",
 			worktreePath: join(tempDir, ".legio", "worktrees", "lifecycle-builder"),
 			fileScope: ["src/main.ts", "src/utils.ts"],
-			mulchDomains: ["typescript"],
+			memoryDomains: ["typescript"],
 			parentAgent: "orchestrator",
 			depth: 0,
 			canSpawn: false,
@@ -277,7 +277,7 @@ describe("E2E: init→sling lifecycle on external project", () => {
 		expect(overlayContent).toContain("orchestrator");
 		expect(overlayContent).toContain("`src/main.ts`");
 		expect(overlayContent).toContain("`src/utils.ts`");
-		expect(overlayContent).toContain("mulch prime typescript");
+		expect(overlayContent).toContain("legio memory prime --domains typescript");
 
 		// No unresolved placeholders
 		expect(overlayContent).not.toMatch(/\{\{[A-Z_]+\}\}/);

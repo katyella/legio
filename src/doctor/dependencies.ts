@@ -33,7 +33,7 @@ export const checkDependencies: DoctorCheckFn = async (
 			versionFlag: "--version",
 			required: false,
 			installHint:
-				"bun install -g @os-eco/mulch-cli — structured expertise/memory across sessions (requires Bun)",
+				"bun install -g @os-eco/mulch-cli — only needed when memory.backend is 'mulch' (builtin SQLite backend is default)",
 		},
 		{
 			name: "bd",

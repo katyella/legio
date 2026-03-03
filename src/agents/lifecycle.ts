@@ -80,7 +80,7 @@ export async function initiateHandoff(options: {
 	pendingWork: string;
 	currentBranch: string;
 	filesModified: string[];
-	mulchDomains: string[];
+	memoryDomains: string[];
 }): Promise<SessionHandoff> {
 	const checkpoint: SessionCheckpoint = {
 		agentName: options.agentName,
@@ -91,7 +91,7 @@ export async function initiateHandoff(options: {
 		filesModified: options.filesModified,
 		currentBranch: options.currentBranch,
 		pendingWork: options.pendingWork,
-		mulchDomains: options.mulchDomains,
+		memoryDomains: options.memoryDomains,
 	};
 
 	await saveCheckpoint(options.agentsDir, checkpoint);

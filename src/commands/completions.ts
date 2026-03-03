@@ -592,6 +592,103 @@ export const COMMANDS: readonly CommandDef[] = [
 		],
 	},
 	{
+		name: "memory",
+		desc: "Memory/expertise system",
+		flags: [
+			{ name: "--json", desc: "JSON output" },
+			{ name: "--help", desc: "Show help" },
+		],
+		subcommands: [
+			{
+				name: "prime",
+				desc: "Generate priming prompt with expertise",
+				flags: [
+					{ name: "--domains", desc: "Scope to domains (comma-separated)", takesValue: true },
+					{ name: "--files", desc: "Scope to files (comma-separated)", takesValue: true },
+					{ name: "--budget", desc: "Max records to include", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "record",
+				desc: "Record a new expertise entry",
+				flags: [
+					{
+						name: "--type",
+						desc: "Record type",
+						takesValue: true,
+						values: ["convention", "pattern", "failure", "decision", "reference", "guide"],
+					},
+					{ name: "--description", desc: "Record content", takesValue: true },
+					{ name: "--tags", desc: "Tags (comma-separated)", takesValue: true },
+					{
+						name: "--classification",
+						desc: "Classification",
+						takesValue: true,
+						values: ["tactical", "observational"],
+					},
+					{ name: "--evidence-commit", desc: "Evidence git commit", takesValue: true },
+					{ name: "--evidence-bead", desc: "Evidence bead/task ID", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "search",
+				desc: "Full-text search across records",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "query",
+				desc: "Query records by domain",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "status",
+				desc: "Show domain statistics",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "list",
+				desc: "List records with filters",
+				flags: [
+					{ name: "--domain", desc: "Filter by domain", takesValue: true },
+					{ name: "--type", desc: "Filter by type", takesValue: true },
+					{ name: "--limit", desc: "Max results", takesValue: true },
+					{ name: "--since", desc: "Records after date (ISO)", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "show",
+				desc: "Show a single record",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "delete",
+				desc: "Delete a record",
+				flags: [{ name: "--json", desc: "JSON output" }],
+			},
+			{
+				name: "prune",
+				desc: "Remove old/stale records",
+				flags: [
+					{ name: "--dry-run", desc: "Show what would be pruned" },
+					{ name: "--older-than-days", desc: "Records older than N days", takesValue: true },
+					{ name: "--domain", desc: "Scope to domain", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+			{
+				name: "suggest",
+				desc: "Suggest domains for files",
+				flags: [
+					{ name: "--files", desc: "File paths (comma-separated)", takesValue: true },
+					{ name: "--json", desc: "JSON output" },
+				],
+			},
+		],
+	},
+	{
 		name: "task",
 		desc: "Universal task interface",
 		flags: [

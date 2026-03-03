@@ -202,7 +202,7 @@ async function startSupervisor(args: string[]): Promise<void> {
 				capability: "supervisor",
 				created: new Date().toISOString(),
 				sessionsCompleted: 0,
-				expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
+				expertiseDomains: config.memory.enabled ? config.memory.domains : [],
 				recentTasks: [],
 			});
 		}

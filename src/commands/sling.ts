@@ -28,7 +28,8 @@ import { writeOverlay } from "../agents/overlay.ts";
 import { collectProviderEnv, loadConfig } from "../config.ts";
 import { AgentError, HierarchyError, isRunningAsRoot, ValidationError } from "../errors.ts";
 import { createMailStore } from "../mail/store.ts";
-import { createMulchClient, inferDomainsFromFiles } from "../mulch/client.ts";
+import { inferDomainsFromFiles } from "../memory/domain-map.ts";
+import { createMemoryClient } from "../memory/factory.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import { createRunStore } from "../sessions/store.ts";
 import { createTrackerClient } from "../tracker/factory.ts";
@@ -524,24 +525,28 @@ export async function slingCommand(args: string[]): Promise<void> {
 		const agentDefPath = join(config.project.root, config.agents.baseDir, agentDef.file);
 		const baseDefinition = await readFile(agentDefPath, "utf-8");
 
-		// 8a. Infer mulch domains from file scope and fetch expertise
-		const customDomainMap = config.mulch.domainMap;
+		// 8a. Infer memory domains from file scope and fetch expertise
+		const customDomainMap = config.memory.domainMap;
 		const inferredDomains = inferDomainsFromFiles(
 			fileScope,
 			customDomainMap && Object.keys(customDomainMap).length > 0 ? customDomainMap : undefined,
 		);
-		let mulchExpertise: string | undefined;
-		if (config.mulch.enabled && fileScope.length > 0) {
+		let memoryExpertise: string | undefined;
+		if (config.memory.enabled && fileScope.length > 0) {
 			try {
-				const mulch = createMulchClient(config.project.root);
-				if (inferredDomains.length > 0) {
-					mulchExpertise = await mulch.prime(inferredDomains);
-				} else {
-					mulchExpertise = await mulch.prime(undefined, undefined, { files: fileScope });
+				const memory = createMemoryClient(config.memory.backend, config.project.root);
+				try {
+					if (inferredDomains.length > 0) {
+						memoryExpertise = await memory.prime({ domains: inferredDomains });
+					} else {
+						memoryExpertise = await memory.prime({ files: fileScope });
+					}
+				} finally {
+					if (memory.dispose) memory.dispose();
 				}
 			} catch {
-				// Non-fatal: mulch expertise is supplementary context
-				mulchExpertise = undefined;
+				// Non-fatal: memory expertise is supplementary context
+				memoryExpertise = undefined;
 			}
 		}
 
@@ -552,17 +557,17 @@ export async function slingCommand(args: string[]): Promise<void> {
 			branchName,
 			worktreePath,
 			fileScope,
-			mulchDomains: config.mulch.enabled
+			memoryDomains: config.memory.enabled
 				? inferredDomains.length > 0
 					? inferredDomains
-					: config.mulch.domains
+					: config.memory.domains
 				: [],
 			parentAgent: parentAgent,
 			depth,
 			canSpawn: agentDef.canSpawn,
 			capability,
 			baseDefinition,
-			mulchExpertise,
+			memoryExpertise,
 			canonicalRoot: config.project.root,
 			skipReview,
 			qualityGates: config.qualityGates as OverlayConfig["qualityGates"],
@@ -608,7 +613,7 @@ export async function slingCommand(args: string[]): Promise<void> {
 				capability,
 				created: new Date().toISOString(),
 				sessionsCompleted: 0,
-				expertiseDomains: config.mulch.enabled ? config.mulch.domains : [],
+				expertiseDomains: config.memory.enabled ? config.memory.domains : [],
 				recentTasks: [],
 			});
 		}
@@ -722,8 +727,8 @@ export async function slingCommand(args: string[]): Promise<void> {
 
 			// Check if the beacon was consumed: if the pane shows agent activity
 			// (spinner, tool calls, thinking indicators) the beacon was delivered.
-			// If the raw beacon text is still sitting in the input area, it wasn't
-			// submitted — retry.
+			// If the raw beacon text or a paste preview is still in the input area,
+			// it wasn't submitted — retry.
 			const paneContent = await capturePaneContent(tmuxSessionName);
 			const beaconTag = `[LEGIO] ${name}`;
 			const hasAgentActivity =
@@ -732,7 +737,12 @@ export async function slingCommand(args: string[]): Promise<void> {
 				paneContent.includes("Searching") || // Tool usage
 				paneContent.includes("Editing") || // Tool usage
 				paneContent.includes("Running"); // Tool usage
-			const beaconStillInInput = paneContent.includes(beaconTag) && !hasAgentActivity;
+			// Claude Code may collapse long pasted text into a preview like
+			// "[Pasted text #1 +2 lines]" — the beacon tag won't be visible
+			// in the pane in this case, so check for paste preview too.
+			const isPastePreview = paneContent.includes("[Pasted text");
+			const beaconStillInInput =
+				(paneContent.includes(beaconTag) || isPastePreview) && !hasAgentActivity;
 
 			if (!beaconStillInInput) {
 				beaconDelivered = true;

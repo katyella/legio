@@ -30,7 +30,7 @@ function makeConfig(overrides?: Partial<OverlayConfig>): OverlayConfig {
 		branchName: "agent/test-builder/legio-abc",
 		worktreePath: "/tmp/test-project/.legio/worktrees/test-builder",
 		fileScope: ["src/agents/manifest.ts", "src/agents/overlay.ts"],
-		mulchDomains: ["typescript", "testing"],
+		memoryDomains: ["typescript", "testing"],
 		parentAgent: "lead-alpha",
 		depth: 1,
 		canSpawn: false,
@@ -130,15 +130,15 @@ describe("generateOverlay", () => {
 		expect(output).toContain("No file scope restrictions");
 	});
 
-	test("mulch domains formatted as prime command", async () => {
-		const config = makeConfig({ mulchDomains: ["typescript", "testing"] });
+	test("memory domains formatted as prime command", async () => {
+		const config = makeConfig({ memoryDomains: ["typescript", "testing"] });
 		const output = await generateOverlay(config);
 
-		expect(output).toContain("mulch prime typescript testing");
+		expect(output).toContain("legio memory prime --domains typescript,testing");
 	});
 
-	test("empty mulch domains shows fallback text", async () => {
-		const config = makeConfig({ mulchDomains: [] });
+	test("empty memory domains shows fallback text", async () => {
+		const config = makeConfig({ memoryDomains: [] });
 		const output = await generateOverlay(config);
 
 		expect(output).toContain("No specific expertise domains configured");
@@ -172,9 +172,9 @@ describe("generateOverlay", () => {
 		expect(output).not.toContain("}}");
 	});
 
-	test("includes pre-loaded expertise when mulchExpertise is provided", async () => {
+	test("includes pre-loaded expertise when memoryExpertise is provided", async () => {
 		const config = makeConfig({
-			mulchExpertise: "## architecture\n- Pattern: use singleton for config loader",
+			memoryExpertise: "## architecture\n- Pattern: use singleton for config loader",
 		});
 		const output = await generateOverlay(config);
 
@@ -184,23 +184,23 @@ describe("generateOverlay", () => {
 		expect(output).toContain("Pattern: use singleton for config loader");
 	});
 
-	test("omits expertise section when mulchExpertise is undefined", async () => {
-		const config = makeConfig({ mulchExpertise: undefined });
+	test("omits expertise section when memoryExpertise is undefined", async () => {
+		const config = makeConfig({ memoryExpertise: undefined });
 		const output = await generateOverlay(config);
 
 		expect(output).not.toContain("### Pre-loaded Expertise");
 		expect(output).not.toContain("automatically loaded at spawn time");
 	});
 
-	test("omits expertise section when mulchExpertise is empty string", async () => {
-		const config = makeConfig({ mulchExpertise: "" });
+	test("omits expertise section when memoryExpertise is empty string", async () => {
+		const config = makeConfig({ memoryExpertise: "" });
 		const output = await generateOverlay(config);
 
 		expect(output).not.toContain("### Pre-loaded Expertise");
 	});
 
-	test("omits expertise section when mulchExpertise is whitespace only", async () => {
-		const config = makeConfig({ mulchExpertise: "   \n\t  \n  " });
+	test("omits expertise section when memoryExpertise is whitespace only", async () => {
+		const config = makeConfig({ memoryExpertise: "   \n\t  \n  " });
 		const output = await generateOverlay(config);
 
 		expect(output).not.toContain("### Pre-loaded Expertise");

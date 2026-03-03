@@ -24,23 +24,23 @@ function formatFileScope(fileScope: readonly string[]): string {
 }
 
 /**
- * Format mulch domains as a `mulch prime` command.
+ * Format memory domains as a `legio memory prime` command.
  * Returns a human-readable fallback if no domains are configured.
  */
-function formatMulchDomains(domains: readonly string[]): string {
+function formatMemoryDomains(domains: readonly string[]): string {
 	if (domains.length === 0) {
 		return "No specific expertise domains configured";
 	}
-	return `\`\`\`bash\nmulch prime ${domains.join(" ")}\n\`\`\``;
+	return `\`\`\`bash\nlegio memory prime --domains ${domains.join(",")}\n\`\`\``;
 }
 
 /**
- * Format pre-fetched mulch expertise for embedding in the overlay.
+ * Format pre-fetched memory expertise for embedding in the overlay.
  * Returns empty string if no expertise was provided (omits the section entirely).
  * When expertise IS provided, renders it under a 'Pre-loaded Expertise' heading
  * with a brief intro explaining it was loaded at spawn time based on file scope.
  */
-function formatMulchExpertise(expertise: string | undefined): string {
+function formatMemoryExpertise(expertise: string | undefined): string {
 	if (!expertise || expertise.trim().length === 0) {
 		return "";
 	}
@@ -92,7 +92,7 @@ function formatQualityGates(config: OverlayConfig): string {
 			"",
 			"Before reporting completion:",
 			"",
-			`1. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|reference> --description "..."\` — capture reusable knowledge from your work`,
+			`1. **Record mulch learnings:** \`legio memory record <domain> --type <convention|pattern|reference> --description "..."\` — capture reusable knowledge from your work`,
 			`2. **Close issue:** \`legio task close ${config.beadId} --reason "summary of findings"\``,
 			`3. **Send results:** \`legio mail send --to ${config.parentAgent ?? "orchestrator"} --subject "done" --body "Summary" --type result --agent ${config.agentName}\``,
 			"",
@@ -120,7 +120,7 @@ function formatQualityGates(config: OverlayConfig): string {
 	);
 	nextStep++;
 	steps.push(
-		`${nextStep}. **Record mulch learnings:** \`mulch record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
+		`${nextStep}. **Record mulch learnings:** \`legio memory record <domain> --type <convention|pattern|failure|decision> --description "..."\` — capture insights from your work`,
 	);
 	nextStep++;
 	steps.push(
@@ -235,8 +235,8 @@ export async function generateOverlay(config: OverlayConfig): Promise<string> {
 		"{{PARENT_AGENT}}": config.parentAgent ?? "orchestrator",
 		"{{DEPTH}}": String(config.depth),
 		"{{FILE_SCOPE}}": formatFileScope(config.fileScope),
-		"{{MULCH_DOMAINS}}": formatMulchDomains(config.mulchDomains),
-		"{{MULCH_EXPERTISE}}": formatMulchExpertise(config.mulchExpertise),
+		"{{MEMORY_DOMAINS}}": formatMemoryDomains(config.memoryDomains),
+		"{{MEMORY_EXPERTISE}}": formatMemoryExpertise(config.memoryExpertise),
 		"{{CAN_SPAWN}}": formatCanSpawn(config),
 		"{{QUALITY_GATES}}": formatQualityGates(config),
 		"{{CONSTRAINTS}}": formatConstraints(config),

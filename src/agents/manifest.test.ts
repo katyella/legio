@@ -521,7 +521,12 @@ describe("resolveModel", () => {
 			},
 			worktrees: { baseDir: ".legio/worktrees" },
 			taskTracker: { backend: "auto" as const, enabled: false },
-			mulch: { enabled: false, domains: [], primeFormat: "markdown" },
+			memory: {
+				backend: "auto" as const,
+				enabled: false,
+				domains: [],
+				primeFormat: "markdown" as const,
+			},
 			merge: { aiResolveEnabled: false, reimagineEnabled: false },
 			watchman: {
 				tier0Enabled: false,

@@ -48,6 +48,12 @@ describe("checkLogs", () => {
 				domains: [],
 				primeFormat: "markdown",
 			},
+			memory: {
+				backend: "auto" as const,
+				enabled: true,
+				domains: [],
+				primeFormat: "markdown" as const,
+			},
 			merge: {
 				aiResolveEnabled: false,
 				reimagineEnabled: false,

@@ -15,7 +15,7 @@ import type { ChildProcess } from "node:child_process";
 import * as cp from "node:child_process";
 import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { MergeError } from "../errors.ts";
-import type { MulchClient } from "../mulch/client.ts";
+import type { MemoryClient } from "../memory/types.ts";
 import type {
 	ConflictHistory,
 	MergeEntry,
@@ -306,13 +306,13 @@ export function buildConflictHistory(
  *
  * @param options.aiResolveEnabled - Enable tier 3 (AI-assisted resolution)
  * @param options.reimagineEnabled - Enable tier 4 (full reimagine)
- * @param options.mulchClient - Optional MulchClient for conflict pattern recording
+ * @param options.memoryClient - Optional MemoryClient for conflict pattern recording
  * @param options._spawn - Injectable spawn function for testing (defaults to cp.spawn)
  */
 export function createMergeResolver(options: {
 	aiResolveEnabled: boolean;
 	reimagineEnabled: boolean;
-	mulchClient?: MulchClient;
+	memoryClient?: MemoryClient;
 	_spawn?: (cmd: string, args: string[], opts: cp.SpawnOptions) => ChildProcess;
 }): MergeResolver {
 	// Bind spawn so tests can inject a replacement without ESM namespace limitations
@@ -584,11 +584,11 @@ export function createMergeResolver(options: {
 	 * Returns empty history if mulch is unavailable or search fails (fire-and-forget).
 	 */
 	async function queryConflictHistory(
-		mulchClient: MulchClient,
+		memoryClient: MemoryClient,
 		entry: MergeEntry,
 	): Promise<ConflictHistory> {
 		try {
-			const searchOutput = await mulchClient.search("merge-conflict");
+			const searchOutput = await memoryClient.search("merge-conflict");
 			const patterns = parseConflictPatterns(searchOutput);
 			return buildConflictHistory(patterns, entry.filesModified);
 		} catch {
@@ -602,7 +602,7 @@ export function createMergeResolver(options: {
 	 * never blocks or fails the merge itself.
 	 */
 	function recordConflictPattern(
-		mulchClient: MulchClient,
+		memoryClient: MemoryClient,
 		entry: MergeEntry,
 		tier: ResolutionTier,
 		conflictFiles: string[],
@@ -617,7 +617,7 @@ export function createMergeResolver(options: {
 		].join(" ");
 
 		// Fire-and-forget per convention mx-09e10f
-		mulchClient
+		memoryClient
 			.record("architecture", {
 				type: "pattern",
 				description,
@@ -670,14 +670,14 @@ export function createMergeResolver(options: {
 			}
 			conflictFiles = cleanResult.conflictFiles;
 
-			// Query conflict history (if mulchClient available)
+			// Query conflict history (if memoryClient available)
 			let history: ConflictHistory = {
 				skipTiers: [],
 				pastResolutions: [],
 				predictedConflictFiles: [],
 			};
-			if (options.mulchClient) {
-				history = await queryConflictHistory(options.mulchClient, entry);
+			if (options.memoryClient) {
+				history = await queryConflictHistory(options.memoryClient, entry);
 			}
 
 			// Tier 2: Auto-resolve (keep incoming)
@@ -685,8 +685,8 @@ export function createMergeResolver(options: {
 				lastTier = "auto-resolve";
 				const autoResult = await tryAutoResolve(conflictFiles, repoRoot);
 				if (autoResult.success) {
-					if (options.mulchClient) {
-						recordConflictPattern(options.mulchClient, entry, "auto-resolve", conflictFiles, true);
+					if (options.memoryClient) {
+						recordConflictPattern(options.memoryClient, entry, "auto-resolve", conflictFiles, true);
 					}
 					return {
 						entry: { ...entry, status: "merged", resolvedTier: "auto-resolve" },
@@ -704,8 +704,8 @@ export function createMergeResolver(options: {
 				lastTier = "ai-resolve";
 				const aiResult = await tryAiResolve(conflictFiles, repoRoot, history.pastResolutions);
 				if (aiResult.success) {
-					if (options.mulchClient) {
-						recordConflictPattern(options.mulchClient, entry, "ai-resolve", conflictFiles, true);
+					if (options.memoryClient) {
+						recordConflictPattern(options.memoryClient, entry, "ai-resolve", conflictFiles, true);
 					}
 					return {
 						entry: { ...entry, status: "merged", resolvedTier: "ai-resolve" },
@@ -723,8 +723,8 @@ export function createMergeResolver(options: {
 				lastTier = "reimagine";
 				const reimagineResult = await tryReimagine(entry, canonicalBranch, repoRoot);
 				if (reimagineResult.success) {
-					if (options.mulchClient) {
-						recordConflictPattern(options.mulchClient, entry, "reimagine", conflictFiles, true);
+					if (options.memoryClient) {
+						recordConflictPattern(options.memoryClient, entry, "reimagine", conflictFiles, true);
 					}
 					return {
 						entry: { ...entry, status: "merged", resolvedTier: "reimagine" },
@@ -743,8 +743,8 @@ export function createMergeResolver(options: {
 				// merge --abort may fail if there's no merge in progress (e.g., after reimagine)
 			}
 
-			if (options.mulchClient) {
-				recordConflictPattern(options.mulchClient, entry, lastTier, conflictFiles, false);
+			if (options.memoryClient) {
+				recordConflictPattern(options.memoryClient, entry, lastTier, conflictFiles, false);
 			}
 
 			return {
