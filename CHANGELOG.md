@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-03-03
+
+### Fixed
+- Agents in `idle` state (between tool calls) disappeared from all queries and UI — `getActive()`, `getByRunIncludeActive()`, status zombie reconciliation, dashboard metrics, and the `activeAgents` computed signal now all include `idle` as an active state
+- Dashboard showed "0 active / 2 total" and "Active: 0" when coordinator and gateway were alive but idle between tool calls
+- 2467 tests across 83 test files (up from 2467 across 83)
+
 ## [0.3.2] - 2026-03-03
 
 ### Fixed
@@ -222,7 +229,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/katyella/legio/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/katyella/legio/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/katyella/legio/compare/v0.3.0...v0.3.1
 [0.2.3]: https://github.com/katyella/legio/compare/v0.2.2...v0.2.3

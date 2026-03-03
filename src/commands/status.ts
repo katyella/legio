@@ -102,7 +102,7 @@ export async function gatherStatus(
 		// The watchman daemon is the sole authority for persisting zombie
 		// state transitions to the DB (prevents race-window zombification).
 		for (const session of sessions) {
-			if (session.state === "booting" || session.state === "working") {
+			if (session.state === "booting" || session.state === "working" || session.state === "idle") {
 				const tmuxAlive = tmuxSessions.some((s) => s.name === session.tmuxSession);
 				if (!tmuxAlive) {
 					session.state = "zombie"; // display-only, no DB write

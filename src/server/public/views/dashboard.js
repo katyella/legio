@@ -75,7 +75,7 @@ function typeBadgeClass(type) {
 
 function MetricsStrip({ agents, status }) {
 	const totalSessions = agents.length;
-	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting").length;
+	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting" || a.state === "idle").length;
 	const completedCount = agents.filter((a) => a.state === "completed").length;
 	const unreadMail = status?.unreadMailCount ?? 0;
 	const pendingMerges = status?.mergeQueueCount ?? 0;
@@ -310,7 +310,7 @@ function AgentRoster({ agents, mail, events }) {
 
 	const ordered = buildAgentHierarchy(agents);
 
-	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting").length;
+	const activeCount = agents.filter((a) => a.state === "working" || a.state === "booting" || a.state === "idle").length;
 
 	const toggleExpand = useCallback((name) => {
 		setExpandedAgent((prev) => (prev === name ? null : name));

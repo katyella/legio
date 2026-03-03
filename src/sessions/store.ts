@@ -209,7 +209,7 @@ export function createSessionStore(dbPath: string): SessionStore {
 	`);
 
 	const getActiveStmt = db.prepare(`
-		SELECT * FROM sessions WHERE state IN ('booting', 'working')
+		SELECT * FROM sessions WHERE state IN ('booting', 'working', 'idle')
 		ORDER BY started_at ASC
 	`);
 
@@ -227,7 +227,7 @@ export function createSessionStore(dbPath: string): SessionStore {
 
 	const getByRunIncludeActiveStmt = db.prepare(`
 		SELECT * FROM sessions
-		WHERE run_id = $run_id OR run_id IS NULL OR state IN ('booting', 'working')
+		WHERE run_id = $run_id OR run_id IS NULL OR state IN ('booting', 'working', 'idle')
 		ORDER BY started_at ASC
 	`);
 

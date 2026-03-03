@@ -35,9 +35,9 @@ export function setLastUpdated() {
 	appState.lastUpdated.value = new Date().toISOString();
 }
 
-// Computed: agents that are working or booting
+// Computed: agents that are working, booting, or idle (alive but between tool calls)
 export const activeAgents = computed(() =>
-	appState.agents.value.filter((a) => a.state === "working" || a.state === "booting"),
+	appState.agents.value.filter((a) => a.state === "working" || a.state === "booting" || a.state === "idle"),
 );
 
 // Computed: count of unread mail messages
