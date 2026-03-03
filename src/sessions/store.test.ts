@@ -308,6 +308,87 @@ describe("getByRunIncludeOrphans", () => {
 	});
 });
 
+// === getByRunIncludeActive ===
+
+describe("getByRunIncludeActive", () => {
+	test("returns empty array when no sessions exist", () => {
+		expect(store.getByRunIncludeActive("run-1")).toEqual([]);
+	});
+
+	test("returns sessions matching runId plus null-runId sessions", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-1", state: "completed" }));
+		store.upsert(makeSession({ agentName: "a2", id: "s-2", runId: "run-1", state: "completed" }));
+		store.upsert(makeSession({ agentName: "a3", id: "s-3", runId: "run-2", state: "completed" }));
+		store.upsert(makeSession({ agentName: "a4", id: "s-4", runId: null, state: "completed" }));
+
+		const result = store.getByRunIncludeActive("run-1");
+		// run-1 sessions + null-runId session; run-2 is completed so excluded
+		expect(result.map((s) => s.agentName).sort()).toEqual(["a1", "a2", "a4"]);
+	});
+
+	test("includes active agents from other runs", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-1", state: "working" }));
+		store.upsert(makeSession({ agentName: "a2", id: "s-2", runId: "run-2", state: "completed" }));
+
+		const result = store.getByRunIncludeActive("run-2");
+		// run-2 session + a1 because it's working (active in another run)
+		expect(result.map((s) => s.agentName).sort()).toEqual(["a1", "a2"]);
+	});
+
+	test("excludes completed agents from other runs", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-1", state: "completed" }));
+		store.upsert(makeSession({ agentName: "a2", id: "s-2", runId: "run-2", state: "working" }));
+
+		const result = store.getByRunIncludeActive("run-2");
+		// only a2 — a1 is completed so not included
+		expect(result.map((s) => s.agentName)).toEqual(["a2"]);
+	});
+
+	test("deduplicates sessions matching both run and active criteria", () => {
+		store.upsert(makeSession({ agentName: "a1", id: "s-1", runId: "run-1", state: "working" }));
+
+		const result = store.getByRunIncludeActive("run-1");
+		// a1 matches both run_id = run-1 AND state = working, but SQL OR deduplicates
+		expect(result).toHaveLength(1);
+		expect(result[0]?.agentName).toBe("a1");
+	});
+
+	test("results are ordered by started_at ascending", () => {
+		store.upsert(
+			makeSession({
+				agentName: "late",
+				id: "s-2",
+				runId: "run-1",
+				state: "completed",
+				startedAt: "2026-01-15T12:00:00.000Z",
+			}),
+		);
+		store.upsert(
+			makeSession({
+				agentName: "active-other-run",
+				id: "s-3",
+				runId: "run-2",
+				state: "working",
+				startedAt: "2026-01-15T11:00:00.000Z",
+			}),
+		);
+		store.upsert(
+			makeSession({
+				agentName: "early",
+				id: "s-1",
+				runId: "run-1",
+				state: "completed",
+				startedAt: "2026-01-15T10:00:00.000Z",
+			}),
+		);
+
+		const result = store.getByRunIncludeActive("run-1");
+		expect(result[0]?.agentName).toBe("early");
+		expect(result[1]?.agentName).toBe("active-other-run");
+		expect(result[2]?.agentName).toBe("late");
+	});
+});
+
 // === updateState ===
 
 describe("updateState", () => {

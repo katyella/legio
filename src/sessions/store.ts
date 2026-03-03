@@ -22,6 +22,8 @@ export interface SessionStore {
 	getByRun(runId: string): AgentSession[];
 	/** Get sessions belonging to a specific run, including sessions with null runId (orphan persistent agents). */
 	getByRunIncludeOrphans(runId: string): AgentSession[];
+	/** Get sessions belonging to a specific run, including orphans AND any active agents from other runs. */
+	getByRunIncludeActive(runId: string): AgentSession[];
 	/** Update only the state of a session. */
 	updateState(agentName: string, state: AgentState): void;
 	/** Update lastActivity to current ISO timestamp. */
@@ -223,6 +225,12 @@ export function createSessionStore(dbPath: string): SessionStore {
 		SELECT * FROM sessions WHERE run_id = $run_id OR run_id IS NULL ORDER BY started_at ASC
 	`);
 
+	const getByRunIncludeActiveStmt = db.prepare(`
+		SELECT * FROM sessions
+		WHERE run_id = $run_id OR run_id IS NULL OR state IN ('booting', 'working')
+		ORDER BY started_at ASC
+	`);
+
 	const updateStateStmt = db.prepare(`
 		UPDATE sessions SET state = $state WHERE agent_name = $agent_name
 	`);
@@ -300,6 +308,11 @@ export function createSessionStore(dbPath: string): SessionStore {
 
 		getByRunIncludeOrphans(runId: string): AgentSession[] {
 			const rows = getByRunIncludeOrphansStmt.all({ run_id: runId }) as SessionRow[];
+			return rows.map(rowToSession);
+		},
+
+		getByRunIncludeActive(runId: string): AgentSession[] {
+			const rows = getByRunIncludeActiveStmt.all({ run_id: runId }) as SessionRow[];
 			return rows.map(rowToSession);
 		},
 
