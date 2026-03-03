@@ -162,7 +162,11 @@ export function createBuiltinTrackerClient(dbPath: string): BuiltinTrackerClient
 			if (conditions.length > 0) {
 				sql += ` WHERE ${conditions.join(" AND ")}`;
 			}
-			sql += " ORDER BY priority ASC, created_at ASC";
+			if (options?.status === "closed") {
+				sql += " ORDER BY closed_at DESC";
+			} else {
+				sql += " ORDER BY priority ASC, created_at ASC";
+			}
 
 			if (options?.limit !== undefined) {
 				sql += " LIMIT ?";

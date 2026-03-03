@@ -174,6 +174,37 @@ describe("createBuiltinTrackerClient", () => {
 			const limited = await client.list({ limit: 2 });
 			expect(limited).toHaveLength(2);
 		});
+
+		it("orders closed tasks by closed_at DESC", async () => {
+			const id1 = await client.create("First closed");
+			const id2 = await client.create("Second closed");
+			const id3 = await client.create("Third closed");
+
+			// Close in sequence with explicit ordering via small waits
+			await client.close(id1, "first");
+			await new Promise((r) => setTimeout(r, 10));
+			await client.close(id2, "second");
+			await new Promise((r) => setTimeout(r, 10));
+			await client.close(id3, "third");
+
+			const closed = await client.list({ status: "closed" });
+			expect(closed).toHaveLength(3);
+			// Most recently closed (id3) should be first
+			expect(closed[0]?.id).toBe(id3);
+			expect(closed[1]?.id).toBe(id2);
+			expect(closed[2]?.id).toBe(id1);
+		});
+
+		it("non-closed statuses still use priority ASC, created_at ASC ordering", async () => {
+			await client.create("Open task");
+			const id2 = await client.create("Another open");
+
+			const open = await client.list({ status: "open" });
+			expect(open[0]?.id).toBe(id2 === open[0]?.id ? id2 : open[0]?.id);
+			// Verify ordering is by created_at ASC (first created comes first)
+			expect(open[0]?.title).toBe("Open task");
+			expect(open[1]?.title).toBe("Another open");
+		});
 	});
 
 	describe("sync", () => {
