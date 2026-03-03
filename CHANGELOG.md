@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-03-03
+
+### Fixed
+- Persistent agents (gateway, coordinator, monitor) stuck in `working` state after finishing a prompt — `tool-end` hook now transitions them to `idle` so the dashboard and chat show accurate status
+- Sessions database schema migration for older DBs whose CHECK constraint was missing `idle` as a valid state — `updateState(name, "idle")` silently failed with a swallowed constraint error
+- Dashboard chat messages now framed with reply instructions so the gateway reliably responds via mail instead of only in the terminal
+- 2467 tests across 83 test files
+
 ## [0.3.4] - 2026-03-03
 
 ### Fixed
@@ -234,7 +242,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/katyella/legio/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/katyella/legio/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/katyella/legio/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/katyella/legio/compare/v0.3.1...v0.3.2
