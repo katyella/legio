@@ -389,12 +389,12 @@ async function statusGateway(args: string[], deps: GatewayDeps = {}): Promise<vo
 
 		const alive = await tmux.isSessionAlive(session.tmuxSession);
 
-		// Reconcile state: if session says active but tmux is dead, update.
-		// We already filtered out completed/zombie states above, so if tmux is dead
-		// this session needs to be marked as zombie.
+		// Reconcile state for display: if session says active but tmux is dead,
+		// show as zombie. Only update the in-memory object — the watchman daemon
+		// is the sole authority for persisting zombie state transitions to the DB
+		// (prevents race-window zombification).
 		if (!alive) {
-			store.updateState(GATEWAY_NAME, "zombie");
-			session.state = "zombie";
+			session.state = "zombie"; // display-only, no DB write
 		}
 
 		const status = {

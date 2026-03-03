@@ -551,6 +551,28 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 			process.stdout.write(`  PID:     ${pid}\n`);
 		}
 
+		// Auto-start watchman BEFORE waiting for TUI or delivering beacons.
+		// This closes the race window where status polls could zombify agents
+		// before watchman starts monitoring them.
+		if (watchmanFlag) {
+			const watchmanResult = await watchman.start();
+			if (watchmanResult) {
+				if (!json) process.stdout.write(`  Watchman: started (PID ${watchmanResult.pid})\n`);
+			} else {
+				if (!json) process.stderr.write("  Watchman: failed to start or already running\n");
+			}
+		}
+
+		// Auto-start monitor if --monitor flag is present
+		if (monitorFlag) {
+			const monitorResult = await monitor.start([]);
+			if (monitorResult) {
+				if (!json) process.stdout.write(`  Monitor:  started (PID ${monitorResult.pid})\n`);
+			} else {
+				if (!json) process.stderr.write("  Monitor:  failed to start or already running\n");
+			}
+		}
+
 		// Wait for Claude Code's TUI to render before sending beacon.
 		// Falls back to sleep(3_000) when waitForTuiReady is not in the DI mock.
 		if (tmux.waitForTuiReady) {
@@ -571,26 +593,6 @@ async function startCoordinator(args: string[], deps: CoordinatorDeps = {}): Pro
 			capturePane: tmux.capturePaneContent,
 			sleep,
 		});
-
-		// Auto-start watchman if --watchman/--watchdog flag is present
-		if (watchmanFlag) {
-			const watchmanResult = await watchman.start();
-			if (watchmanResult) {
-				if (!json) process.stdout.write(`  Watchman: started (PID ${watchmanResult.pid})\n`);
-			} else {
-				if (!json) process.stderr.write("  Watchman: failed to start or already running\n");
-			}
-		}
-
-		// Auto-start monitor if --monitor flag is present
-		if (monitorFlag) {
-			const monitorResult = await monitor.start([]);
-			if (monitorResult) {
-				if (!json) process.stdout.write(`  Monitor:  started (PID ${monitorResult.pid})\n`);
-			} else {
-				if (!json) process.stderr.write("  Monitor:  failed to start or already running\n");
-			}
-		}
 
 		if (shouldAttach) {
 			spawnSync("tmux", ["attach-session", "-t", tmuxSession], {
@@ -790,12 +792,12 @@ async function statusCoordinator(args: string[], deps: CoordinatorDeps = {}): Pr
 			alive = await tmux.isSessionAlive(session.tmuxSession);
 		}
 
-		// Reconcile state: if session says active but process/tmux is dead, update.
-		// We already filtered out completed/zombie states above, so if dead
-		// this session needs to be marked as zombie.
+		// Reconcile state for display: if session says active but process/tmux
+		// is dead, show as zombie. Only update the in-memory object — the
+		// watchman daemon is the sole authority for persisting zombie state
+		// transitions to the DB (prevents race-window zombification).
 		if (!alive) {
-			store.updateState(COORDINATOR_NAME, "zombie");
-			session.state = "zombie";
+			session.state = "zombie"; // display-only, no DB write
 		}
 		const status = {
 			running: alive,

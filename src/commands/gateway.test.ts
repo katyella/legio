@@ -679,11 +679,11 @@ describe("statusGateway", () => {
 		expect(parsed.pid).toBe(99999);
 	});
 
-	test("reconciles zombie: updates state when tmux is dead but session says working", async () => {
+	test("reconciles zombie: displays zombie state but does NOT write to DB", async () => {
 		const session = makeGatewaySession({ state: "working" });
 		saveSessionsToDb([session]);
 
-		// Tmux is NOT alive — triggers zombie reconciliation
+		// Tmux is NOT alive — triggers display-only zombie reconciliation
 		const { deps } = makeDeps({ "legio-test-project-gateway": false });
 
 		const output = await captureStdout(() => gatewayCommand(["status", "--json"], deps));
@@ -691,12 +691,12 @@ describe("statusGateway", () => {
 		expect(parsed.running).toBe(false);
 		expect(parsed.state).toBe("zombie");
 
-		// Verify sessions.db was updated
+		// DB state should be UNCHANGED — watchman is the sole authority for zombie writes
 		const sessions = loadSessionsFromDb();
-		expect(sessions[0]?.state).toBe("zombie");
+		expect(sessions[0]?.state).toBe("working");
 	});
 
-	test("reconciles zombie for booting state too", async () => {
+	test("reconciles zombie for booting state: displays zombie but DB unchanged", async () => {
 		const session = makeGatewaySession({ state: "booting" });
 		saveSessionsToDb([session]);
 		const { deps } = makeDeps({ "legio-test-project-gateway": false });
@@ -704,6 +704,10 @@ describe("statusGateway", () => {
 		const output = await captureStdout(() => gatewayCommand(["status", "--json"], deps));
 		const parsed = JSON.parse(output) as Record<string, unknown>;
 		expect(parsed.state).toBe("zombie");
+
+		// DB state should be UNCHANGED
+		const sessions = loadSessionsFromDb();
+		expect(sessions[0]?.state).toBe("booting");
 	});
 
 	test("does not show completed sessions as active", async () => {

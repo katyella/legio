@@ -392,12 +392,12 @@ async function statusSupervisor(args: string[]): Promise<void> {
 
 			const alive = await isSessionAlive(session.tmuxSession);
 
-			// Reconcile state: we already filtered out completed/zombie above,
-			// so if tmux is dead this session needs to be marked as zombie.
+			// Reconcile state for display: if session says active but tmux is dead,
+			// show as zombie. Only update the in-memory object — the watchman daemon
+			// is the sole authority for persisting zombie state transitions to the DB
+			// (prevents race-window zombification).
 			if (!alive) {
-				store.updateState(flags.name, "zombie");
-				store.updateLastActivity(flags.name);
-				session.state = "zombie";
+				session.state = "zombie"; // display-only, no DB write
 			}
 
 			const status = {
@@ -446,11 +446,8 @@ async function statusSupervisor(args: string[]): Promise<void> {
 				supervisors.map(async (session) => {
 					const alive = await isSessionAlive(session.tmuxSession);
 
-					// Reconcile state
-					if (!alive && session.state !== "completed" && session.state !== "zombie") {
-						store.updateState(session.agentName, "zombie");
-						store.updateLastActivity(session.agentName);
-					}
+					// Reconcile state for display only — no DB write.
+					// The watchman daemon is the sole authority for zombie transitions.
 
 					return {
 						agentName: session.agentName,

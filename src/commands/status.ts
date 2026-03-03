@@ -98,17 +98,14 @@ export async function gatherStatus(
 		}
 
 		// Reconcile agent states: if tmux session is dead but agent state
-		// indicates it should be alive, mark it as zombie
+		// indicates it should be alive, mark as zombie for display only.
+		// The watchman daemon is the sole authority for persisting zombie
+		// state transitions to the DB (prevents race-window zombification).
 		for (const session of sessions) {
 			if (session.state === "booting" || session.state === "working") {
 				const tmuxAlive = tmuxSessions.some((s) => s.name === session.tmuxSession);
 				if (!tmuxAlive) {
-					try {
-						store.updateState(session.agentName, "zombie");
-						session.state = "zombie";
-					} catch {
-						// Best effort: don't fail status display if update fails
-					}
+					session.state = "zombie"; // display-only, no DB write
 				}
 			}
 		}
