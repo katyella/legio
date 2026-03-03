@@ -1009,6 +1009,21 @@ export async function handleApiRequest(
 				return errorResponse(`No active session found for agent "${agentName}"`, 404);
 			}
 
+			// Skip transcript-sync for agents that communicate directly via mail (e.g. gateway).
+			// These agents send curated messages via legio mail send --to human. Syncing raw
+			// transcripts causes duplicates because the bodies never match exactly.
+			const DIRECT_MAIL_CAPABILITIES = new Set(["gateway"]);
+			if (
+				agentSession.capability &&
+				DIRECT_MAIL_CAPABILITIES.has(agentSession.capability)
+			) {
+				return jsonResponse({
+					synced: 0,
+					skipped: true,
+					reason: "direct_mail_agent",
+				});
+			}
+
 			const logsBase = join(legioDir, "logs");
 			const cachePath = join(logsBase, agentName, ".transcript-path");
 			let transcriptPath: string | null = null;
