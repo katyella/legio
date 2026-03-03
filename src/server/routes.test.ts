@@ -3829,4 +3829,35 @@ describe("POST /api/chat/transcript-sync", () => {
 		const res = await dispatchPost("/api/chat/transcript-sync", { agent: "nonexistent" });
 		expect(res.status).toBe(404);
 	});
+
+	it("skips transcript-sync for gateway agents", async () => {
+		const sessStore = createSessionStore(join(legioDir, "sessions.db"));
+		const now = new Date().toISOString();
+		sessStore.upsert({
+			id: "sess-gw",
+			agentName: "gateway-test",
+			capability: "gateway",
+			worktreePath: "/tmp/wt/gateway-test",
+			branchName: "legio/gateway-test/task-gw",
+			beadId: "task-gw",
+			tmuxSession: "legio-test-gateway-test",
+			state: "working",
+			pid: 99999,
+			parentAgent: null,
+			depth: 0,
+			runId: "run-001",
+			startedAt: now,
+			lastActivity: now,
+			escalationLevel: 0,
+			stalledSince: null,
+		});
+		sessStore.close();
+
+		const res = await dispatchPost("/api/chat/transcript-sync", { agent: "gateway-test" });
+		expect(res.status).toBe(200);
+		const data = (await res.json()) as Record<string, unknown>;
+		expect(data.synced).toBe(0);
+		expect(data.skipped).toBe(true);
+		expect(data.reason).toBe("direct_mail_agent");
+	});
 });
