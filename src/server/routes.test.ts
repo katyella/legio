@@ -2774,7 +2774,10 @@ describe("POST /api/gateway/chat", () => {
 		mockSendKeys.mockClear();
 		const res = await dispatchPost("/api/gateway/chat", { text: "send this" });
 		expect(res.status).toBe(201);
-		expect(mockSendKeys).toHaveBeenCalledWith("legio-test-gateway", "send this");
+		expect(mockSendKeys).toHaveBeenCalledWith(
+			"legio-test-gateway",
+			expect.stringContaining("send this"),
+		);
 	});
 });
 

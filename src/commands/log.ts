@@ -67,9 +67,16 @@ async function getSessionDir(logsBase: string, agentName: string): Promise<strin
 
 /**
  * Update the lastActivity timestamp for an agent in the SessionStore.
+ * On tool-start: transitions idle/booting → working.
+ * On tool-end: transitions persistent agents (gateway, coordinator, monitor) → idle
+ * so the dashboard/chat correctly reflects that the agent is waiting at the prompt.
  * Non-fatal: silently ignores errors to avoid breaking hook execution.
  */
-function updateLastActivity(projectRoot: string, agentName: string): void {
+function updateLastActivity(
+	projectRoot: string,
+	agentName: string,
+	event: "tool-start" | "tool-end" = "tool-start",
+): void {
 	try {
 		const legioDir = join(projectRoot, ".legio");
 		const { store } = openSessionStore(legioDir);
@@ -77,8 +84,14 @@ function updateLastActivity(projectRoot: string, agentName: string): void {
 			const session = store.getByName(agentName);
 			if (session) {
 				store.updateLastActivity(agentName);
-				if (session.state === "booting" || session.state === "idle") {
+				if (event === "tool-start" && (session.state === "booting" || session.state === "idle")) {
 					store.updateState(agentName, "working");
+				} else if (
+					event === "tool-end" &&
+					session.state === "working" &&
+					PERSISTENT_CAPABILITIES.has(session.capability)
+				) {
+					store.updateState(agentName, "idle");
 				}
 			}
 		} finally {
@@ -471,7 +484,7 @@ export async function logCommand(args: string[]): Promise<void> {
 		case "tool-end": {
 			// Backward compatibility: always write to per-agent log files
 			logger.toolEnd(toolName, 0);
-			updateLastActivity(config.project.root, agentName);
+			updateLastActivity(config.project.root, agentName, "tool-end");
 
 			// Clear busy state: remove .legio/agent-busy/{agentName}
 			try {

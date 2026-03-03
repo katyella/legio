@@ -150,6 +150,70 @@ function rowToRun(row: RunRow): Run {
 }
 
 /**
+ * Migrate the sessions table CHECK constraint to include 'idle'.
+ *
+ * Older databases were created with:
+ *   CHECK(state IN ('booting','working','completed','stalled','zombie'))
+ * which rejects 'idle'. Since SQLite doesn't support ALTER CONSTRAINT,
+ * we recreate the table when the old constraint is detected.
+ *
+ * Detection: attempt to insert a temp row with state='idle'. If it fails
+ * with a CHECK constraint error, the migration is needed.
+ */
+function migrateStateCheckConstraint(db: InstanceType<typeof Database>): void {
+	// Quick probe: try inserting a dummy row with state='idle'
+	const probeId = `__migrate_probe_${Date.now()}`;
+	try {
+		db.prepare(
+			`INSERT INTO sessions (id, agent_name, capability, worktree_path, branch_name, bead_id, tmux_session, state, depth, started_at, last_activity)
+			 VALUES (?, ?, '', '', '', '', '', 'idle', 0, '', '')`,
+		).run(probeId, probeId);
+		// Probe succeeded — constraint already allows 'idle', clean up
+		db.prepare("DELETE FROM sessions WHERE id = ?").run(probeId);
+		return;
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : "";
+		if (!msg.includes("CHECK constraint failed")) {
+			// Some other error — don't attempt migration
+			return;
+		}
+	}
+
+	// Migration needed: recreate the table with the correct constraint
+	db.exec("BEGIN IMMEDIATE");
+	try {
+		db.exec(`
+			CREATE TABLE sessions_new (
+				id TEXT PRIMARY KEY,
+				agent_name TEXT NOT NULL UNIQUE,
+				capability TEXT NOT NULL,
+				worktree_path TEXT NOT NULL,
+				branch_name TEXT NOT NULL,
+				bead_id TEXT NOT NULL,
+				tmux_session TEXT NOT NULL,
+				state TEXT NOT NULL DEFAULT 'booting'
+					CHECK(state IN ('booting','working','idle','completed','zombie')),
+				pid INTEGER,
+				parent_agent TEXT,
+				depth INTEGER NOT NULL DEFAULT 0,
+				run_id TEXT,
+				started_at TEXT NOT NULL,
+				last_activity TEXT NOT NULL,
+				escalation_level INTEGER NOT NULL DEFAULT 0,
+				stalled_since TEXT,
+				terminal_log_path TEXT
+			)
+		`);
+		db.exec("INSERT INTO sessions_new SELECT * FROM sessions");
+		db.exec("DROP TABLE sessions");
+		db.exec("ALTER TABLE sessions_new RENAME TO sessions");
+		db.exec("COMMIT");
+	} catch {
+		db.exec("ROLLBACK");
+	}
+}
+
+/**
  * Create a new SessionStore backed by a SQLite database at the given path.
  *
  * Initializes the database with WAL mode and a 5-second busy timeout.
@@ -171,6 +235,11 @@ export function createSessionStore(dbPath: string): SessionStore {
 	} catch {
 		// Column already exists — safe to ignore
 	}
+	// Migration: ensure CHECK constraint includes 'idle' state.
+	// Older DBs were created without 'idle' in the allowed values, causing
+	// updateState(name, "idle") to silently fail with a CHECK constraint error.
+	// SQLite doesn't support ALTER CONSTRAINT, so we recreate the table.
+	migrateStateCheckConstraint(db);
 	db.exec(CREATE_INDEXES);
 	db.exec(CREATE_RUNS_TABLE);
 	db.exec(CREATE_RUNS_INDEXES);

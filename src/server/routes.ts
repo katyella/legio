@@ -844,7 +844,11 @@ export async function handleApiRequest(
 		wsManager?.broadcastEvent({ type: "mail_new", data: savedMessage });
 
 		try {
-			await sendKeys(tmuxSession, text);
+			// Frame the message as a system-level instruction so the gateway
+			// reliably replies via mail. The dashboard polls for to='human'
+			// messages — terminal-only responses are invisible there.
+			const framed = `IMPORTANT: This message is from the dashboard chat. You MUST reply via mail so your response appears in the chat UI. After your analysis, run: legio mail send --to human --subject "chat" --body "<your full response>" --type status --audience human --agent $LEGIO_AGENT_NAME\n\nMessage from human: ${text}`;
+			await sendKeys(tmuxSession, framed);
 		} catch (err) {
 			return errorResponse(
 				`Failed to send keys: ${err instanceof Error ? err.message : String(err)}`,
