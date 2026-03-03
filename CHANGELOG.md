@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-03-03
+
+### Fixed
+- Idle agents showed a gray `?` icon instead of a green `●` dot in the dashboard agent roster and badge component
+
 ## [0.3.3] - 2026-03-03
 
 ### Fixed
@@ -229,7 +234,8 @@ Initial public release on npm as [`@katyella/legio`](https://www.npmjs.com/packa
 - E2E lifecycle tests via Playwright
 - Vitest test runner with forks pool for CI compatibility
 
-[Unreleased]: https://github.com/katyella/legio/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/katyella/legio/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/katyella/legio/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/katyella/legio/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/katyella/legio/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/katyella/legio/compare/v0.3.0...v0.3.1

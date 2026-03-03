@@ -62,6 +62,7 @@ export function escapeHtml(str) {
 export function stateIcon(agentState) {
 	switch (agentState) {
 		case "working":
+		case "idle":
 			return "●";
 		case "booting":
 			return "◐";
@@ -82,6 +83,7 @@ export function stateIcon(agentState) {
 export function stateColor(agentState) {
 	switch (agentState) {
 		case "working":
+		case "idle":
 			return "text-green-500";
 		case "booting":
 			return "text-yellow-500";

@@ -11,7 +11,7 @@ const html = htm.bind(h);
 const STATE_COLORS = {
 	working: "text-green-500",
 	booting: "text-yellow-500",
-	idle: "text-blue-400",
+	idle: "text-green-500",
 	stalled: "text-red-500",
 	completed: "text-gray-500",
 	zombie: "text-orange-500",
