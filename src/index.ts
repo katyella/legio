@@ -44,10 +44,13 @@ import { traceCommand } from "./commands/trace.ts";
 import { upCommand } from "./commands/up.ts";
 import { watchmanCommand } from "./commands/watchman.ts";
 import { worktreeCommand } from "./commands/worktree.ts";
+import { createRequire } from "node:module";
 import { LegioError, WorktreeError } from "./errors.ts";
 import { setQuiet } from "./logging/color.ts";
 
-const VERSION = "0.3.1";
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
+const VERSION = pkg.version;
 
 const HELP = `legio v${VERSION} — Multi-agent orchestration for Claude Code
 
