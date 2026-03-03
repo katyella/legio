@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Status commands (status, coordinator, gateway, monitor, supervisor) no longer destructively write zombie state to the DB — display-only zombie reconciliation prevents the race where page loads zombify agents before watchman can promote them to working
+- Watchman and monitor auto-start moved before TUI wait and beacon delivery in `startCoordinator()`, closing the 15-30s race window
+
 ## [0.2.3] - 2026-03-02
 
 ### Fixed
