@@ -325,6 +325,15 @@ describe("updateState", () => {
 		store.updateState("nonexistent", "completed");
 	});
 
+	test("accepts idle state", () => {
+		store.upsert(makeSession({ state: "booting" }));
+
+		store.updateState("test-agent", "idle");
+
+		const result = store.getByName("test-agent");
+		expect(result?.state).toBe("idle");
+	});
+
 	test("rejects invalid state via CHECK constraint", () => {
 		store.upsert(makeSession());
 		expect(() => store.updateState("test-agent", "invalid" as AgentState)).toThrow();
