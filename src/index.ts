@@ -7,7 +7,6 @@
  * Usage: legio <command> [args...]
  */
 
-import { createRequire } from "node:module";
 import { agentsCommand } from "./commands/agents.ts";
 import { cleanCommand } from "./commands/clean.ts";
 import { completionsCommand } from "./commands/completions.ts";
@@ -48,9 +47,7 @@ import { worktreeCommand } from "./commands/worktree.ts";
 import { LegioError, WorktreeError } from "./errors.ts";
 import { setQuiet } from "./logging/color.ts";
 
-const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { version: string };
-const VERSION = pkg.version;
+const VERSION = "0.3.6";
 
 const HELP = `legio v${VERSION} — Multi-agent orchestration for Claude Code
 
