@@ -14,6 +14,7 @@ const NON_IMPLEMENTATION_CAPABILITIES = new Set([
 	"coordinator",
 	"supervisor",
 	"monitor",
+	"gateway",
 ]);
 
 /**
@@ -334,6 +335,38 @@ export function buildBashFileGuardScript(
 }
 
 /**
+ * Legio subcommands that the gateway agent must not run.
+ * Gateway is a read-only planning companion — it must not spawn workers or merge branches.
+ */
+const GATEWAY_BLOCKED_LEGIO_COMMANDS = ["legio sling", "legio merge"];
+
+/**
+ * Build a Bash guard script that blocks specific legio subcommands for the gateway agent.
+ *
+ * Runs BEFORE the safe prefix whitelist in the file guard, so `legio sling` and `legio merge`
+ * are caught even though `legio ` is whitelisted.
+ */
+export function buildGatewayBashGuardScript(): string {
+	const checks = GATEWAY_BLOCKED_LEGIO_COMMANDS.map((cmd) => {
+		const escaped = cmd.replace(/\s+/g, "\\s+");
+		return [
+			`if echo "$CMD" | grep -qE '^\\s*${escaped}'; then`,
+			`  echo '{"decision":"block","reason":"gateway agents cannot run ${cmd} — gateway is a read-only planning companion"}';`,
+			"  exit 0;",
+			"fi;",
+		].join(" ");
+	}).join(" ");
+
+	const script = [
+		ENV_GUARD,
+		"read -r INPUT;",
+		'CMD=$(echo "$INPUT" | sed \'s/.*"command": *"\\([^"]*\\)".*/\\1/\');',
+		checks,
+	].join(" ");
+	return script;
+}
+
+/**
  * Capabilities that are allowed to modify files via Bash commands.
  * These get the Bash path boundary guard instead of a blanket file-modification block.
  */
@@ -483,6 +516,14 @@ export function getCapabilityGuards(capability: string): HookEntry[] {
 			],
 		};
 		guards.push(bashFileGuard);
+
+		// Gateway gets additional guard blocking legio sling and legio merge
+		if (capability === "gateway") {
+			guards.push({
+				matcher: "Bash",
+				hooks: [{ type: "command", command: buildGatewayBashGuardScript() }],
+			});
+		}
 	}
 
 	// Implementation capabilities get Bash path boundary validation

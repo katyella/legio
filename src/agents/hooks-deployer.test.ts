@@ -6,6 +6,7 @@ import { AgentError } from "../errors.ts";
 import {
 	buildBashFileGuardScript,
 	buildBashPathBoundaryScript,
+	buildGatewayBashGuardScript,
 	buildPathBoundaryGuardScript,
 	deployHooks,
 	getBashPathBoundaryGuards,
@@ -799,6 +800,37 @@ describe("getCapabilityGuards", () => {
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
+	test("gateway gets 18 guards (10 team + 3 interactive + 3 tool blocks + 1 bash file guard + 1 gateway command guard)", () => {
+		const guards = getCapabilityGuards("gateway");
+		expect(guards.length).toBe(BASE_GUARD_COUNT + 5);
+	});
+
+	test("gateway Bash guard blocks legio sling", () => {
+		const guards = getCapabilityGuards("gateway");
+		const bashGuards = guards.filter((g) => g.matcher === "Bash");
+		// Should have both a file guard and a gateway command guard
+		expect(bashGuards.length).toBeGreaterThanOrEqual(2);
+		const gatewayGuard = bashGuards.find((g) => g.hooks[0]?.command.includes("legio sling"));
+		expect(gatewayGuard).toBeDefined();
+		expect(gatewayGuard?.hooks[0]?.command).toContain('"decision":"block"');
+	});
+
+	test("gateway Bash guard blocks legio merge", () => {
+		const guards = getCapabilityGuards("gateway");
+		const bashGuards = guards.filter((g) => g.matcher === "Bash");
+		const gatewayGuard = bashGuards.find((g) => g.hooks[0]?.command.includes("legio merge"));
+		expect(gatewayGuard).toBeDefined();
+		expect(gatewayGuard?.hooks[0]?.command).toContain('"decision":"block"');
+	});
+
+	test("gateway guards include Write, Edit, NotebookEdit blocks", () => {
+		const guards = getCapabilityGuards("gateway");
+		const matchers = guards.map((g) => g.matcher);
+		expect(matchers).toContain("Write");
+		expect(matchers).toContain("Edit");
+		expect(matchers).toContain("NotebookEdit");
+	});
+
 	test("builder gets AskUserQuestion, EnterPlanMode, EnterWorktree blocked", () => {
 		const guards = getCapabilityGuards("builder");
 		const matchers = guards.map((g) => g.matcher);
@@ -953,6 +985,30 @@ describe("getDangerGuards", () => {
 		} finally {
 			await rm(tempDir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("buildGatewayBashGuardScript", () => {
+	test("blocks legio sling", () => {
+		const script = buildGatewayBashGuardScript();
+		expect(script).toContain("legio sling");
+		expect(script).toContain('"decision":"block"');
+	});
+
+	test("blocks legio merge", () => {
+		const script = buildGatewayBashGuardScript();
+		expect(script).toContain("legio merge");
+		expect(script).toContain('"decision":"block"');
+	});
+
+	test("includes env guard prefix", () => {
+		const script = buildGatewayBashGuardScript();
+		expect(script).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
+	});
+
+	test("reason mentions gateway is read-only", () => {
+		const script = buildGatewayBashGuardScript();
+		expect(script).toContain("read-only planning companion");
 	});
 });
 

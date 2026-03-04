@@ -6,11 +6,9 @@
  * Logs are never auto-deleted.
  */
 
-import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { loadConfig } from "../config.ts";
 import { ValidationError } from "../errors.ts";
-import { createMailStore } from "../mail/store.ts";
 import { openSessionStore } from "../sessions/compat.ts";
 import type { AgentSession } from "../types.ts";
 import { listWorktrees, removeWorktree } from "../worktree/manager.ts";
@@ -140,32 +138,6 @@ async function handleClean(args: string[], root: string, json: boolean): Promise
 			}
 		}
 
-		// Purge mail for cleaned agents
-		let mailPurged = 0;
-		if (cleaned.length > 0) {
-			const mailDbPath = join(root, ".legio", "mail.db");
-			let mailDbFileExists = false;
-			try {
-				await access(mailDbPath);
-				mailDbFileExists = true;
-			} catch {
-				/* not found */
-			}
-			if (mailDbFileExists) {
-				const mailStore = createMailStore(mailDbPath);
-				try {
-					for (const branch of cleaned) {
-						const session = sessions.find((s) => s.branchName === branch);
-						if (session) {
-							mailPurged += mailStore.purge({ agent: session.agentName });
-						}
-					}
-				} finally {
-					mailStore.close();
-				}
-			}
-		}
-
 		// Mark cleaned sessions as zombie in the SessionStore
 		for (const branch of cleaned) {
 			const session = sessions.find((s) => s.branchName === branch);
@@ -190,9 +162,7 @@ async function handleClean(args: string[], root: string, json: boolean): Promise
 		}
 
 		if (json) {
-			process.stdout.write(
-				`${JSON.stringify({ cleaned, failed, pruned: pruneCount, mailPurged })}\n`,
-			);
+			process.stdout.write(`${JSON.stringify({ cleaned, failed, pruned: pruneCount })}\n`);
 		} else if (cleaned.length === 0 && pruneCount === 0 && failed.length === 0) {
 			process.stdout.write("No worktrees to clean.\n");
 		} else {
@@ -204,11 +174,6 @@ async function handleClean(args: string[], root: string, json: boolean): Promise
 			if (failed.length > 0) {
 				process.stdout.write(
 					`Failed to clean ${failed.length} worktree${failed.length === 1 ? "" : "s"}.\n`,
-				);
-			}
-			if (mailPurged > 0) {
-				process.stdout.write(
-					`Purged ${mailPurged} mail message${mailPurged === 1 ? "" : "s"} from cleaned agents.\n`,
 				);
 			}
 			if (pruneCount > 0) {
