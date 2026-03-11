@@ -553,7 +553,7 @@ describe("deployHooks", () => {
 			.filter((h: { matcher: string }) => h.matcher !== "")
 			.map((h: { matcher: string }) => h.matcher);
 
-		// Path boundary guards + Bash danger guard + Bash path boundary guard + 10 native team tool blocks
+		// Path boundary guards + Bash danger guard + Bash path boundary guard + 9 task + 3 team tool blocks
 		expect(guardMatchers).toContain("Bash");
 		expect(guardMatchers).toContain("Task");
 		expect(guardMatchers).toContain("TeamCreate");
@@ -641,37 +641,38 @@ describe("deployHooks", () => {
 });
 
 describe("getCapabilityGuards", () => {
-	// 10 native team tool blocks + 3 interactive tool blocks apply to ALL capabilities
-	const NATIVE_TEAM_TOOL_COUNT = 10;
+	// 9 native task tool blocks + 3 native team tool blocks + 3 interactive tool blocks apply to ALL capabilities
+	const NATIVE_TASK_TOOL_COUNT = 9;
+	const NATIVE_TEAM_TOOL_COUNT = 3;
 	const INTERACTIVE_TOOL_COUNT = 3;
-	const BASE_GUARD_COUNT = NATIVE_TEAM_TOOL_COUNT + INTERACTIVE_TOOL_COUNT;
+	const BASE_GUARD_COUNT = NATIVE_TASK_TOOL_COUNT + NATIVE_TEAM_TOOL_COUNT + INTERACTIVE_TOOL_COUNT;
 
-	test("returns 17 guards for scout (10 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
+	test("returns 19 guards for scout (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
 		const guards = getCapabilityGuards("scout");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
-	test("returns 17 guards for reviewer (10 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
+	test("returns 19 guards for reviewer (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
 		const guards = getCapabilityGuards("reviewer");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
-	test("returns 17 guards for lead (10 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
+	test("returns 19 guards for lead (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
 		const guards = getCapabilityGuards("lead");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
-	test("returns 14 guards for builder (10 team + 3 interactive + 1 bash path boundary)", () => {
+	test("returns 16 guards for builder (9 task + 3 team + 3 interactive + 1 bash path boundary)", () => {
 		const guards = getCapabilityGuards("builder");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 1);
 	});
 
-	test("returns 14 guards for merger (10 team + 3 interactive + 1 bash path boundary)", () => {
+	test("returns 16 guards for merger (9 task + 3 team + 3 interactive + 1 bash path boundary)", () => {
 		const guards = getCapabilityGuards("merger");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 1);
 	});
 
-	test("returns 13 guards for unknown capability (10 team + 3 interactive tool blocks only)", () => {
+	test("returns 15 guards for unknown capability (9 task + 3 team + 3 interactive tool blocks only)", () => {
 		const guards = getCapabilityGuards("unknown");
 		expect(guards.length).toBe(BASE_GUARD_COUNT);
 	});
@@ -753,7 +754,7 @@ describe("getCapabilityGuards", () => {
 			const guards = getCapabilityGuards(cap);
 			const taskGuard = guards.find((g) => g.matcher === "Task");
 			expect(taskGuard).toBeDefined();
-			expect(taskGuard?.hooks[0]?.command).toContain("legio sling");
+			expect(taskGuard?.hooks[0]?.command).toContain("legio task");
 		}
 	});
 
@@ -783,24 +784,27 @@ describe("getCapabilityGuards", () => {
 		}
 	});
 
-	test("native team tool block guards include env var guard prefix", () => {
+	test("native task/team tool block guards include env var guard prefix", () => {
 		const guards = getCapabilityGuards("builder");
 		const taskGuard = guards.find((g) => g.matcher === "Task");
 		expect(taskGuard).toBeDefined();
 		expect(taskGuard?.hooks[0]?.command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
+		const teamGuard = guards.find((g) => g.matcher === "TeamCreate");
+		expect(teamGuard).toBeDefined();
+		expect(teamGuard?.hooks[0]?.command).toContain('[ -z "$LEGIO_AGENT_NAME" ] && exit 0;');
 	});
 
-	test("coordinator gets 17 guards (10 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
+	test("coordinator gets 19 guards (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
 		const guards = getCapabilityGuards("coordinator");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
-	test("supervisor gets 17 guards (10 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
+	test("supervisor gets 19 guards (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard)", () => {
 		const guards = getCapabilityGuards("supervisor");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 4);
 	});
 
-	test("gateway gets 18 guards (10 team + 3 interactive + 3 tool blocks + 1 bash file guard + 1 gateway command guard)", () => {
+	test("gateway gets 20 guards (9 task + 3 team + 3 interactive + 3 tool blocks + 1 bash file guard + 1 gateway command guard)", () => {
 		const guards = getCapabilityGuards("gateway");
 		expect(guards.length).toBe(BASE_GUARD_COUNT + 5);
 	});
@@ -1380,7 +1384,7 @@ describe("structural enforcement integration", () => {
 		}
 	});
 
-	test("all capabilities block Task tool for legio sling enforcement", async () => {
+	test("all capabilities block Task tool for legio task enforcement", async () => {
 		const capabilities = [
 			"scout",
 			"reviewer",
@@ -1401,7 +1405,7 @@ describe("structural enforcement integration", () => {
 
 			const taskGuard = preToolUse.find((h: { matcher: string }) => h.matcher === "Task");
 			expect(taskGuard).toBeDefined();
-			expect(taskGuard.hooks[0].command).toContain("legio sling");
+			expect(taskGuard.hooks[0].command).toContain("legio task");
 		}
 	});
 

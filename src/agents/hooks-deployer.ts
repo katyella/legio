@@ -31,21 +31,26 @@ const COORDINATION_CAPABILITIES = new Set(["coordinator", "supervisor", "monitor
 const COORDINATION_SAFE_PREFIXES = ["git add", "git commit"];
 
 /**
- * Claude Code native team/task tools that bypass legio orchestration.
- * All legio agents must use `legio sling` for delegation, not these.
+ * Claude Code native task tools that bypass legio's task tracker.
+ * All legio agents must use `legio task` for task management, not these.
  */
-const NATIVE_TEAM_TOOLS = [
+const NATIVE_TASK_TOOLS = [
 	"Task",
-	"TeamCreate",
-	"TeamDelete",
-	"SendMessage",
 	"TaskCreate",
 	"TaskUpdate",
 	"TaskList",
 	"TaskGet",
 	"TaskOutput",
 	"TaskStop",
+	"TodoWrite",
+	"TodoRead",
 ];
+
+/**
+ * Claude Code native team/delegation tools that bypass legio orchestration.
+ * All legio agents must use `legio sling` for delegation, not these.
+ */
+const NATIVE_TEAM_TOOLS = ["TeamCreate", "TeamDelete", "SendMessage"];
 
 /**
  * Interactive tools that require human input unavailable in non-interactive tmux sessions.
@@ -359,6 +364,8 @@ export function buildGatewayBashGuardScript(): string {
 
 	const script = [
 		ENV_GUARD,
+		// Only apply to gateway agent — coordinator shares the same settings file
+		'[ "$LEGIO_AGENT_NAME" != "gateway" ] && exit 0;',
 		"read -r INPUT;",
 		'CMD=$(echo "$INPUT" | sed \'s/.*"command": *"\\([^"]*\\)".*/\\1/\');',
 		checks,
@@ -484,8 +491,18 @@ export function getBashPathBoundaryGuards(): HookEntry[] {
 export function getCapabilityGuards(capability: string): HookEntry[] {
 	const guards: HookEntry[] = [];
 
-	// Block Claude Code native team/task tools for ALL legio agents.
-	// Agents must use `legio sling` for delegation, not native Task/Team tools.
+	// Block Claude Code native task tools for ALL legio agents.
+	// Agents must use `legio task` for task management, not native Task tools.
+	const taskToolGuards = NATIVE_TASK_TOOLS.map((tool) =>
+		blockGuard(
+			tool,
+			`Legio agents must use 'legio task' for task management — ${tool} is not allowed`,
+		),
+	);
+	guards.push(...taskToolGuards);
+
+	// Block Claude Code native team/delegation tools for ALL legio agents.
+	// Agents must use `legio sling` for delegation, not native Team tools.
 	const teamToolGuards = NATIVE_TEAM_TOOLS.map((tool) =>
 		blockGuard(tool, `Legio agents must use 'legio sling' for delegation — ${tool} is not allowed`),
 	);

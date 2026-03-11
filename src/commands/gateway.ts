@@ -87,7 +87,7 @@ export function buildGatewayBeacon(isFirstRun = false): string {
 		"You are a gateway agent in the legio multi-agent orchestration system. legio is a CLI tool installed on this machine that coordinates multiple Claude Code agents via tmux, SQLite mail, and git worktrees.",
 		"Depth: 0 | Role: planning companion | READONLY: No Write/Edit tool access",
 		'COMMUNICATION: Use legio mail for all inter-agent messaging. Check your inbox with: legio mail check --agent gateway. Send replies via: legio mail send --to human --subject "chat" --body "..." --type status --audience human --agent gateway',
-		"ISSUES: If a task tracker is configured, use legio task to create issues for work decomposition. Check legio status for current agent fleet.",
+		"ISSUES: ALWAYS use 'legio task create' to create issues for work decomposition — never use Claude Code's native task/todo tools. Check legio status for current agent fleet.",
 		`Startup: run legio memory prime, check mail (legio mail check --agent ${GATEWAY_NAME}), check legio status, then send a greeting to the human via legio mail send --to human --subject "chat" --body "Gateway online and ready. What would you like to work on?" --type status --audience human --agent ${GATEWAY_NAME}`,
 	];
 	if (isFirstRun) {
